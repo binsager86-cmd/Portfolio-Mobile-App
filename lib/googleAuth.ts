@@ -63,10 +63,6 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
       redirectUri,
       responseType: AuthSession.ResponseType.Token,
       usePKCE: false,
-      extraParams: {
-        // Request id_token along with the access_token
-        nonce: Math.random().toString(36).substring(2),
-      },
     });
 
     const result = await request.promptAsync(discovery);
