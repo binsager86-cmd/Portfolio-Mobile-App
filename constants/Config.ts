@@ -62,5 +62,10 @@ const ENV_GOOGLE_CLIENT_ID =
     ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
     : undefined;
 
+// Hardcoded fallback — the client ID is public (appears in every OAuth URL).
+// Ensures production builds work even if the env var isn't injected.
+const FALLBACK_GOOGLE_CLIENT_ID =
+  "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com";
+
 export const GOOGLE_WEB_CLIENT_ID: string =
-  ENV_GOOGLE_CLIENT_ID || "";
+  ENV_GOOGLE_CLIENT_ID || FALLBACK_GOOGLE_CLIENT_ID;
