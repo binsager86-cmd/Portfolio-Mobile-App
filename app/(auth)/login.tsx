@@ -83,9 +83,17 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       console.error("[Google Sign-In]", err);
-      useAuthStore.setState({
-        error: "Google Sign-In failed unexpectedly. Please try again.",
-      });
+      // Surface actionable message for OAuth config errors
+      if (err?.message?.includes("OAuth 2.0 policy") || err?.message?.includes("redirect_uri")) {
+        const origin = typeof window !== "undefined" ? window.location.origin : "unknown";
+        useAuthStore.setState({
+          error: `Google Sign-In configuration error. Please contact support (redirect: ${origin}).`,
+        });
+      } else {
+        useAuthStore.setState({
+          error: "Google Sign-In failed unexpectedly. Please try again.",
+        });
+      }
     } finally {
       setGoogleLoading(false);
     }
