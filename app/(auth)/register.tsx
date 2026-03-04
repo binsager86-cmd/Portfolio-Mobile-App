@@ -98,19 +98,13 @@ export default function RegisterScreen() {
   // Dev-time config check — catch missing env vars early
   useEffect(() => {
     if (__DEV__) {
-      console.log("🔍 Google Config Check:", {
+      console.log("[Register] Google Config:", {
         webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           ? "✅ Set"
           : "❌ Missing",
         apiUrl: process.env.EXPO_PUBLIC_API_URL
           ? "✅ Set"
           : "⚠️ Using fallback",
-      });
-      console.log('🔍 ENV DEBUG:', {
-        hasVar: !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-        varValue: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-        nodeEnv: process.env.NODE_ENV,
-        allExpoVars: Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC_')),
       });
     }
   }, []);
