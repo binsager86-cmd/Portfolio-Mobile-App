@@ -33,6 +33,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { registerSchema, type RegisterFormData } from "@/lib/validationSchemas";
 import { performGoogleSignIn } from "@/lib/googleAuth";
 import { analytics } from "@/lib/analytics";
+import { validateEnv } from "@/lib/env";
 
 // ── Password strength helper ────────────────────────────────────────
 
@@ -98,6 +99,7 @@ export default function RegisterScreen() {
   // Dev-time config check — catch missing env vars early
   useEffect(() => {
     if (__DEV__) {
+      validateEnv();
       console.log("[Register] Google Config:", {
         webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
           ? "✅ Set"
@@ -105,6 +107,8 @@ export default function RegisterScreen() {
         apiUrl: process.env.EXPO_PUBLIC_API_URL
           ? "✅ Set"
           : "⚠️ Using fallback",
+        currentOrigin:
+          typeof window !== "undefined" ? window.location.origin : "native",
       });
     }
   }, []);
