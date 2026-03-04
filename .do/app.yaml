@@ -6,7 +6,7 @@ static_sites:
       repo: binsager86-cmd/Portfolio-Mobile-App
       branch: main
       deploy_on_push: true
-    build_command: npm install && npx expo export --platform web
+    build_command: npm install --ignore-scripts && npx expo export --platform web
     output_dir: dist
     environment_slug: node-js
     envs:
