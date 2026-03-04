@@ -14,7 +14,7 @@ static_sites:
         value: "https://backend-api-app-hfc2n.ondigitalocean.app"
         scope: BUILD_TIME
       - key: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
-        value: "${GOOGLE_WEB_CLIENT_ID}"
+        value: "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
         scope: BUILD_TIME
     routes:
       - path: /

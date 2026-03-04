@@ -106,6 +106,12 @@ export default function RegisterScreen() {
           ? "✅ Set"
           : "⚠️ Using fallback",
       });
+      console.log('🔍 ENV DEBUG:', {
+        hasVar: !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        varValue: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        nodeEnv: process.env.NODE_ENV,
+        allExpoVars: Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC_')),
+      });
     }
   }, []);
 
