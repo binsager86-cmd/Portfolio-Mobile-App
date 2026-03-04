@@ -1,0 +1,25 @@
+name: portfolio-mobile-app
+
+static_sites:
+  - name: web
+    github:
+      repo: binsager86-cmd/Portfolio-Mobile-App
+      branch: main
+      deploy_on_push: true
+    build_command: npm install && npx expo export --platform web
+    output_dir: dist
+    environment_slug: node-js
+    envs:
+      - key: EXPO_PUBLIC_API_URL
+        value: "https://backend-api-app-hfc2n.ondigitalocean.app"
+        scope: BUILD_TIME
+      - key: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        value: "${GOOGLE_WEB_CLIENT_ID}"
+        scope: BUILD_TIME
+    routes:
+      - path: /
+        preserve_path_prefix: true
+    catchall_document: index.html
+    cors:
+      allow_origins:
+        - exact: "https://backend-api-app-hfc2n.ondigitalocean.app"
