@@ -6,7 +6,7 @@
  * the user is auto-logged-in — no redirect-to-login needed.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -32,6 +32,21 @@ import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
 import { registerSchema, type RegisterFormData } from "@/lib/validationSchemas";
 import { performGoogleSignIn } from "@/lib/googleAuth";
+import { analytics } from "@/lib/analytics";
+
+// ── Password strength helper ────────────────────────────────────────
+
+const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const;
+const STRENGTH_COLORS = ["#d1d5db", "#ef4444", "#f59e0b", "#3b82f6", "#22c55e"];
+
+function getPasswordStrength(pwd: string): number {
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  return score; // 0–4
+}
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -41,11 +56,20 @@ export default function RegisterScreen() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
+
+  // Field refs for keyboard navigation
+  const displayNameRef = useRef<any>(null);
+  const passwordRef = useRef<any>(null);
+  const confirmPasswordRef = useRef<any>(null);
 
   // react-hook-form + Zod
   const {
     control,
     handleSubmit,
+    watch,
+    reset,
+    setFocus,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -58,35 +82,70 @@ export default function RegisterScreen() {
     mode: "onBlur",
   });
 
+  const passwordValue = watch("password");
+  const strengthScore = getPasswordStrength(passwordValue || "");
+
   // Clear store error on unmount
   useEffect(() => {
     return () => clearError();
   }, []);
 
+  // Track screen view
+  useEffect(() => {
+    analytics.logScreenView("Register");
+  }, []);
+
+  // Focus the first invalid field after validation
+  useEffect(() => {
+    const errorFields = Object.keys(errors) as (keyof RegisterFormData)[];
+    if (errorFields.length > 0) {
+      try {
+        setFocus(errorFields[0]);
+      } catch {
+        // setFocus may not work on all platforms — fail silently
+      }
+    }
+  }, [errors, setFocus]);
+
   // ── Handlers ──────────────────────────────────────────────────────
 
-  const onSubmit = async (data: RegisterFormData) => {
-    const ok = await register(
-      data.email.trim(),
-      data.password,
-      data.displayName?.trim() || undefined,
-    );
-    if (ok) {
-      // Auto-login: authStore already persisted tokens, _layout auth guard
-      // will redirect to /(tabs) automatically.
-      router.replace("/(tabs)");
+  const onSubmit = useCallback(async (data: RegisterFormData) => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    analytics.logEvent("registration_attempted", { method: "email" });
+    try {
+      const ok = await register(
+        data.email.trim().toLowerCase(),
+        data.password,
+        data.displayName?.trim() || undefined,
+      );
+      if (ok) {
+        analytics.logEvent("registration_completed", { method: "email" });
+        try {
+          router.replace("/(tabs)");
+        } catch (navErr) {
+          // Fallback: reset form to prevent duplicate submit if nav fails
+          reset();
+          console.error("Navigation failed after registration", navErr);
+        }
+      }
+    } finally {
+      isSubmittingRef.current = false;
     }
-  };
+  }, [register, router, reset]);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = useCallback(async () => {
     setGoogleLoading(true);
+    analytics.logEvent("registration_attempted", { method: "google" });
     try {
       const result = await performGoogleSignIn();
       if (result.success) {
         const ok = await googleSignIn(result.idToken);
-        if (ok) router.replace("/(tabs)");
+        if (ok) {
+          analytics.logEvent("registration_completed", { method: "google" });
+          router.replace("/(tabs)");
+        }
       } else if (!result.cancelled) {
-        // Show error to user via the auth store error banner
         useAuthStore.setState({
           error: result.error || "Google Sign-In failed. Please try again.",
         });
@@ -99,7 +158,7 @@ export default function RegisterScreen() {
     } finally {
       setGoogleLoading(false);
     }
-  };
+  }, [googleSignIn, router]);
 
   // ── Shared input theme ────────────────────────────────────────────
 
@@ -133,7 +192,9 @@ export default function RegisterScreen() {
             iconColor={colors.textSecondary}
             size={24}
             onPress={toggle}
-            accessibilityLabel="Toggle theme"
+            disabled={loading || googleLoading}
+            accessibilityLabel={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            accessibilityRole="button"
           />
         </View>
 
@@ -181,6 +242,7 @@ export default function RegisterScreen() {
               name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
+                  testID="register-email-input"
                   label="Email"
                   value={value}
                   onChangeText={(t) => {
@@ -191,6 +253,8 @@ export default function RegisterScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
+                  returnKeyType="next"
+                  onSubmitEditing={() => displayNameRef.current?.focus()}
                   disabled={loading}
                   left={<TextInput.Icon icon="email" />}
                   mode="outlined"
@@ -210,6 +274,7 @@ export default function RegisterScreen() {
               type="error"
               visible={!!errors.email}
               style={{ color: colors.danger }}
+              accessibilityLiveRegion="polite"
             >
               {errors.email?.message}
             </HelperText>
@@ -220,11 +285,15 @@ export default function RegisterScreen() {
               name="displayName"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
+                  testID="register-displayname-input"
+                  ref={displayNameRef}
                   label="Display Name (optional)"
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
                   autoCapitalize="words"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                   disabled={loading}
                   left={<TextInput.Icon icon="badge-account" />}
                   mode="outlined"
@@ -244,6 +313,8 @@ export default function RegisterScreen() {
               name="password"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
+                  testID="register-password-input"
+                  ref={passwordRef}
                   label="Password"
                   value={value}
                   onChangeText={(t) => {
@@ -252,6 +323,8 @@ export default function RegisterScreen() {
                   }}
                   onBlur={onBlur}
                   secureTextEntry={!showPassword}
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                   disabled={loading}
                   left={<TextInput.Icon icon="lock" />}
                   right={
@@ -277,9 +350,39 @@ export default function RegisterScreen() {
               type="error"
               visible={!!errors.password}
               style={{ color: colors.danger }}
+              accessibilityLiveRegion="polite"
             >
               {errors.password?.message}
             </HelperText>
+
+            {/* Password strength indicator */}
+            {passwordValue ? (
+              <View style={styles.strengthRow}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.strengthSegment,
+                      {
+                        backgroundColor:
+                          i < strengthScore
+                            ? STRENGTH_COLORS[strengthScore]
+                            : colors.borderColor,
+                      },
+                    ]}
+                  />
+                ))}
+                <Text
+                  style={[
+                    styles.strengthText,
+                    { color: STRENGTH_COLORS[strengthScore] },
+                  ]}
+                  accessibilityLabel={`Password strength: ${STRENGTH_LABELS[strengthScore]}`}
+                >
+                  {STRENGTH_LABELS[strengthScore]}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Confirm Password */}
             <Controller
@@ -287,6 +390,8 @@ export default function RegisterScreen() {
               name="confirmPassword"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
+                  testID="register-confirm-password-input"
+                  ref={confirmPasswordRef}
                   label="Confirm Password"
                   value={value}
                   onChangeText={(t) => {
@@ -295,6 +400,8 @@ export default function RegisterScreen() {
                   }}
                   onBlur={onBlur}
                   secureTextEntry={!showPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit(onSubmit)}
                   disabled={loading}
                   left={<TextInput.Icon icon="lock-check" />}
                   mode="outlined"
@@ -306,7 +413,6 @@ export default function RegisterScreen() {
                   activeOutlineColor={colors.accentPrimary}
                   textColor={colors.textPrimary}
                   error={!!errors.confirmPassword}
-                  onSubmitEditing={handleSubmit(onSubmit)}
                   theme={inputTheme}
                 />
               )}
@@ -315,12 +421,14 @@ export default function RegisterScreen() {
               type="error"
               visible={!!errors.confirmPassword}
               style={{ color: colors.danger }}
+              accessibilityLiveRegion="polite"
             >
               {errors.confirmPassword?.message}
             </HelperText>
 
             {/* Create Account button */}
             <Button
+              testID="register-submit-button"
               mode="contained"
               onPress={handleSubmit(onSubmit)}
               loading={loading}
@@ -330,6 +438,7 @@ export default function RegisterScreen() {
               labelStyle={styles.buttonLabel}
               buttonColor={colors.accentPrimary}
               textColor="#ffffff"
+              accessibilityLabel="Create account"
             >
               Create Account
             </Button>
@@ -345,6 +454,7 @@ export default function RegisterScreen() {
 
             {/* Google Sign-In */}
             <Button
+              testID="register-google-button"
               mode="outlined"
               onPress={handleGoogleSignIn}
               loading={googleLoading}
@@ -353,6 +463,7 @@ export default function RegisterScreen() {
               style={[styles.googleButton, { borderColor: colors.borderColor }]}
               contentStyle={styles.buttonContent}
               labelStyle={[styles.googleLabel, { color: colors.textPrimary }]}
+              accessibilityLabel="Continue with Google"
             >
               Continue with Google
             </Button>
@@ -430,4 +541,21 @@ const styles = StyleSheet.create({
   backButton: { marginTop: 8 },
   backLabel: { fontSize: 14, fontWeight: "600" },
   footer: { marginTop: 32, fontSize: 13 },
+  strengthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 4,
+  },
+  strengthSegment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+  },
+  strengthText: {
+    fontSize: 12,
+    marginLeft: 8,
+    fontWeight: "600",
+    minWidth: 44,
+  },
 });

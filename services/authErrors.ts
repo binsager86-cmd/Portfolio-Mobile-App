@@ -78,8 +78,8 @@ const LOGIN_ERROR_MAP: Record<number, { code: string; message: string; severity:
 
 const REGISTER_ERROR_MAP: Record<number, { code: string; message: string; severity: ErrorSeverity }> = {
   409: {
-    code: "auth/username-taken",
-    message: "This username is already taken. Please choose a different one.",
+    code: "auth/email-exists",
+    message: "An account with this email already exists.",
     severity: "warning",
   },
   400: {

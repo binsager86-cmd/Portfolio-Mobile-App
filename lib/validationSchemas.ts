@@ -35,7 +35,11 @@ export const registerSchema = z
       .min(1, "Email is required")
       .email("Please enter a valid email address")
       .max(200, "Email cannot exceed 200 characters")
-      .trim(),
+      .trim()
+      .transform((val) => val.toLowerCase())
+      .refine((val) => !val.includes("+"), {
+        message: "Gmail alias addresses are not supported",
+      }),
     displayName: z
       .string()
       .max(100, "Display name cannot exceed 100 characters")
