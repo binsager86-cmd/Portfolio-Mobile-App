@@ -62,6 +62,7 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
       scopes: ["openid", "profile", "email"],
       redirectUri,
       responseType: AuthSession.ResponseType.Token,
+      usePKCE: false,
       extraParams: {
         // Request id_token along with the access_token
         nonce: Math.random().toString(36).substring(2),
