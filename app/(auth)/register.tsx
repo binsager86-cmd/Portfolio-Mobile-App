@@ -31,6 +31,7 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
 import { registerSchema, type RegisterFormData } from "@/lib/validationSchemas";
+import { performGoogleSignIn } from "@/lib/googleAuth";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -49,7 +50,7 @@ export default function RegisterScreen() {
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      username: "",
+      email: "",
       displayName: "",
       password: "",
       confirmPassword: "",
@@ -66,7 +67,7 @@ export default function RegisterScreen() {
 
   const onSubmit = async (data: RegisterFormData) => {
     const ok = await register(
-      data.username.trim(),
+      data.email.trim(),
       data.password,
       data.displayName?.trim() || undefined,
     );
@@ -78,20 +79,23 @@ export default function RegisterScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
     try {
-      setGoogleLoading(true);
-      const { GoogleSignin } = await import(
-        "@react-native-google-signin/google-signin"
-      );
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken;
-      if (!idToken) throw new Error("Google Sign-In did not return an ID token");
-      const ok = await googleSignIn(idToken);
-      if (ok) router.replace("/(tabs)");
+      const result = await performGoogleSignIn();
+      if (result.success) {
+        const ok = await googleSignIn(result.idToken);
+        if (ok) router.replace("/(tabs)");
+      } else if (!result.cancelled) {
+        // Show error to user via the auth store error banner
+        useAuthStore.setState({
+          error: result.error || "Google Sign-In failed. Please try again.",
+        });
+      }
     } catch (err: any) {
-      if (err?.code === "SIGN_IN_CANCELLED") return;
-      console.warn("[Google Sign-In]", err);
+      console.error("[Google Sign-In]", err);
+      useAuthStore.setState({
+        error: "Google Sign-In failed unexpectedly. Please try again.",
+      });
     } finally {
       setGoogleLoading(false);
     }
@@ -171,13 +175,13 @@ export default function RegisterScreen() {
               </View>
             ) : null}
 
-            {/* Username */}
+            {/* Email */}
             <Controller
               control={control}
-              name="username"
+              name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
-                  label="Username"
+                  label="Email"
                   value={value}
                   onChangeText={(t) => {
                     onChange(t);
@@ -186,27 +190,28 @@ export default function RegisterScreen() {
                   onBlur={onBlur}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType="email-address"
                   disabled={loading}
-                  left={<TextInput.Icon icon="account" />}
+                  left={<TextInput.Icon icon="email" />}
                   mode="outlined"
                   style={styles.input}
                   contentStyle={styles.inputContent}
                   outlineColor={
-                    errors.username ? colors.danger : colors.borderColor
+                    errors.email ? colors.danger : colors.borderColor
                   }
                   activeOutlineColor={colors.accentPrimary}
                   textColor={colors.textPrimary}
-                  error={!!errors.username}
+                  error={!!errors.email}
                   theme={inputTheme}
                 />
               )}
             />
             <HelperText
               type="error"
-              visible={!!errors.username}
+              visible={!!errors.email}
               style={{ color: colors.danger }}
             >
-              {errors.username?.message}
+              {errors.email?.message}
             </HelperText>
 
             {/* Display Name */}

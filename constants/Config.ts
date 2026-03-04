@@ -48,3 +48,19 @@ export const API_BASE_URL: string =
 
 /** How long (ms) to wait before timing out API calls. */
 export const API_TIMEOUT = 60_000;
+
+/**
+ * Google OAuth Web Client ID.
+ *
+ * Create one at https://console.cloud.google.com → APIs & Services → Credentials.
+ * Type: "Web application". Add your redirect URIs (localhost + production).
+ * Set via EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID env var or hardcode below.
+ */
+const ENV_GOOGLE_CLIENT_ID =
+  // @ts-ignore — Expo injects process.env.EXPO_PUBLIC_* at build time
+  typeof process !== "undefined"
+    ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+    : undefined;
+
+export const GOOGLE_WEB_CLIENT_ID: string =
+  ENV_GOOGLE_CLIENT_ID || "";

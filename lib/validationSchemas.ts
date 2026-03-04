@@ -11,11 +11,11 @@ import { z } from "zod";
 // ── Login Schema ────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
-  username: z
+  email: z
     .string()
-    .min(1, "Username is required")
-    .min(3, "Username must be at least 3 characters")
-    .max(50, "Username cannot exceed 50 characters")
+    .min(1, "Email is required")
+    .email("Please enter a valid email address")
+    .max(200, "Email cannot exceed 200 characters")
     .trim(),
   password: z
     .string()
@@ -30,15 +30,11 @@ export type LoginFormData = z.infer<typeof loginSchema>;
 
 export const registerSchema = z
   .object({
-    username: z
+    email: z
       .string()
-      .min(1, "Username is required")
-      .min(3, "Username must be at least 3 characters")
-      .max(50, "Username cannot exceed 50 characters")
-      .regex(
-        /^[a-zA-Z0-9_ ]+$/,
-        "Username can only contain letters, numbers, underscores, and spaces"
-      )
+      .min(1, "Email is required")
+      .email("Please enter a valid email address")
+      .max(200, "Email cannot exceed 200 characters")
       .trim(),
     displayName: z
       .string()

@@ -30,6 +30,7 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
 import { loginSchema, type LoginFormData } from "@/lib/validationSchemas";
+import { performGoogleSignIn } from "@/lib/googleAuth";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function LoginScreen() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: __DEV__ ? "sager alsager" : "",
+      email: __DEV__ ? "sager@example.com" : "",
       password: __DEV__ ? "Admin123!" : "",
     },
     mode: "onBlur",
@@ -62,29 +63,29 @@ export default function LoginScreen() {
   // ── Handlers ──────────────────────────────────────────────────────
 
   const onSubmit = async (data: LoginFormData) => {
-    const ok = await login(data.username.trim(), data.password);
+    const ok = await login(data.email.trim(), data.password);
     if (ok) {
       router.replace("/(tabs)");
     }
   };
 
   const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
     try {
-      setGoogleLoading(true);
-      // Dynamic import so we don't crash when package isn't installed
-      const { GoogleSignin } = await import(
-        "@react-native-google-signin/google-signin"
-      );
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken;
-      if (!idToken) throw new Error("Google Sign-In did not return an ID token");
-      const ok = await googleSignIn(idToken);
-      if (ok) router.replace("/(tabs)");
+      const result = await performGoogleSignIn();
+      if (result.success) {
+        const ok = await googleSignIn(result.idToken);
+        if (ok) router.replace("/(tabs)");
+      } else if (!result.cancelled) {
+        useAuthStore.setState({
+          error: result.error || "Google Sign-In failed. Please try again.",
+        });
+      }
     } catch (err: any) {
-      // If user cancelled, do nothing
-      if (err?.code === "SIGN_IN_CANCELLED") return;
-      console.warn("[Google Sign-In]", err);
+      console.error("[Google Sign-In]", err);
+      useAuthStore.setState({
+        error: "Google Sign-In failed unexpectedly. Please try again.",
+      });
     } finally {
       setGoogleLoading(false);
     }
@@ -178,19 +179,19 @@ export default function LoginScreen() {
                       opacity: 0.8,
                     }}
                   >
-                    Please check your username and password and try again
+                    Please check your email and password and try again
                   </Text>
                 ) : null}
               </View>
             ) : null}
 
-            {/* Username */}
+            {/* Email */}
             <Controller
               control={control}
-              name="username"
+              name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <TextInput
-                  label="Username"
+                  label="Email"
                   value={value}
                   onChangeText={(t) => {
                     onChange(t);
@@ -199,27 +200,28 @@ export default function LoginScreen() {
                   onBlur={onBlur}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType="email-address"
                   disabled={loading}
-                  left={<TextInput.Icon icon="account" />}
+                  left={<TextInput.Icon icon="email" />}
                   mode="outlined"
                   style={styles.input}
                   contentStyle={styles.inputContent}
                   outlineColor={
-                    errors.username ? colors.danger : colors.borderColor
+                    errors.email ? colors.danger : colors.borderColor
                   }
                   activeOutlineColor={colors.accentPrimary}
                   textColor={colors.textPrimary}
-                  error={!!errors.username}
+                  error={!!errors.email}
                   theme={inputTheme}
                 />
               )}
             />
             <HelperText
               type="error"
-              visible={!!errors.username}
+              visible={!!errors.email}
               style={{ color: colors.danger }}
             >
-              {errors.username?.message}
+              {errors.email?.message}
             </HelperText>
 
             {/* Password */}
