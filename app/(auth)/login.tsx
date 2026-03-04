@@ -72,17 +72,28 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      console.log("[Login] 🔵 Starting Google Sign-In…");
       const result = await performGoogleSignIn();
+      console.log("[Login] 🔵 Google result:", result.success ? "✅ success" : `❌ failed (cancelled: ${result.cancelled})`);
+
       if (result.success) {
+        console.log("[Login] 🔵 Sending token to backend…");
         const ok = await googleSignIn(result.idToken);
-        if (ok) router.replace("/(tabs)");
+        console.log("[Login] 🔵 Backend response:", ok ? "✅ authenticated" : "❌ rejected");
+        if (ok) {
+          console.log("[Login] 🔵 Navigating to /(tabs)…");
+          router.replace("/(tabs)");
+        } else {
+          console.warn("[Login] ⚠️ googleSignIn returned false — check authStore error");
+        }
       } else if (!result.cancelled) {
+        console.warn("[Login] ⚠️ Google Sign-In failed:", result.error);
         useAuthStore.setState({
           error: result.error || "Google Sign-In failed. Please try again.",
         });
       }
     } catch (err: any) {
-      console.error("[Google Sign-In]", err);
+      console.error("[Login] ❌ Google Sign-In exception:", err);
       // Surface actionable message for OAuth config errors
       if (err?.message?.includes("OAuth 2.0 policy") || err?.message?.includes("redirect_uri")) {
         const origin = typeof window !== "undefined" ? window.location.origin : "unknown";

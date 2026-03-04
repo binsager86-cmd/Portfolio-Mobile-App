@@ -156,20 +156,29 @@ export default function RegisterScreen() {
     setGoogleLoading(true);
     analytics.logEvent("registration_attempted", { method: "google" });
     try {
+      console.log("[Register] 🔵 Starting Google Sign-In…");
       const result = await performGoogleSignIn();
+      console.log("[Register] 🔵 Google result:", result.success ? "✅ success" : `❌ failed (cancelled: ${result.cancelled})`);
+
       if (result.success) {
+        console.log("[Register] 🔵 Sending token to backend…");
         const ok = await googleSignIn(result.idToken);
+        console.log("[Register] 🔵 Backend response:", ok ? "✅ authenticated" : "❌ rejected");
         if (ok) {
           analytics.logEvent("registration_completed", { method: "google" });
+          console.log("[Register] 🔵 Navigating to /(tabs)…");
           router.replace("/(tabs)");
+        } else {
+          console.warn("[Register] ⚠️ googleSignIn returned false — check authStore error");
         }
       } else if (!result.cancelled) {
+        console.warn("[Register] ⚠️ Google Sign-In failed:", result.error);
         useAuthStore.setState({
           error: result.error || "Google Sign-In failed. Please try again.",
         });
       }
     } catch (err: any) {
-      console.error("[Google Sign-In]", err);
+      console.error("[Register] ❌ Google Sign-In exception:", err);
       // Surface actionable message for OAuth config errors
       if (err?.message?.includes("OAuth 2.0 policy") || err?.message?.includes("redirect_uri")) {
         const origin = typeof window !== "undefined" ? window.location.origin : "unknown";

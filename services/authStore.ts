@@ -171,16 +171,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   // ── Google Sign-In ─────────────────────────────────────────────
 
   googleSignIn: async (idToken: string) => {
+    console.log("[AuthStore] 🔵 googleSignIn called, token length:", idToken?.length);
     set({ loading: true, error: null, lastAuthError: null });
     try {
       // Dynamic import to avoid bundling Google auth code when unused
       const { googleSignIn: apiGoogleSignIn } = await import(
         "@/services/api"
       );
+      console.log("[AuthStore] 🔵 Calling POST /api/v1/auth/google…");
       const res: LoginResponse = await apiGoogleSignIn(idToken);
+      console.log("[AuthStore] ✅ Backend returned tokens:", {
+        hasAccessToken: !!res.access_token,
+        hasRefreshToken: !!res.refresh_token,
+        userId: res.user_id,
+        username: res.username,
+      });
       await persistAndSetSession(res, set);
+      console.log("[AuthStore] ✅ Session persisted, user is now authenticated");
       return true;
     } catch (err: unknown) {
+      console.error("[AuthStore] ❌ googleSignIn error:", err);
       const mapped = mapAuthError(err, "google");
       logAuthError(mapped, "googleSignIn");
       set({ loading: false, error: mapped.message, lastAuthError: mapped });

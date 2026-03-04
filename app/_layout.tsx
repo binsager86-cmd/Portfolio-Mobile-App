@@ -7,10 +7,17 @@ import {
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect } from "react";
 import "react-native-reanimated";
 import { PaperProvider, MD3DarkTheme, MD3LightTheme } from "react-native-paper";
 import { QueryClientProvider } from "@tanstack/react-query";
+
+// ── CRITICAL: Must be at module level for OAuth redirect to work ────
+// When the Google OAuth popup redirects back, it reloads the app.
+// This call detects it's a callback, extracts the token from the URL
+// hash, posts it back to the parent window, and closes the popup.
+WebBrowser.maybeCompleteAuthSession();
 
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
