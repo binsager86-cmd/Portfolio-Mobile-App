@@ -354,6 +354,7 @@ export default function PortfolioTrackerScreen() {
               <Text style={[st.th, st.colSmall, { color: colors.textSecondary }]}>Accum. Cash</Text>
               <Text style={[st.th, st.colMoney, { color: colors.textSecondary }]}>Net Gain</Text>
               <Text style={[st.th, st.colPct, { color: colors.textSecondary }]}>Change %</Text>
+              <Text style={[st.th, st.colPct, { color: colors.textSecondary }]}>ROI %</Text>
               <Text style={[st.th, st.colAction, { color: colors.textSecondary }]}></Text>
             </View>
             {/* Table Rows — most recent first */}
@@ -364,6 +365,7 @@ export default function PortfolioTrackerScreen() {
                 const bd = snap.beginning_difference ?? 0;
                 const ng = snap.net_gain ?? 0;
                 const cp = snap.change_percent ?? 0;
+                const rp = snap.roi_percent ?? 0;
                 return (
                   <View key={snap.id} style={[st.tableRow, { borderBottomColor: colors.borderColor }]}>
                     <Text style={[st.td, st.colDate, { color: colors.textPrimary }]}>{snap.snapshot_date}</Text>
@@ -374,6 +376,7 @@ export default function PortfolioTrackerScreen() {
                     <Text style={[st.td, st.colSmall, { color: colors.textPrimary }]}>{fmtMoney0(snap.accumulated_cash ?? 0)}</Text>
                     <Text style={[st.td, st.colMoney, { color: ng >= 0 ? colors.success : colors.danger, fontWeight: "600" }]}>{fmtMoney(ng)}</Text>
                     <Text style={[st.td, st.colPct, { color: cp >= 0 ? colors.success : colors.danger, fontWeight: "600" }]}>{fmtPercent(cp)}</Text>
+                    <Text style={[st.td, st.colPct, { color: rp >= 0 ? colors.success : colors.danger, fontWeight: "600" }]}>{fmtPercent(rp)}</Text>
                     <View style={st.colAction}>
                       <Pressable onPress={() => handleDeleteOne(snap)} style={{ padding: 4 }}>
                         <FontAwesome name="trash-o" size={14} color={colors.danger} />
@@ -471,7 +474,7 @@ const st = StyleSheet.create({
   kpiSub: { fontSize: 11, marginTop: 4, fontWeight: "500" },
   empty: { alignItems: "center", paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 14, textAlign: "center", maxWidth: 280 },
-  table: { borderWidth: 1, borderRadius: 8, overflow: "hidden", minWidth: 1050 },
+  table: { borderWidth: 1, borderRadius: 8, overflow: "hidden", minWidth: 1130 },
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
