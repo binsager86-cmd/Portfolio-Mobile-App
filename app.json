@@ -34,7 +34,6 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-crypto",
       "@react-native-google-signin/google-signin"
     ],
     "experiments": {
