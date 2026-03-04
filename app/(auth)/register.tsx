@@ -95,6 +95,20 @@ export default function RegisterScreen() {
     analytics.logScreenView("Register");
   }, []);
 
+  // Dev-time config check — catch missing env vars early
+  useEffect(() => {
+    if (__DEV__) {
+      console.log("🔍 Google Config Check:", {
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+          ? "✅ Set"
+          : "❌ Missing",
+        apiUrl: process.env.EXPO_PUBLIC_API_URL
+          ? "✅ Set"
+          : "⚠️ Using fallback",
+      });
+    }
+  }, []);
+
   // Focus the first invalid field after validation
   useEffect(() => {
     const errorFields = Object.keys(errors) as (keyof RegisterFormData)[];
