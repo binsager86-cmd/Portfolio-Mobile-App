@@ -141,7 +141,7 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
 
 // ── Native: @react-native-google-signin ─────────────────────────────
 
-async function performNativeGoogleSignIn(): Promise<GoogleAuthResult> {
+export async function performNativeGoogleSignIn(): Promise<GoogleAuthResult> {
   try {
     const { GoogleSignin } = await import(
       "@react-native-google-signin/google-signin"

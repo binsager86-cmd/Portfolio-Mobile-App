@@ -31,7 +31,7 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
 import { registerSchema, type RegisterFormData } from "@/lib/validationSchemas";
-import { performGoogleSignIn } from "@/lib/googleAuth";
+import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 import { analytics } from "@/lib/analytics";
 import { validateEnv } from "@/lib/env";
 
@@ -56,8 +56,10 @@ export default function RegisterScreen() {
   const { isDesktop } = useResponsive();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const isSubmittingRef = useRef(false);
+
+  // Google Sign-In hook (handles popup + redirect flows on web, native on mobile)
+  const { signIn: googlePrompt, loading: googleLoading } = useGoogleSignIn();
 
   // Field refs for keyboard navigation
   const displayNameRef = useRef<any>(null);
@@ -153,47 +155,33 @@ export default function RegisterScreen() {
   }, [register, router, reset]);
 
   const handleGoogleSignIn = useCallback(async () => {
-    setGoogleLoading(true);
     analytics.logEvent("registration_attempted", { method: "google" });
     try {
-      console.log("[Register] 🔵 Starting Google Sign-In…");
-      const result = await performGoogleSignIn();
-      console.log("[Register] 🔵 Google result:", result.success ? "✅ success" : `❌ failed (cancelled: ${result.cancelled})`);
+      console.log("[Register] Starting Google Sign-In…");
+      // On web this redirects the page to Google (never returns).
+      // On native this returns a result with the token.
+      const result = await googlePrompt();
 
+      // ─ Native path (web never reaches here — page navigates away) ─
       if (result.success) {
-        console.log("[Register] 🔵 Sending token to backend…");
-        const ok = await googleSignIn(result.idToken);
-        console.log("[Register] 🔵 Backend response:", ok ? "✅ authenticated" : "❌ rejected");
+        console.log("[Register] Got token, sending to backend…");
+        const ok = await googleSignIn(result.token);
         if (ok) {
           analytics.logEvent("registration_completed", { method: "google" });
-          console.log("[Register] 🔵 Navigating to /(tabs)…");
           router.replace("/(tabs)");
-        } else {
-          console.warn("[Register] ⚠️ googleSignIn returned false — check authStore error");
         }
       } else if (!result.cancelled) {
-        console.warn("[Register] ⚠️ Google Sign-In failed:", result.error);
         useAuthStore.setState({
           error: result.error || "Google Sign-In failed. Please try again.",
         });
       }
     } catch (err: any) {
-      console.error("[Register] ❌ Google Sign-In exception:", err);
-      // Surface actionable message for OAuth config errors
-      if (err?.message?.includes("OAuth 2.0 policy") || err?.message?.includes("redirect_uri")) {
-        const origin = typeof window !== "undefined" ? window.location.origin : "unknown";
-        useAuthStore.setState({
-          error: `Google Sign-In configuration error. Please contact support (redirect: ${origin}).`,
-        });
-      } else {
-        useAuthStore.setState({
-          error: "Google Sign-In failed unexpectedly. Please try again.",
-        });
-      }
-    } finally {
-      setGoogleLoading(false);
+      console.error("[Register] Google Sign-In error:", err);
+      useAuthStore.setState({
+        error: err?.message || "Google Sign-In failed unexpectedly.",
+      });
     }
-  }, [googleSignIn, router]);
+  }, [googlePrompt, googleSignIn, router]);
 
   // ── Shared input theme ────────────────────────────────────────────
 

@@ -30,7 +30,7 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
 import { loginSchema, type LoginFormData } from "@/lib/validationSchemas";
-import { performGoogleSignIn } from "@/lib/googleAuth";
+import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,7 +39,9 @@ export default function LoginScreen() {
   const { isDesktop } = useResponsive();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Google Sign-In hook (handles popup + redirect flows on web, native on mobile)
+  const { signIn: googlePrompt, loading: googleLoading } = useGoogleSignIn();
 
   // react-hook-form + Zod
   const {
@@ -70,43 +72,29 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
     try {
-      console.log("[Login] 🔵 Starting Google Sign-In…");
-      const result = await performGoogleSignIn();
-      console.log("[Login] 🔵 Google result:", result.success ? "✅ success" : `❌ failed (cancelled: ${result.cancelled})`);
+      console.log("[Login] Starting Google Sign-In…");
+      // On web this redirects the page to Google (never returns).
+      // On native this returns a result with the token.
+      const result = await googlePrompt();
 
+      // ─ Native path (web never reaches here — page navigates away) ─
       if (result.success) {
-        console.log("[Login] 🔵 Sending token to backend…");
-        const ok = await googleSignIn(result.idToken);
-        console.log("[Login] 🔵 Backend response:", ok ? "✅ authenticated" : "❌ rejected");
+        console.log("[Login] Got token, sending to backend…");
+        const ok = await googleSignIn(result.token);
         if (ok) {
-          console.log("[Login] 🔵 Navigating to /(tabs)…");
           router.replace("/(tabs)");
-        } else {
-          console.warn("[Login] ⚠️ googleSignIn returned false — check authStore error");
         }
       } else if (!result.cancelled) {
-        console.warn("[Login] ⚠️ Google Sign-In failed:", result.error);
         useAuthStore.setState({
           error: result.error || "Google Sign-In failed. Please try again.",
         });
       }
     } catch (err: any) {
-      console.error("[Login] ❌ Google Sign-In exception:", err);
-      // Surface actionable message for OAuth config errors
-      if (err?.message?.includes("OAuth 2.0 policy") || err?.message?.includes("redirect_uri")) {
-        const origin = typeof window !== "undefined" ? window.location.origin : "unknown";
-        useAuthStore.setState({
-          error: `Google Sign-In configuration error. Please contact support (redirect: ${origin}).`,
-        });
-      } else {
-        useAuthStore.setState({
-          error: "Google Sign-In failed unexpectedly. Please try again.",
-        });
-      }
-    } finally {
-      setGoogleLoading(false);
+      console.error("[Login] Google Sign-In error:", err);
+      useAuthStore.setState({
+        error: err?.message || "Google Sign-In failed unexpectedly.",
+      });
     }
   };
 

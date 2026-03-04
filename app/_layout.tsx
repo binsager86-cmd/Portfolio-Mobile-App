@@ -7,17 +7,11 @@ import {
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import "react-native-reanimated";
 import { PaperProvider, MD3DarkTheme, MD3LightTheme } from "react-native-paper";
 import { QueryClientProvider } from "@tanstack/react-query";
-
-// ── CRITICAL: Must be at module level for OAuth redirect to work ────
-// When the Google OAuth popup redirects back, it reloads the app.
-// This call detects it's a callback, extracts the token from the URL
-// hash, posts it back to the parent window, and closes the popup.
-WebBrowser.maybeCompleteAuthSession();
 
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
@@ -93,13 +87,43 @@ function RootLayoutNav() {
   const token = useAuthStore((s) => s.token);
   const authLoading = useAuthStore((s) => s.loading);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
+  const googleSignIn = useAuthStore((s) => s.googleSignIn);
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const themeMode = useThemeStore((s) => s.mode);
 
-  // Hydrate auth + theme from storage on first mount
+  // ── Single init effect: OAuth hash check → hydration ───────────
+  // Must be one effect so hydration can't race with googleSignIn.
+  // If we find an OAuth hash (Google redirect), we process the token
+  // INSTEAD of hydrating from storage (there's nothing stored yet).
   useEffect(() => {
-    hydrateAuth();
-    hydrateTheme();
+    async function init() {
+      hydrateTheme();
+
+      // Check for Google OAuth redirect (web only)
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const hash = window.location.hash;
+        if (hash && hash.includes("access_token=")) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get("access_token");
+          if (accessToken) {
+            console.log("[Layout] Found OAuth access_token in URL hash");
+            // Clean the URL so the token isn't visible
+            window.history.replaceState(
+              null,
+              "",
+              window.location.pathname + window.location.search,
+            );
+            // Await the full sign-in flow — this sets token + loading:false
+            await googleSignIn(accessToken);
+            return; // skip hydration — googleSignIn already set session
+          }
+        }
+      }
+
+      // Normal path: hydrate from stored tokens
+      hydrateAuth();
+    }
+    init();
   }, []);
 
   // Prefetch stock reference lists (static data) so dropdowns load instantly
