@@ -178,7 +178,7 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
             ]}
           >
             <FontAwesome
-              name={mode === "dark" ? "sun-o" : "moon-o"}
+              name={mode === "dark" ? "lightbulb-o" : "moon-o"}
               size={20}
               color={colors.textSecondary}
               style={s.navIcon}

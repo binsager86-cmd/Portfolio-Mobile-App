@@ -32,6 +32,7 @@ import {
   deleteSnapshot,
   deleteAllSnapshots,
   recalculateSnapshots,
+  updatePrices,
   SnapshotRecord,
 } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
@@ -177,6 +178,25 @@ export default function PortfolioTrackerScreen() {
     retry: 1,
   });
 
+  const refreshPricesMutation = useMutation({
+    mutationFn: updatePrices,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["snapshots"] });
+      const msg = result.message ?? "Prices updated successfully";
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Prices Refreshed", msg);
+    },
+    onError: (err: any) => {
+      console.error("[RefreshPrices] Error:", err);
+      const detail = err?.response?.data?.detail;
+      const msg = detail ?? err?.message ?? "Price refresh failed";
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("Error", msg);
+    },
+    retry: 1,
+  });
+
   // ── Handlers ─────────────────────────────────────────────────────
 
   const handleDeleteOne = useCallback(
@@ -241,12 +261,20 @@ export default function PortfolioTrackerScreen() {
         <Text style={[st.pageTitle, { color: colors.textPrimary }]}>Portfolio Tracker</Text>
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
           <Pressable
+            onPress={() => refreshPricesMutation.mutate()}
+            disabled={refreshPricesMutation.isPending}
+            style={[st.actionBtn, { backgroundColor: isDark ? "#0ea5e9" : "#0284c7", opacity: refreshPricesMutation.isPending ? 0.5 : 1 }]}
+          >
+            <FontAwesome name="refresh" size={14} color="#fff" />
+            <Text style={st.actionBtnText}>{refreshPricesMutation.isPending ? "Refreshing..." : "Refresh Prices"}</Text>
+          </Pressable>
+          <Pressable
             onPress={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             style={[st.actionBtn, { backgroundColor: colors.accentPrimary, opacity: saveMutation.isPending ? 0.5 : 1 }]}
           >
             <FontAwesome name="camera" size={14} color="#fff" />
-            <Text style={st.actionBtnText}>Save Snapshot</Text>
+            <Text style={st.actionBtnText}>{saveMutation.isPending ? "Saving..." : "Save Snapshot"}</Text>
           </Pressable>
           {snapshots.length > 0 && (
             <Pressable
@@ -254,7 +282,7 @@ export default function PortfolioTrackerScreen() {
               disabled={recalcMutation.isPending}
               style={[st.actionBtn, { backgroundColor: colors.success, opacity: recalcMutation.isPending ? 0.5 : 1 }]}
             >
-              <FontAwesome name="refresh" size={14} color="#fff" />
+              <FontAwesome name="calculator" size={14} color="#fff" />
               <Text style={st.actionBtnText}>Recalculate</Text>
             </Pressable>
           )}

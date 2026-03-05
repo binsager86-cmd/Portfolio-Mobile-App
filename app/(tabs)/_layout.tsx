@@ -108,7 +108,7 @@ export default function TabLayout() {
                   <Pressable onPress={toggle} style={ls.headerBtn}>
                     {({ pressed }) => (
                       <FontAwesome
-                        name={mode === "dark" ? "sun-o" : "moon-o"}
+                        name={mode === "dark" ? "lightbulb-o" : "moon-o"}
                         size={20}
                         color={colors.textSecondary}
                         style={{ opacity: pressed ? 0.5 : 1 }}

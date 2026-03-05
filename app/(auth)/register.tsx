@@ -211,7 +211,7 @@ export default function RegisterScreen() {
         {/* Theme toggle */}
         <View style={styles.themeToggleRow}>
           <IconButton
-            icon={mode === "dark" ? "weather-sunny" : "weather-night"}
+            icon={mode === "dark" ? "lightbulb-on-outline" : "weather-night"}
             iconColor={colors.textSecondary}
             size={24}
             onPress={toggle}

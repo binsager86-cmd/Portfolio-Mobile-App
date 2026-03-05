@@ -22,6 +22,8 @@ import {
   Platform,
   TextInput as RNTextInput,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -35,6 +37,9 @@ import {
   PortfolioCashBalance,
   getDeposits,
   exportHoldingsExcel,
+  getStocks,
+  mergeStocks,
+  StockRecord,
 } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -429,10 +434,12 @@ function HoldingRow({
   holding,
   colors,
   isEven,
+  onCompanyPress,
 }: {
   holding: Holding;
   colors: ThemePalette;
   isEven: boolean;
+  onCompanyPress?: (holding: Holding) => void;
 }) {
   const rowBg = isEven ? "transparent" : colors.bgCardHover + "30";
   return (
@@ -442,10 +449,263 @@ function HoldingRow({
         { backgroundColor: rowBg, borderBottomColor: colors.borderColor },
       ]}
     >
-      {TABLE_COLUMNS.map((col) => (
-        <DataCell key={col.key} col={col} holding={holding} colors={colors} />
-      ))}
+      {TABLE_COLUMNS.map((col) =>
+        col.key === "company" && onCompanyPress ? (
+          <Pressable
+            key={col.key}
+            onPress={() => onCompanyPress(holding)}
+            style={({ pressed }) => [
+              ts.dataCell,
+              { width: col.width, opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Text
+              style={[
+                ts.cellText,
+                {
+                  color: colors.accentPrimary,
+                  fontWeight: "700",
+                  textAlign: col.align,
+                  textDecorationLine: "underline",
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {holding.company}
+            </Text>
+          </Pressable>
+        ) : (
+          <DataCell key={col.key} col={col} holding={holding} colors={colors} />
+        )
+      )}
     </View>
+  );
+}
+
+// ── Stock Merge / Edit Modal ────────────────────────────────────────
+
+function StockMergeModal({
+  holding,
+  colors,
+  onClose,
+  onMerged,
+}: {
+  holding: Holding;
+  colors: ThemePalette;
+  onClose: () => void;
+  onMerged: () => void;
+}) {
+  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
+  const [searchText, setSearchText] = useState("");
+
+  // Fetch all stocks to find the current stock's ID and list merge targets
+  const stocksQ = useQuery({
+    queryKey: ["all-stocks-for-merge"],
+    queryFn: () => getStocks(),
+  });
+
+  const allStocks = stocksQ.data?.stocks ?? [];
+
+  // Find the current holding's stock record
+  const currentStock = allStocks.find(
+    (s) => s.symbol.trim().toUpperCase() === holding.symbol.trim().toUpperCase()
+  );
+
+  // Filter: all OTHER stocks (possible merge sources to absorb into this one)
+  const mergeCandidates = useMemo(() => {
+    const list = allStocks.filter(
+      (s) => s.symbol.trim().toUpperCase() !== holding.symbol.trim().toUpperCase()
+    );
+    if (!searchText.trim()) return list;
+    const q = searchText.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.symbol.toLowerCase().includes(q) ||
+        (s.name ?? "").toLowerCase().includes(q)
+    );
+  }, [allStocks, holding.symbol, searchText]);
+
+  const mergeMutation = useMutation({
+    mutationFn: () => {
+      if (!mergeTargetId || !currentStock) throw new Error("Missing stock IDs");
+      // mergeTargetId is the SOURCE (stock being absorbed)
+      // currentStock.id is the TARGET (stock being kept)
+      return mergeStocks(mergeTargetId, currentStock.id);
+    },
+    onSuccess: (result) => {
+      Alert.alert(
+        "Stocks Merged",
+        `${result.source_symbol} merged into ${result.target_symbol}\n${result.transactions_moved} transactions moved.`
+      );
+      onMerged();
+      onClose();
+    },
+    onError: (err: any) => {
+      Alert.alert("Merge Failed", err?.message ?? "Unknown error");
+    },
+  });
+
+  const handleMerge = () => {
+    if (!mergeTargetId || !currentStock) return;
+    const sourceStock = allStocks.find((s) => s.id === mergeTargetId);
+    const sourceName = sourceStock ? `${sourceStock.symbol} (${sourceStock.name})` : "the selected stock";
+
+    if (Platform.OS === "web") {
+      if (window.confirm(`Merge ${sourceName} into ${holding.company}?\n\nAll transactions will be moved to ${holding.symbol}. This cannot be undone.`)) {
+        mergeMutation.mutate();
+      }
+    } else {
+      Alert.alert(
+        "Confirm Merge",
+        `Merge ${sourceName} into ${holding.company}?\n\nAll transactions will be moved to ${holding.symbol}. This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Merge", style: "destructive", onPress: () => mergeMutation.mutate() },
+        ]
+      );
+    }
+  };
+
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={mergeStyles.overlay} onPress={onClose}>
+        <Pressable
+          style={[
+            mergeStyles.box,
+            { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+          ]}
+          onPress={() => {}}
+        >
+          {/* Title */}
+          <View style={mergeStyles.titleRow}>
+            <Text style={[mergeStyles.title, { color: colors.textPrimary }]}>
+              {holding.company}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={12} style={{ padding: 6 }}>
+              <FontAwesome name="times" size={16} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          {/* Stock info */}
+          <View style={[mergeStyles.infoCard, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
+            <View style={mergeStyles.infoRow}>
+              <Text style={[mergeStyles.infoLabel, { color: colors.textMuted }]}>Symbol</Text>
+              <Text style={[mergeStyles.infoValue, { color: colors.textPrimary }]}>{holding.symbol}</Text>
+            </View>
+            <View style={mergeStyles.infoRow}>
+              <Text style={[mergeStyles.infoLabel, { color: colors.textMuted }]}>Quantity</Text>
+              <Text style={[mergeStyles.infoValue, { color: colors.textPrimary }]}>{fmtNum(holding.shares_qty, 0)}</Text>
+            </View>
+            <View style={mergeStyles.infoRow}>
+              <Text style={[mergeStyles.infoLabel, { color: colors.textMuted }]}>Market Price</Text>
+              <Text style={[mergeStyles.infoValue, { color: colors.textPrimary }]}>{fmtNum(holding.market_price, 3)}</Text>
+            </View>
+            <View style={mergeStyles.infoRow}>
+              <Text style={[mergeStyles.infoLabel, { color: colors.textMuted }]}>Currency</Text>
+              <Text style={[mergeStyles.infoValue, { color: colors.textPrimary }]}>{holding.currency}</Text>
+            </View>
+          </View>
+
+          {/* Merge section */}
+          <Text style={[mergeStyles.sectionLabel, { color: colors.textPrimary }]}>
+            Merge Another Stock Into This One
+          </Text>
+          <Text style={[mergeStyles.sectionHint, { color: colors.textMuted }]}>
+            Select a stock to absorb. Its transactions will be moved to {holding.symbol}, then the selected stock will be deleted.
+          </Text>
+
+          <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
+            {/* Search filter */}
+            <RNTextInput
+              style={[
+                mergeStyles.searchInput,
+                {
+                  color: colors.textPrimary,
+                  borderColor: colors.borderColor,
+                  backgroundColor: colors.bgPrimary,
+                },
+              ]}
+              placeholder="Search stocks..."
+              placeholderTextColor={colors.textMuted}
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+
+            {stocksQ.isLoading ? (
+              <ActivityIndicator style={{ padding: 20 }} color={colors.accentPrimary} />
+            ) : mergeCandidates.length === 0 ? (
+              <Text style={[mergeStyles.emptyText, { color: colors.textMuted }]}>
+                No other stocks found
+              </Text>
+            ) : (
+              mergeCandidates.map((stock) => {
+                const selected = mergeTargetId === stock.id;
+                return (
+                  <Pressable
+                    key={stock.id}
+                    onPress={() => setMergeTargetId(selected ? null : stock.id)}
+                    style={[
+                      mergeStyles.stockItem,
+                      {
+                        backgroundColor: selected
+                          ? colors.accentPrimary + "20"
+                          : "transparent",
+                        borderColor: selected
+                          ? colors.accentPrimary
+                          : colors.borderColor,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[mergeStyles.stockSymbol, { color: selected ? colors.accentPrimary : colors.textPrimary }]}>
+                        {stock.symbol}
+                      </Text>
+                      <Text style={[mergeStyles.stockName, { color: colors.textMuted }]}>
+                        {stock.name} • {stock.portfolio} • {stock.currency}
+                      </Text>
+                    </View>
+                    {selected && (
+                      <FontAwesome name="check-circle" size={18} color={colors.accentPrimary} />
+                    )}
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+
+          {/* Action buttons */}
+          <View style={mergeStyles.btnRow}>
+            <Pressable
+              onPress={onClose}
+              style={[mergeStyles.btn, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor, borderWidth: 1 }]}
+            >
+              <Text style={[mergeStyles.btnText, { color: colors.textSecondary }]}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleMerge}
+              disabled={!mergeTargetId || mergeMutation.isPending}
+              style={[
+                mergeStyles.btn,
+                {
+                  backgroundColor: mergeTargetId
+                    ? colors.danger
+                    : colors.bgInput,
+                  opacity: mergeTargetId ? 1 : 0.5,
+                },
+              ]}
+            >
+              {mergeMutation.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={[mergeStyles.btnText, { color: "#fff", fontWeight: "700" }]}>
+                  Merge Selected
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -459,6 +719,7 @@ export default function HoldingsScreen() {
   const [filter, setFilter] = useState<string | undefined>(undefined);
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [selectedHolding, setSelectedHolding] = useState<Holding | null>(null);
 
   const {
     data: resp,
@@ -759,6 +1020,7 @@ export default function HoldingsScreen() {
                   holding={h}
                   colors={colors}
                   isEven={idx % 2 === 0}
+                  onCompanyPress={(holding) => setSelectedHolding(holding)}
                 />
               ))}
 
@@ -825,6 +1087,20 @@ export default function HoldingsScreen() {
         )}
 
       </ScrollView>
+
+      {/* Stock Merge / Edit Modal */}
+      {selectedHolding && (
+        <StockMergeModal
+          holding={selectedHolding}
+          colors={colors}
+          onClose={() => setSelectedHolding(null)}
+          onMerged={() => {
+            queryClient.invalidateQueries({ queryKey: ["holdings"] });
+            queryClient.invalidateQueries({ queryKey: ["overview"] });
+            queryClient.invalidateQueries({ queryKey: ["all-stocks-for-merge"] });
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1131,6 +1407,117 @@ function KpiChip({
     </View>
   );
 }
+
+// ── Table styles ────────────────────────────────────────────────────
+
+// ── Merge modal styles ──────────────────────────────────────────────
+
+const mergeStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  box: {
+    width: "92%",
+    maxWidth: 480,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 22,
+    maxHeight: "88%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  infoCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  infoLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  infoValue: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  sectionHint: {
+    fontSize: 11,
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  emptyText: {
+    textAlign: "center",
+    padding: 20,
+    fontSize: 13,
+  },
+  stockItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  stockSymbol: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  stockName: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  btnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+});
 
 // ── Table styles ────────────────────────────────────────────────────
 

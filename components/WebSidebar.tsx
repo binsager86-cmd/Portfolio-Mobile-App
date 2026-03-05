@@ -182,7 +182,7 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
           accessibilityLabel={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           <FontAwesome
-            name={mode === "dark" ? "sun-o" : "moon-o"}
+            name={mode === "dark" ? "lightbulb-o" : "moon-o"}
             size={18}
             color={colors.textSecondary}
             style={s.navIcon}

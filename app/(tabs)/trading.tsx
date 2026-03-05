@@ -34,9 +34,11 @@ import {
   renameStockBySymbol,
   updateTransaction,
   deleteTransaction,
+  getStocks,
   TradingSummaryResponse,
   TradingTransaction,
   TradingSummary,
+  StockRecord,
 } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -518,6 +520,217 @@ const EDIT_TABLE_WIDTH = EDIT_COLUMNS.reduce((sum, c) => sum + c.width, 0);
 
 const PORTFOLIO_OPTIONS = ["KFH", "BBYN", "USA"];
 
+// ── Stock Picker Dropdown (searchable, uses cached stocks) ──────────
+
+function StockPickerDropdown({
+  value,
+  onChange,
+  colors,
+  width,
+  stocks,
+}: {
+  value: string;
+  onChange: (symbol: string) => void;
+  colors: ThemePalette;
+  width: number;
+  stocks: StockRecord[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!filter.trim()) return stocks;
+    const q = filter.toLowerCase();
+    return stocks.filter(
+      (s) =>
+        s.symbol.toLowerCase().includes(q) ||
+        (s.name ?? "").toLowerCase().includes(q)
+    );
+  }, [stocks, filter]);
+
+  if (Platform.OS === "web") {
+    return (
+      <View style={[editStyles.editCell, { width, zIndex: open ? 200 : 1 }]}>
+        <Pressable
+          onPress={() => { setOpen(!open); setFilter(""); }}
+          style={[
+            editStyles.dropdownBtn,
+            { borderColor: colors.borderColor, backgroundColor: colors.bgInput },
+          ]}
+        >
+          <Text
+            style={[editStyles.dropdownText, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {value || "Select…"}
+          </Text>
+          <FontAwesome
+            name={open ? "caret-up" : "caret-down"}
+            size={10}
+            color={colors.textMuted}
+          />
+        </Pressable>
+        {open && (
+          <View
+            style={[
+              editStyles.dropdownList,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.borderColor,
+                maxHeight: 220,
+                width: Math.max(width, 200),
+              },
+            ]}
+          >
+            {/* search box */}
+            <View style={{ padding: 4 }}>
+              <input
+                type="text"
+                placeholder="Search stocks…"
+                value={filter}
+                onChange={(e: any) => setFilter(e.target.value)}
+                autoFocus
+                style={{
+                  fontSize: 12,
+                  color: colors.textPrimary,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderColor}`,
+                  borderRadius: 4,
+                  padding: "4px 6px",
+                  fontFamily: "inherit",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  outline: "none",
+                } as any}
+              />
+            </View>
+            <ScrollView style={{ maxHeight: 180 }}>
+              {filtered.length === 0 ? (
+                <Text
+                  style={{
+                    padding: 8,
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  No stocks found
+                </Text>
+              ) : (
+                filtered.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    onPress={() => {
+                      onChange(s.symbol);
+                      setOpen(false);
+                      setFilter("");
+                    }}
+                    style={[
+                      editStyles.dropdownItem,
+                      s.symbol === value && {
+                        backgroundColor: colors.accentPrimary + "20",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        editStyles.dropdownItemText,
+                        {
+                          color:
+                            s.symbol === value
+                              ? colors.accentPrimary
+                              : colors.textPrimary,
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {s.symbol}{s.name ? ` — ${s.name}` : ""}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // Native fallback (same pattern)
+  return (
+    <View style={[editStyles.editCell, { width, zIndex: open ? 200 : 1 }]}>
+      <Pressable
+        onPress={() => { setOpen(!open); setFilter(""); }}
+        style={[
+          editStyles.dropdownBtn,
+          { borderColor: colors.borderColor, backgroundColor: colors.bgInput },
+        ]}
+      >
+        <Text style={[editStyles.dropdownText, { color: colors.textPrimary }]} numberOfLines={1}>
+          {value || "Select…"}
+        </Text>
+        <FontAwesome name={open ? "caret-up" : "caret-down"} size={10} color={colors.textMuted} />
+      </Pressable>
+      {open && (
+        <View
+          style={[
+            editStyles.dropdownList,
+            { backgroundColor: colors.bgCard, borderColor: colors.borderColor, maxHeight: 220, width: Math.max(width, 200) },
+          ]}
+        >
+          <View style={{ padding: 4 }}>
+            <TextInput
+              placeholder="Search stocks…"
+              placeholderTextColor={colors.textMuted}
+              value={filter}
+              onChangeText={setFilter}
+              autoFocus
+              style={{
+                fontSize: 12,
+                color: colors.textPrimary,
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                borderRadius: 4,
+                paddingHorizontal: 6,
+                paddingVertical: 4,
+                backgroundColor: colors.bgInput,
+              }}
+            />
+          </View>
+          <ScrollView style={{ maxHeight: 180 }}>
+            {filtered.length === 0 ? (
+              <Text style={{ padding: 8, color: colors.textMuted, fontSize: 12, textAlign: "center" }}>
+                No stocks found
+              </Text>
+            ) : (
+              filtered.map((s) => (
+                <Pressable
+                  key={s.id}
+                  onPress={() => { onChange(s.symbol); setOpen(false); setFilter(""); }}
+                  style={[
+                    editStyles.dropdownItem,
+                    s.symbol === value && { backgroundColor: colors.accentPrimary + "20" },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      editStyles.dropdownItemText,
+                      { color: s.symbol === value ? colors.accentPrimary : colors.textPrimary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {s.symbol}{s.name ? ` — ${s.name}` : ""}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ── Portfolio Dropdown ──────────────────────────────────────────────
 
 function PortfolioDropdown({
@@ -599,6 +812,7 @@ function EditableTableRow({
   onUpdateField,
   colors,
   isEven,
+  stocks,
 }: {
   row: EditRowData;
   isSelected: boolean;
@@ -606,6 +820,7 @@ function EditableTableRow({
   onUpdateField: (id: number, field: keyof EditRowData, value: string) => void;
   colors: ThemePalette;
   isEven: boolean;
+  stocks: StockRecord[];
 }) {
   const rowBg = isSelected
     ? colors.danger + "15"
@@ -679,10 +894,14 @@ function EditableTableRow({
         )}
       </View>
 
-      {/* Symbol (read-only) */}
-      <View style={[editStyles.editCell, { width: 100 }]}>
-        <Text style={[ts.cellText, { color: colors.textPrimary, fontWeight: "700" }]}>{row.symbol}</Text>
-      </View>
+      {/* Symbol (editable stock picker) */}
+      <StockPickerDropdown
+        value={row.symbol}
+        onChange={(v) => onUpdateField(row.id, "symbol", v)}
+        colors={colors}
+        width={100}
+        stocks={stocks}
+      />
 
       {/* Portfolio (dropdown) */}
       <PortfolioDropdown
@@ -1244,6 +1463,14 @@ export default function TradingScreen() {
       Alert.alert("Error", err?.message ?? "Failed to recalculate");
     },
   });
+
+  // Fetch cached stocks for the stock picker in edit mode
+  const { data: stocksData } = useQuery({
+    queryKey: ["stocks"],
+    queryFn: () => getStocks(),
+    staleTime: 60_000,
+  });
+  const allStocks = useMemo(() => stocksData?.stocks ?? [], [stocksData]);
 
   // Rename stock mutation (inline edit on company name)
   const renameMutation = useMutation({
@@ -1938,6 +2165,7 @@ export default function TradingScreen() {
                       onUpdateField={handleUpdateField}
                       colors={colors}
                       isEven={idx % 2 === 0}
+                      stocks={allStocks}
                     />
                   );
                 })}

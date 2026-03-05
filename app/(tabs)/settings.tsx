@@ -149,7 +149,7 @@ export default function SettingsScreen() {
       {/* Theme Toggle */}
       <View style={[s.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <View style={s.cardHeader}>
-          <FontAwesome name={mode === "dark" ? "sun-o" : "moon-o"} size={20} color={colors.accentPrimary} />
+          <FontAwesome name={mode === "dark" ? "lightbulb-o" : "moon-o"} size={20} color={colors.accentPrimary} />
           <Text style={[s.cardTitle, { color: colors.textPrimary }]}>Appearance</Text>
         </View>
         <Pressable
