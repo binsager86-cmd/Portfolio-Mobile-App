@@ -4,14 +4,13 @@
  *
  * Post-build script for SPA hosting on static platforms (DigitalOcean, GitHub Pages, etc.)
  *
- * Problem:  Static hosts return 404 for deep links like /login because no physical file exists.
- * Solution: Copy index.html to every known route path (e.g., dist/login/index.html).
- *           When the CDN finds the file it serves it, the SPA boots, and expo-router handles routing.
+ * Works with both Expo output modes:
+ *   - "static" (preferred): Expo generates <route>.html files natively.
+ *     This script adds <route>/index.html directories as additional fallback.
+ *   - "single": Only index.html exists.
+ *     This script copies it to every route path.
  *
- * This script:
- *   1. Reads dist/index.html
- *   2. Creates dist/404.html  (fallback for genuinely unknown paths)
- *   3. Creates dist/<route>/index.html for every app route
+ * Also creates 404.html as a fallback for genuinely unknown paths.
  *
  * Usage:  node scripts/create-spa-redirects.js
  */
@@ -24,13 +23,10 @@ const INDEX = path.join(DIST, 'index.html');
 
 // ── All app routes derived from app/(auth)/ and app/(tabs)/ ──────────────
 const ROUTES = [
-  // Auth routes
   'login',
   'register',
-  // Auth routes with group prefix (expo-router may use either)
   '(auth)/login',
   '(auth)/register',
-  // Tab routes
   'holdings',
   'transactions',
   'add-transaction',
@@ -50,7 +46,6 @@ const ROUTES = [
   'integrity',
   'two',
   'modal',
-  // Tab routes with group prefix
   '(tabs)',
   '(tabs)/holdings',
   '(tabs)/transactions',
@@ -80,32 +75,45 @@ function main() {
     process.exit(1);
   }
 
-  const html = fs.readFileSync(INDEX, 'utf-8');
+  const fallbackHtml = fs.readFileSync(INDEX, 'utf-8');
 
-  // 1. Create 404.html (DO CDN serves this for truly unknown paths)
+  // 1. Create 404.html
   const dest404 = path.join(DIST, '404.html');
-  fs.writeFileSync(dest404, html);
+  fs.writeFileSync(dest404, fallbackHtml);
   console.log('✅  dist/404.html');
 
-  // 2. Create route-specific index.html copies
+  // 2. For each route, ensure both <route>.html and <route>/index.html exist
   let created = 0;
   for (const route of ROUTES) {
-    const dir = path.join(DIST, route);
-    const file = path.join(dir, 'index.html');
+    // Determine the best HTML source for this route
+    // Prefer the route-specific .html (from output:"static") over generic index.html
+    const routeHtmlFile = path.join(DIST, route + '.html');
+    const html = fs.existsSync(routeHtmlFile)
+      ? fs.readFileSync(routeHtmlFile, 'utf-8')
+      : fallbackHtml;
 
-    // Skip if the route directory already has an index.html from the build
-    if (fs.existsSync(file)) {
-      console.log(`⏭   ${route}/index.html (already exists)`);
-      continue;
+    // Create <route>/index.html (for servers that resolve directories)
+    const dir = path.join(DIST, route);
+    const dirIndex = path.join(dir, 'index.html');
+    if (!fs.existsSync(dirIndex)) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(dirIndex, html);
+      created++;
+      console.log(`✅  ${route}/index.html`);
+    } else {
+      console.log(`⏭   ${route}/index.html (exists)`);
     }
 
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, html);
-    created++;
-    console.log(`✅  ${route}/index.html`);
+    // Create <route>.html if it doesn't exist (for CDNs with clean-URL support)
+    if (!fs.existsSync(routeHtmlFile)) {
+      fs.writeFileSync(routeHtmlFile, html);
+      created++;
+      console.log(`✅  ${route}.html`);
+    }
   }
 
-  console.log(`\n🎯  Created ${created} route files + 404.html — SPA deep links will work on any static host.`);
+  console.log(`\n🎯  Created ${created} extra route files + 404.html`);
+  console.log('    SPA deep links will work on any static host.');
 }
 
 main();
