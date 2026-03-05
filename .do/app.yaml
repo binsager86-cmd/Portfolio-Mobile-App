@@ -20,6 +20,7 @@ static_sites:
       - path: /
         preserve_path_prefix: true
     catchall_document: index.html
+    error_document: index.html
     cors:
       allow_origins:
         - exact: "https://backend-api-app-hfc2n.ondigitalocean.app"
