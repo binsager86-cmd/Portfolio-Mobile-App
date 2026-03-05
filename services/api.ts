@@ -167,6 +167,8 @@ export interface OverviewData {
   cagr_years?: number;
   cagr_start_value?: number;
   cagr_start_date?: string;
+  // MWRR (IRR) — inline from overview
+  mwrr_percent?: number | null;
 }
 
 export interface Holding {

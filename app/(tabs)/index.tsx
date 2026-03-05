@@ -689,7 +689,7 @@ export default function OverviewScreen() {
         />
         <MetricCard
           label="MWRR (IRR)"
-          value={perfData ? formatPercent(perfData.mwrr_percent) : "—"}
+          value={formatPercent(data?.mwrr_percent ?? perfData?.mwrr_percent ?? null)}
           subline="Money-Weighted Return"
           icon="line-chart"
           accentColor="#8b5cf6"
