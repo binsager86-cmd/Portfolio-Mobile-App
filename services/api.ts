@@ -707,6 +707,8 @@ export interface TradingTransaction {
   id: number;
   date: string | null;
   symbol: string | null;
+  company_name: string | null;
+  stock_id: number | null;
   portfolio: string;
   type: string;
   status: string;
@@ -951,9 +953,38 @@ export async function updateStock(stockId: number, payload: Partial<StockCreate>
   return data.data;
 }
 
+/** Rename a stock by symbol (inline edit from trading table). */
+export async function renameStockBySymbol(
+  symbol: string,
+  name: string
+): Promise<{ stock_id: number; symbol: string; name: string; message: string }> {
+  const { data } = await api.patch<{
+    status: string;
+    data: { stock_id: number; symbol: string; name: string; message: string };
+  }>("/api/v1/portfolio/rename-stock", null, {
+    params: { symbol, name },
+  });
+  return data.data;
+}
+
 /** Delete stock. */
 export async function deleteStock(stockId: number): Promise<void> {
   await api.delete(`/api/v1/stocks/${stockId}`);
+}
+
+/** Merge two stock records: move all transactions from source into target, delete source. */
+export async function mergeStocks(
+  sourceStockId: number,
+  targetStockId: number
+): Promise<{ message: string; source_symbol: string; target_symbol: string; transactions_moved: number }> {
+  const { data } = await api.post<{
+    status: string;
+    data: { message: string; source_symbol: string; target_symbol: string; transactions_moved: number };
+  }>("/api/v1/stocks/merge", {
+    source_stock_id: sourceStockId,
+    target_stock_id: targetStockId,
+  });
+  return data.data;
 }
 
 /** Trigger price update for all stocks. */

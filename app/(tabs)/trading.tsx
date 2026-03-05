@@ -31,6 +31,7 @@ import {
   getTradingSummary,
   recalculateWAC,
   exportTradingExcel,
+  renameStockBySymbol,
   TradingSummaryResponse,
   TradingTransaction,
   TradingSummary,
@@ -78,7 +79,8 @@ interface ColDef {
 const TABLE_COLUMNS: ColDef[] = [
   { key: "id",            label: "ID",            fmt: "id",              width: 52,  align: "left" },
   { key: "date",          label: "Date",          fmt: "date",            width: 90,  align: "left" },
-  { key: "symbol",        label: "Symbol",        fmt: "text_bold",       width: 100, align: "left" },
+  { key: "company_name",  label: "Company",       fmt: "text_bold",       width: 140, align: "left" },
+  { key: "symbol",        label: "Symbol",        fmt: "text",            width: 100, align: "left" },
   { key: "portfolio",     label: "Portfolio",     fmt: "text",            width: 72,  align: "left" },
   { key: "type",          label: "Type",          fmt: "type_badge",      width: 80,  align: "left" },
   { key: "status",        label: "Status",        fmt: "status",          width: 82,  align: "left" },
@@ -317,16 +319,116 @@ function DataCell({
   );
 }
 
+// ── Editable Company Name Cell ──────────────────────────────────────
+
+function EditableCompanyCell({
+  txn,
+  colors,
+  width,
+  onRename,
+}: {
+  txn: TradingTransaction;
+  colors: ThemePalette;
+  width: number;
+  onRename: (symbol: string, newName: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(txn.company_name ?? txn.symbol ?? "");
+
+  const companyName = txn.company_name ?? txn.symbol ?? "-";
+
+  const handleDoubleClick = useCallback(() => {
+    setEditValue(companyName);
+    setEditing(true);
+  }, [companyName]);
+
+  const handleSave = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== companyName && txn.symbol) {
+      onRename(txn.symbol, trimmed);
+    }
+    setEditing(false);
+  }, [editValue, companyName, txn.symbol, onRename]);
+
+  const handleCancel = useCallback(() => {
+    setEditing(false);
+    setEditValue(companyName);
+  }, [companyName]);
+
+  if (editing) {
+    return (
+      <View style={[ts.dataCell, { width, flexDirection: "row", alignItems: "center", gap: 2 }]}>
+        <TextInput
+          value={editValue}
+          onChangeText={setEditValue}
+          onSubmitEditing={handleSave}
+          onBlur={handleSave}
+          autoFocus
+          style={[
+            ts.cellText,
+            {
+              flex: 1,
+              color: colors.textPrimary,
+              fontWeight: "700",
+              borderBottomWidth: 1,
+              borderBottomColor: colors.accentPrimary,
+              paddingVertical: 2,
+              fontSize: 12,
+              ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
+            },
+          ]}
+          returnKeyType="done"
+        />
+        <Pressable onPress={handleCancel} hitSlop={6}>
+          <FontAwesome name="times" size={10} color={colors.danger} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Web: use onDoubleClick via native prop
+  const webProps = Platform.OS === "web"
+    ? { onDoubleClick: handleDoubleClick } as any
+    : {};
+
+  return (
+    <Pressable
+      onLongPress={Platform.OS !== "web" ? handleDoubleClick : undefined}
+      style={[ts.dataCell, { width }]}
+      {...webProps}
+    >
+      <Text
+        style={[
+          ts.cellText,
+          {
+            color: colors.textPrimary,
+            fontWeight: "700",
+            textAlign: "left",
+          },
+        ]}
+        numberOfLines={1}
+      >
+        {companyName}
+      </Text>
+      <Text style={{ fontSize: 8, color: colors.textMuted, marginTop: 1 }}>
+        double-click to edit
+      </Text>
+    </Pressable>
+  );
+}
+
 // ── Table Row ───────────────────────────────────────────────────────
 
 function TableRow({
   txn,
   colors,
   isEven,
+  onRename,
 }: {
   txn: TradingTransaction;
   colors: ThemePalette;
   isEven: boolean;
+  onRename: (symbol: string, newName: string) => void;
 }) {
   const typ = (txn.type ?? "").toLowerCase();
   const rowBg = typ.includes("buy")
@@ -339,9 +441,19 @@ function TableRow({
 
   return (
     <View style={[ts.dataRow, { backgroundColor: rowBg, borderBottomColor: colors.borderColor }]}>
-      {TABLE_COLUMNS.map((col) => (
-        <DataCell key={col.key} col={col} txn={txn} colors={colors} />
-      ))}
+      {TABLE_COLUMNS.map((col) =>
+        col.key === "company_name" ? (
+          <EditableCompanyCell
+            key={col.key}
+            txn={txn}
+            colors={colors}
+            width={col.width}
+            onRename={onRename}
+          />
+        ) : (
+          <DataCell key={col.key} col={col} txn={txn} colors={colors} />
+        )
+      )}
     </View>
   );
 }
@@ -702,6 +814,26 @@ export default function TradingScreen() {
     },
   });
 
+  // Rename stock mutation (inline edit on company name)
+  const renameMutation = useMutation({
+    mutationFn: ({ symbol, name }: { symbol: string; name: string }) =>
+      renameStockBySymbol(symbol, name),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+      Alert.alert("Updated", `"${result.symbol}" renamed to "${result.name}"`);
+    },
+    onError: (err: any) => {
+      Alert.alert("Rename Failed", err?.message ?? "Could not rename stock");
+    },
+  });
+
+  const handleRename = useCallback(
+    (symbol: string, newName: string) => {
+      renameMutation.mutate({ symbol, name: newName });
+    },
+    [renameMutation]
+  );
+
   // Export handler
   const handleExport = useCallback(async () => {
     try {
@@ -1059,7 +1191,7 @@ export default function TradingScreen() {
 
                 {/* Data rows */}
                 {sortedTransactions.map((txn, idx) => (
-                  <TableRow key={txn.id} txn={txn} colors={colors} isEven={idx % 2 === 0} />
+                  <TableRow key={txn.id} txn={txn} colors={colors} isEven={idx % 2 === 0} onRename={handleRename} />
                 ))}
               </View>
             </ScrollView>
