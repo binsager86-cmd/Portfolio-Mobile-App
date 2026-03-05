@@ -547,6 +547,7 @@ export default function OverviewScreen() {
           {/* Refresh button */}
           <Pressable
             onPress={onRefresh}
+            disabled={refreshing}
             style={({ pressed }) => ({
               minWidth: 44,
               minHeight: 44,
@@ -554,13 +555,18 @@ export default function OverviewScreen() {
               justifyContent: "center" as const,
               borderRadius: 8,
               backgroundColor: pressed ? colors.bgCardHover : "transparent",
+              opacity: refreshing ? 0.6 : 1,
             })}
           >
-            <FontAwesome
-              name="refresh"
-              size={18}
-              color={refreshing ? colors.accentPrimary : colors.textMuted}
-            />
+            {refreshing ? (
+              <ActivityIndicator size="small" color={colors.accentPrimary} />
+            ) : (
+              <FontAwesome
+                name="refresh"
+                size={18}
+                color={colors.textMuted}
+              />
+            )}
           </Pressable>
         </View>
         <View style={styles.bannerRow}>
