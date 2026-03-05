@@ -662,9 +662,7 @@ export default function AddTransactionScreen() {
               render={({ field: { value, onChange } }) => (
                 <NumberInput
                   value={value != null ? String(value) : ""}
-                  onChangeText={(t) =>
-                    onChange(t === "" ? undefined : Number(t))
-                  }
+                  onChangeText={(t) => onChange(t === "" ? undefined : t)}
                   placeholder="0"
                   hasError={!!errors.shares}
                 />
@@ -686,9 +684,7 @@ export default function AddTransactionScreen() {
               render={({ field: { value, onChange } }) => (
                 <NumberInput
                   value={value != null && value !== ("" as any) ? String(value) : ""}
-                  onChangeText={(t) =>
-                    onChange(t === "" ? "" : Number(t))
-                  }
+                  onChangeText={(t) => onChange(t)}
                   placeholder="Total cost"
                   suffix="KWD"
                   hasError={!!errors.purchase_cost}
@@ -711,9 +707,7 @@ export default function AddTransactionScreen() {
               render={({ field: { value, onChange } }) => (
                 <NumberInput
                   value={value != null && value !== ("" as any) ? String(value) : ""}
-                  onChangeText={(t) =>
-                    onChange(t === "" ? "" : Number(t))
-                  }
+                  onChangeText={(t) => onChange(t)}
                   placeholder="Total proceeds"
                   suffix="KWD"
                   hasError={!!errors.sell_value}
@@ -745,7 +739,7 @@ export default function AddTransactionScreen() {
             render={({ field: { value, onChange } }) => (
               <NumberInput
                 value={value != null && value !== ("" as any) ? String(value) : ""}
-                onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                onChangeText={(t) => onChange(t)}
                 placeholder="0.000"
                 suffix="KWD"
                 hasError={!!errors.cash_dividend}
@@ -762,7 +756,7 @@ export default function AddTransactionScreen() {
             render={({ field: { value, onChange } }) => (
               <NumberInput
                 value={value != null && value !== ("" as any) ? String(value) : ""}
-                onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                onChangeText={(t) => onChange(t)}
                 placeholder="0.000"
                 suffix="KWD"
               />
@@ -778,7 +772,7 @@ export default function AddTransactionScreen() {
             render={({ field: { value, onChange } }) => (
               <NumberInput
                 value={value != null && value !== ("" as any) ? String(value) : ""}
-                onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                onChangeText={(t) => onChange(t)}
                 placeholder="0"
               />
             )}
@@ -817,7 +811,7 @@ export default function AddTransactionScreen() {
                     render={({ field: { value, onChange } }) => (
                       <NumberInput
                         value={value != null && value !== ("" as any) ? String(value) : ""}
-                        onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                        onChangeText={(t) => onChange(t)}
                         placeholder="0.000"
                         suffix="KWD"
                       />
@@ -833,7 +827,7 @@ export default function AddTransactionScreen() {
                     render={({ field: { value, onChange } }) => (
                       <NumberInput
                         value={value != null && value !== ("" as any) ? String(value) : ""}
-                        onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                        onChangeText={(t) => onChange(t)}
                         placeholder="0.000000"
                       />
                     )}
@@ -848,7 +842,7 @@ export default function AddTransactionScreen() {
                     render={({ field: { value, onChange } }) => (
                       <NumberInput
                         value={value != null && value !== ("" as any) ? String(value) : ""}
-                        onChangeText={(t) => onChange(t === "" ? "" : Number(t))}
+                        onChangeText={(t) => onChange(t)}
                         placeholder="0"
                       />
                     )}
