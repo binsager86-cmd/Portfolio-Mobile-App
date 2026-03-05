@@ -513,6 +513,45 @@ export async function exportDepositsExcel(): Promise<Blob> {
   return data;
 }
 
+/** Download sample template for deposit uploads. Returns blob. */
+export async function downloadDepositsTemplate(): Promise<Blob> {
+  const { data } = await api.get("/api/v1/cash/deposits-template", {
+    responseType: "blob",
+  });
+  return data;
+}
+
+/** Import deposits from Excel upload. */
+export async function importDepositsExcel(
+  file: FormData,
+  mode: "merge" | "replace" = "merge",
+): Promise<{
+  imported: number;
+  skipped: number;
+  total_rows: number;
+  errors: Array<{ row: number; error: string }>;
+  mode: string;
+}> {
+  const { data } = await api.post<{
+    status: string;
+    data: {
+      imported: number;
+      skipped: number;
+      total_rows: number;
+      errors: Array<{ row: number; error: string }>;
+      mode: string;
+    };
+  }>(
+    "/api/v1/cash/deposits-import",
+    file,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      params: { mode },
+    }
+  );
+  return data.data;
+}
+
 // ── Portfolio Cash Balances ─────────────────────────────────────────
 
 export interface PortfolioCashBalance {
