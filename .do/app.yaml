@@ -17,7 +17,6 @@ static_sites:
         value: "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
         scope: BUILD_TIME
     catchall_document: index.html
-    error_document: 404.html
     cors:
       allow_origins:
         - exact: "https://backend-api-app-hfc2n.ondigitalocean.app"
