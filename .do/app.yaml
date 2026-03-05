@@ -6,7 +6,7 @@ static_sites:
       repo: binsager86-cmd/Portfolio-Mobile-App
       branch: main
       deploy_on_push: true
-    build_command: npm install --ignore-scripts && npx expo export --platform web
+    build_command: npm install && npx expo export --platform web --clear
     output_dir: dist
     environment_slug: node-js
     envs:
@@ -16,9 +16,6 @@ static_sites:
       - key: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
         value: "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
         scope: BUILD_TIME
-    routes:
-      - path: /
-        preserve_path_prefix: true
     catchall_document: index.html
     error_document: index.html
     cors:
