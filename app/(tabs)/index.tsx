@@ -938,7 +938,7 @@ export default function OverviewScreen() {
             {AI_PROMPT_CATEGORIES[aiCategory].prompts.map((p) => (
               <Pressable
                 key={p}
-                onPress={() => handleAiAnalyze(p)}
+                onPress={() => setAiPrompt(p)}
                 style={[styles.aiPromptSuggestion, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
               >
                 <Text style={{ color: colors.textPrimary, fontSize: 13, flex: 1 }}>{p}</Text>

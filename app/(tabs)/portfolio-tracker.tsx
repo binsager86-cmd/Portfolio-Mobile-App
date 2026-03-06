@@ -41,6 +41,7 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import SnapshotLineChart, {
   ChartDataPoint,
+  ChartPalette,
 } from "@/components/charts/SnapshotLineChart";
 import type { ThemePalette } from "@/constants/theme";
 
@@ -75,6 +76,90 @@ const CHART_COLORS = {
   gainLine: { dark: "#10b981", light: "#047857" },
 };
 
+// ── Premium chart palettes ──────────────────────────────────────────
+
+/** Teal → Cyan palette for the Portfolio Value chart */
+const VALUE_PALETTE_DARK: ChartPalette = {
+  primary: "#06B6D4",
+  secondary: "#0EA5E9",
+  primaryLight: "#22D3EE",
+  secondaryLight: "#38BDF8",
+  primaryGlow: "rgba(6,182,212,0.45)",
+  secondaryGlow: "rgba(14,165,233,0.45)",
+  areaTopOpacity: 0.45,
+  areaMidOpacity: 0.12,
+  areaBotOpacity: 0.02,
+  guideLine: "rgba(255,255,255,0.15)",
+  dotFill: "#FFFFFF",
+  tooltipBg: "rgba(18,18,28,0.88)",
+  tooltipBorder: "rgba(6,182,212,0.35)",
+  tooltipShadow: "rgba(6,182,212,0.25)",
+  tooltipValue: "#FFFFFF",
+  tooltipDate: "rgba(255,255,255,0.55)",
+  chartBg: "#0F0F0F",
+};
+
+const VALUE_PALETTE_LIGHT: ChartPalette = {
+  primary: "#0891B2",
+  secondary: "#0284C7",
+  primaryLight: "#06B6D4",
+  secondaryLight: "#0EA5E9",
+  primaryGlow: "rgba(8,145,178,0.22)",
+  secondaryGlow: "rgba(2,132,199,0.22)",
+  areaTopOpacity: 0.28,
+  areaMidOpacity: 0.08,
+  areaBotOpacity: 0.01,
+  guideLine: "rgba(100,116,139,0.22)",
+  dotFill: "#FFFFFF",
+  tooltipBg: "rgba(255,255,255,0.92)",
+  tooltipBorder: "rgba(8,145,178,0.25)",
+  tooltipShadow: "rgba(100,116,139,0.18)",
+  tooltipValue: "#1e293b",
+  tooltipDate: "rgba(100,116,139,0.72)",
+  chartBg: "#F7F8FC",
+};
+
+/** Emerald → Teal palette for the Net Gain chart */
+const GAIN_PALETTE_DARK: ChartPalette = {
+  primary: "#10B981",
+  secondary: "#14B8A6",
+  primaryLight: "#34D399",
+  secondaryLight: "#2DD4BF",
+  primaryGlow: "rgba(16,185,129,0.45)",
+  secondaryGlow: "rgba(20,184,166,0.45)",
+  areaTopOpacity: 0.45,
+  areaMidOpacity: 0.12,
+  areaBotOpacity: 0.02,
+  guideLine: "rgba(255,255,255,0.15)",
+  dotFill: "#FFFFFF",
+  tooltipBg: "rgba(18,18,28,0.88)",
+  tooltipBorder: "rgba(16,185,129,0.35)",
+  tooltipShadow: "rgba(16,185,129,0.25)",
+  tooltipValue: "#FFFFFF",
+  tooltipDate: "rgba(255,255,255,0.55)",
+  chartBg: "#0F0F0F",
+};
+
+const GAIN_PALETTE_LIGHT: ChartPalette = {
+  primary: "#059669",
+  secondary: "#0D9488",
+  primaryLight: "#10B981",
+  secondaryLight: "#14B8A6",
+  primaryGlow: "rgba(5,150,105,0.22)",
+  secondaryGlow: "rgba(13,148,136,0.22)",
+  areaTopOpacity: 0.28,
+  areaMidOpacity: 0.08,
+  areaBotOpacity: 0.01,
+  guideLine: "rgba(100,116,139,0.22)",
+  dotFill: "#FFFFFF",
+  tooltipBg: "rgba(255,255,255,0.92)",
+  tooltipBorder: "rgba(5,150,105,0.25)",
+  tooltipShadow: "rgba(100,116,139,0.18)",
+  tooltipValue: "#1e293b",
+  tooltipDate: "rgba(100,116,139,0.72)",
+  chartBg: "#F7F8FC",
+};
+
 // ── KPI card colors ─────────────────────────────────────────────────
 
 const KPI_STYLES = {
@@ -89,6 +174,10 @@ const KPI_STYLES = {
   roi: {
     dark: { bg: "rgba(138,43,226,0.12)", border: "rgba(138,43,226,0.3)", accent: "#8a2be2" },
     light: { bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.2)", accent: "#6366f1" },
+  },
+  avgMovement: {
+    dark: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", accent: "#f59e0b" },
+    light: { bg: "rgba(217,119,6,0.08)", border: "rgba(217,119,6,0.2)", accent: "#d97706" },
   },
 };
 
@@ -161,8 +250,12 @@ export default function PortfolioTrackerScreen() {
   });
 
   const recalcMutation = useMutation({
-    mutationFn: recalculateSnapshots,
+    mutationFn: () => {
+      console.log("[Recalculate] Starting recalculation request...");
+      return recalculateSnapshots();
+    },
     onSuccess: (result) => {
+      console.log("[Recalculate] Success:", result);
       queryClient.invalidateQueries({ queryKey: ["snapshots"] });
       const msg = `Recalculated ${result.updated} snapshots`;
       if (Platform.OS === "web") window.alert(msg);
@@ -170,9 +263,11 @@ export default function PortfolioTrackerScreen() {
     },
     onError: (err: any) => {
       console.error("[Recalculate] Error:", err);
+      console.error("[Recalculate] Response status:", err?.response?.status);
+      console.error("[Recalculate] Response data:", err?.response?.data);
       const detail = err?.response?.data?.detail;
       const msg = detail ?? err?.message ?? "Recalculation failed";
-      if (Platform.OS === "web") window.alert(msg);
+      if (Platform.OS === "web") window.alert(`Recalculation error: ${msg}`);
       else Alert.alert("Error", msg);
     },
     retry: 1,
@@ -234,6 +329,13 @@ export default function PortfolioTrackerScreen() {
     [snapshots],
   );
   const latest = sortedAsc.length > 0 ? sortedAsc[sortedAsc.length - 1] : null;
+
+  // Average Daily Movement = sum(daily_movement) / number of records
+  const avgDailyMovement = useMemo(() => {
+    if (sortedAsc.length === 0) return 0;
+    const total = sortedAsc.reduce((sum, s) => sum + (s.daily_movement ?? 0), 0);
+    return total / sortedAsc.length;
+  }, [sortedAsc]);
 
   const valueChartData: ChartDataPoint[] = useMemo(
     () => sortedAsc.map((s) => ({ label: s.snapshot_date, value: s.portfolio_value })),
@@ -329,6 +431,14 @@ export default function PortfolioTrackerScreen() {
             colors={colors}
             valueColor={(latest.roi_percent ?? 0) >= 0 ? (isDark ? "#8a2be2" : "#6366f1") : colors.danger}
           />
+          <KpiCard
+            label="Average Daily Movement"
+            value={`${avgDailyMovement >= 0 ? "+" : ""}${fmtMoney(avgDailyMovement)} KWD`}
+            subtitle={`↑ Avg over ${sortedAsc.length} day${sortedAsc.length !== 1 ? "s" : ""}`}
+            kpiStyle={isDark ? KPI_STYLES.avgMovement.dark : KPI_STYLES.avgMovement.light}
+            colors={colors}
+            valueColor={avgDailyMovement >= 0 ? (isDark ? "#f59e0b" : "#d97706") : colors.danger}
+          />
         </View>
       )}
 
@@ -340,6 +450,7 @@ export default function PortfolioTrackerScreen() {
             title="Total Portfolio Value Over Time"
             colors={colors}
             lineColor={isDark ? CHART_COLORS.valueLine.dark : CHART_COLORS.valueLine.light}
+            palette={isDark ? VALUE_PALETTE_DARK : VALUE_PALETTE_LIGHT}
             height={300}
             width={containerWidth}
             formatValue={(v) => fmtMoney0(v)}
@@ -349,6 +460,7 @@ export default function PortfolioTrackerScreen() {
             title="Net Gain from Stocks Over Time"
             colors={colors}
             lineColor={isDark ? CHART_COLORS.gainLine.dark : CHART_COLORS.gainLine.light}
+            palette={isDark ? GAIN_PALETTE_DARK : GAIN_PALETTE_LIGHT}
             height={300}
             width={containerWidth}
             formatValue={(v) => fmtMoney0(v)}
