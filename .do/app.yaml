@@ -1,3 +1,8 @@
+# ──────────────────────────────────────────────────────────────────────
+# Standalone static-site deploy (frontend only, separate from backend).
+# For the COMBINED app (frontend + backend on one domain),
+# use mobile-migration/.do/app.yaml instead.
+# ──────────────────────────────────────────────────────────────────────
 name: portfolio-mobile-app
 
 static_sites:
@@ -9,6 +14,13 @@ static_sites:
     build_command: npm install && npx expo export --platform web --clear && node scripts/create-spa-redirects.js
     output_dir: dist
     environment_slug: node-js
+
+    routes:
+      - path: /
+
+    # ⭐ SPA fallback — serves index.html for any unmatched path (fixes 404 on refresh)
+    catchall_document: index.html
+
     envs:
       - key: EXPO_PUBLIC_API_URL
         value: "https://backend-api-app-hfc2n.ondigitalocean.app"
@@ -16,7 +28,7 @@ static_sites:
       - key: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
         value: "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
         scope: BUILD_TIME
-    catchall_document: index.html
+
     cors:
       allow_origins:
         - exact: "https://backend-api-app-hfc2n.ondigitalocean.app"

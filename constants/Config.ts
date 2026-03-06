@@ -17,7 +17,7 @@ const ENV_API_URL =
   // @ts-ignore — Expo injects process.env.EXPO_PUBLIC_* at build time
   typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL : undefined;
 
-// ── Production URL ──────────────────────────────────────────────────
+// ── Production URL (used by EAS mobile builds to reach API directly) ─
 const PRODUCTION_API = "https://backend-api-app-hfc2n.ondigitalocean.app";
 
 // ── Local dev fallbacks ─────────────────────────────────────────────
@@ -30,8 +30,9 @@ const LOCAL_WEB_API = "http://localhost:8002";
  *
  * Priority:
  *   1. EXPO_PUBLIC_API_URL env var (set in Vercel / EAS / CI)
- *   2. Production URL (for deployed web builds)
- *   3. localhost (web) or LAN IP (native) for dev
+ *   2. Production web: "" (empty) → relative paths (same domain on DO)
+ *   3. Dev web: localhost:8002
+ *   4. Dev mobile: LAN IP
  */
 const isLocalDev =
   Platform.OS === "web" &&
@@ -39,12 +40,14 @@ const isLocalDev =
   window.location?.hostname === "localhost";
 
 export const API_BASE_URL: string =
-  ENV_API_URL ||
-  (Platform.OS === "web"
-    ? isLocalDev
-      ? LOCAL_WEB_API
-      : PRODUCTION_API
-    : LOCAL_LAN_API);
+  // Explicit override always wins (EAS build, CI, Vercel, etc.)
+  (ENV_API_URL != null && ENV_API_URL !== "")
+    ? ENV_API_URL
+    : Platform.OS === "web"
+      ? isLocalDev
+        ? LOCAL_WEB_API        // Dev: http://localhost:8002
+        : ""                   // Production web: relative paths (same domain)
+      : PRODUCTION_API;        // Mobile native: full URL to backend
 
 /** How long (ms) to wait before timing out API calls. */
 export const API_TIMEOUT = 60_000;
