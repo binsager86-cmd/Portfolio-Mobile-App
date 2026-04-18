@@ -11,13 +11,14 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { BackHandler, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MobileDrawer } from "@/components/MobileDrawer";
 import WebSidebar from "@/components/WebSidebar";
 import { AnimatedTabBar } from "@/components/ui/AnimatedTabBar";
+import { useKeyboardShortcuts, Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { trackEvent } from "@/lib/gtag";
 import { useAuthStore } from "@/services/authStore";
@@ -49,6 +50,37 @@ export default function TabLayout() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Sidebar collapse state — persisted via localStorage on web
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean | null>(() => {
+    if (Platform.OS !== "web") return null;
+    try {
+      const saved = localStorage.getItem("sidebar_collapsed");
+      return saved === "true";
+    } catch { return null; }
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (Platform.OS === "web") {
+        try { localStorage.setItem("sidebar_collapsed", String(next)); } catch {}
+      }
+      return next;
+    });
+  }, []);
+
+  // Keyboard shortcuts: Ctrl+B sidebar, Ctrl+1-5 tab nav, Alt+←/→ browser nav
+  const shortcuts = useMemo<Shortcut[]>(() => [
+    { key: "b", ctrl: true, handler: toggleSidebar },
+    { key: "1", ctrl: true, handler: () => router.push("/(tabs)/") },
+    { key: "2", ctrl: true, handler: () => router.push("/(tabs)/dividends") },
+    { key: "3", ctrl: true, handler: () => router.push("/(tabs)/market") },
+    { key: "4", ctrl: true, handler: () => router.push("/(tabs)/news") },
+    { key: "5", ctrl: true, handler: () => router.push("/(tabs)/settings") },
+    { key: "ArrowLeft", alt: true, handler: () => { if (router.canGoBack()) router.back(); } },
+  ], [toggleSidebar, router]);
+  useKeyboardShortcuts(shortcuts);
+
   // Expertise-based progressive tab disclosure
   const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
 
@@ -77,35 +109,49 @@ export default function TabLayout() {
     }
   }, [token, isLoading]);
 
+  // Android hardware back — go back if possible, otherwise let system handle
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (drawerOpen) {
+        setDrawerOpen(false);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+      return false; // let Android handle (exit app)
+    });
+    return () => sub.remove();
+  }, [drawerOpen, router]);
+
   return (
     <View style={[ls.root, { backgroundColor: colors.bgPrimary }]}>
       {/* ── Sidebar (web tablet/desktop only) ── */}
-      {showSidebar && <WebSidebar />}
+      {showSidebar && (
+        <WebSidebar
+          collapsed={sidebarCollapsed ?? undefined}
+          onToggleCollapse={toggleSidebar}
+        />
+      )}
 
       {/* ── Content area ── */}
       <View style={ls.content}>
         <Tabs
-          tabBar={(props) =>
-            showSidebar || Platform.OS === "web" ? null : (
-              <AnimatedTabBar
-                {...props}
-                colors={colors}
-                insetBottom={insets.bottom}
-              />
-            )
-          }
+          tabBar={(props) => null}
           screenListeners={{
             tabPress: (e) => {
               trackEvent("tab_press", "navigation", e.target?.split("-")[0]);
             },
           }}
           screenOptions={{
-            // Hide default tab bar (we use custom AnimatedTabBar)
-            tabBarStyle: showSidebar || Platform.OS === "web"
-              ? { display: "none", height: 0, overflow: "hidden" as const }
-              : undefined,
+            // Bottom tabs are always hidden — navigation via sidebar (web) or drawer (native)
+            tabBarStyle: { display: "none", height: 0, overflow: "hidden" as const },
             tabBarHideOnKeyboard: true,
             lazy: true,
+            // Keep screens alive when switching tabs — preserves scroll position & state
+            freezeOnBlur: true,
             tabBarActiveTintColor: colors.accentPrimary,
             tabBarInactiveTintColor: colors.textMuted,
             // Screen transition animation
@@ -164,6 +210,7 @@ export default function TabLayout() {
             name="index"
             options={{
               title: t("nav.overview"),
+              headerShown: false,
               href: isAdmin ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="line-chart" color={color} />
@@ -252,6 +299,7 @@ export default function TabLayout() {
             name="dividends"
             options={{
               title: t("nav.dividends"),
+              headerShown: false,
               href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="money" color={color} />

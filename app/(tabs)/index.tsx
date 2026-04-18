@@ -24,6 +24,7 @@ import { PortfolioCard } from "@/components/portfolio/PortfolioCard";
 import { TradeSimulatorModal } from "@/components/trading/TradeSimulatorModal";
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
+import { LastUpdated } from "@/components/ui/LastUpdated";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { OverviewSkeleton } from "@/components/ui/OverviewSkeleton";
 import {
@@ -70,6 +71,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── Sub-tab type ─────────────────────────────────────────────────────
 
@@ -79,8 +81,9 @@ type OverviewTab = "dashboard" | "historical";
 
 function OverviewScreen() {
   const { user } = useAuth();
-  const { colors } = useThemeStore();
+  const { colors, toggle, mode } = useThemeStore();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { metricCols, isDesktop, isPhone, spacing, fonts, maxContentWidth } = useResponsive();
   const { refresh: refreshPrices } = usePriceRefresh();
   const queryClient = useQueryClient();
@@ -189,6 +192,8 @@ function OverviewScreen() {
     isError,
     error,
     refetch,
+    dataUpdatedAt,
+    isFetching,
   } = usePortfolioOverview(user?.id);
 
   // Additional data for parity with Streamlit — fire in parallel once overview loads
@@ -365,6 +370,7 @@ function OverviewScreen() {
       contentContainerStyle={[
         styles.content,
         {
+          paddingTop: insets.top + 8,
           paddingHorizontal: spacing.pagePx,
           maxWidth: maxContentWidth,
           alignSelf: isDesktop ? "center" as const : undefined,
@@ -379,6 +385,26 @@ function OverviewScreen() {
         />
       }
     >
+      {/* ── Inline scrollable header ── */}
+      <View style={styles.inlineHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.inlineHeaderTitle, { color: colors.textPrimary }]}>
+            {t('nav.overview')}
+          </Text>
+          <LastUpdated timestamp={dataUpdatedAt} isFetching={isFetching} />
+        </View>
+        <Pressable onPress={toggle} style={styles.inlineHeaderBtn}>
+          {({ pressed }) => (
+            <FontAwesome
+              name={mode === "dark" ? "lightbulb-o" : "moon-o"}
+              size={20}
+              color={colors.textSecondary}
+              style={{ opacity: pressed ? 0.5 : 1 }}
+            />
+          )}
+        </Pressable>
+      </View>
+
       {/* ── Hero Banner ── */}
       <View
         style={[
@@ -898,6 +924,25 @@ function OverviewScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingVertical: 16, paddingBottom: 40 },
+
+  // Inline scrollable header
+  inlineHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  inlineHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  inlineHeaderBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   // Banner
   banner: {

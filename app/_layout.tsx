@@ -25,8 +25,10 @@ import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { analytics } from "@/lib/analytics";
 import i18n from "@/lib/i18n/config";
 import { queryClient } from "@/lib/queryClient";
-import { getStockList } from "@/services/api";
+import { getHoldings, getOverview, getStockList } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
+import { marketApi } from "@/services/market/marketApi";
+import { newsApi } from "@/services/news/newsApi";
 import { registerPushToken } from "@/services/notifications/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
@@ -160,9 +162,18 @@ function RootLayoutNav() {
 
 
 
-  // Prefetch stock reference lists (static data) so dropdowns load instantly
+  // Prefetch critical data on login so first screens render instantly
   useEffect(() => {
     if (!token) return; // only after login
+
+    // Portfolio overview — the first thing the user sees
+    queryClient.prefetchQuery({
+      queryKey: ["portfolio-overview", undefined],
+      queryFn: getOverview,
+      staleTime: 30_000,
+    });
+
+    // Stock reference lists (static data) so dropdowns load instantly
     queryClient.prefetchQuery({
       queryKey: ["stock-list", "kuwait"],
       queryFn: () => getStockList({ market: "kuwait" }),
@@ -172,6 +183,24 @@ function RootLayoutNav() {
       queryKey: ["stock-list", "us"],
       queryFn: () => getStockList({ market: "us" }),
       staleTime: Infinity,
+    });
+
+    // Next-likely screens: prefetch holdings, news, and market
+    // so navigating feels instant instead of showing skeletons
+    queryClient.prefetchQuery({
+      queryKey: ["holdings", undefined],
+      queryFn: () => getHoldings(),
+      staleTime: 30_000,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ["news", "feed", {}],
+      queryFn: () => newsApi.getFeed({ limit: 15 }),
+      staleTime: 5 * 60_000,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ["market", "summary"],
+      queryFn: () => marketApi.getSummary(),
+      staleTime: 5 * 60_000,
     });
 
     // Register push token for real-time news notifications
