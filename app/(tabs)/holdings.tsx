@@ -89,13 +89,14 @@ export default function HoldingsScreen() {
   ], [t]);
 
   const holdingKeyExtractor = useCallback((item: Holding) => item.symbol, []);
+  const mobileHoldingKeyExtractor = useCallback((item: Holding) => item.symbol, []);
   const renderDesktopHoldingRow = useCallback(
     ({ item, index }: { item: Holding; index: number }) => (
       <HoldingRow
         holding={item}
         colors={colors}
         isEven={index % 2 === 0}
-        onCompanyPress={(holding) => setSelectedHolding(holding)}
+        onCompanyPress={setSelectedHolding}
         columns={activeColumns}
       />
     ),
@@ -224,8 +225,8 @@ export default function HoldingsScreen() {
             <ResponsiveDataTable<Holding>
               data={sortedHoldings}
               columns={mobileColumns}
-              keyExtractor={(h) => h.symbol}
-              onPressItem={(h) => setSelectedHolding(h)}
+              keyExtractor={mobileHoldingKeyExtractor}
+              onPressItem={setSelectedHolding}
               itemA11yLabel={(h) => `${h.symbol} ${h.company}, value ${formatCurrency(h.market_value_kwd)}`}
               desktopTable={
                 <View
@@ -251,7 +252,6 @@ export default function HoldingsScreen() {
                         data={sortedHoldings}
                         renderItem={renderDesktopHoldingRow}
                         keyExtractor={holdingKeyExtractor}
-                        estimatedItemSize={56}
                         scrollEnabled={false}
                       />
 

@@ -16,6 +16,7 @@
 
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { ScreenHeader } from "@/components/ui/ScreenHeader";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -75,6 +76,16 @@ export interface DataScreenProps {
   contentStyle?: ViewStyle;
   /** Header rendered above children but below loading/error states */
   header?: ReactNode;
+  /** Standardized page title (rendered as first row if provided) */
+  title?: string;
+  /** Right-side primary action for title row */
+  primaryAction?: ReactNode;
+  /** KPI row section shown below title/header */
+  kpiRow?: ReactNode;
+  /** Filter/search/sort controls row */
+  filterRow?: ReactNode;
+  /** Secondary actions rendered after main content */
+  secondaryActions?: ReactNode;
 }
 
 // ── Component ───────────────────────────────────────────────────────
@@ -98,9 +109,23 @@ export function DataScreen({
   bare = false,
   contentStyle,
   header,
+  title,
+  primaryAction,
+  kpiRow,
+  filterRow,
+  secondaryActions,
 }: DataScreenProps) {
   const { colors } = useThemeStore();
   const { isDesktop } = useResponsive();
+
+  const renderStructureHeader = () => (
+    <>
+      {title ? <ScreenHeader title={title} trailing={primaryAction} /> : null}
+      {header}
+      {kpiRow}
+      {filterRow}
+    </>
+  );
 
   // ── Loading state ─────────────────────────────────────────────
   if (loading && !isRefreshing) {
@@ -114,10 +139,17 @@ export function DataScreen({
 
   // ── Empty state ───────────────────────────────────────────────
   if (empty) {
-    if (emptyContent) return <View style={[styles.flex, { backgroundColor: colors.bgPrimary }]}>{header}{emptyContent}</View>;
+    if (emptyContent) {
+      return (
+        <View style={[styles.flex, { backgroundColor: colors.bgPrimary }]}>
+          {renderStructureHeader()}
+          {emptyContent}
+        </View>
+      );
+    }
     return (
       <View style={[styles.flex, styles.emptyContainer, { backgroundColor: colors.bgPrimary }]}>
-        {header}
+        {renderStructureHeader()}
         <View style={styles.emptyBody}>
           <View style={[styles.emptyIconBox, { backgroundColor: colors.accentPrimary + "12" }]}>
             <FontAwesome name={emptyIcon} size={36} color={colors.accentPrimary} />
@@ -143,8 +175,9 @@ export function DataScreen({
   if (bare) {
     return (
       <View style={[styles.flex, { backgroundColor: colors.bgPrimary }]}>
-        {header}
+        {renderStructureHeader()}
         {children}
+        {secondaryActions}
       </View>
     );
   }
@@ -169,8 +202,9 @@ export function DataScreen({
         ) : undefined
       }
     >
-      {header}
+      {renderStructureHeader()}
       {children}
+      {secondaryActions}
     </ScrollView>
   );
 }

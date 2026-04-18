@@ -298,7 +298,6 @@ function PortfolioAnalysisScreen() {
                 data={sortedHoldings}
                 renderItem={renderHoldingRow}
                 keyExtractor={holdingKeyExtractor}
-                estimatedItemSize={56}
                 scrollEnabled={false}
               />
 
