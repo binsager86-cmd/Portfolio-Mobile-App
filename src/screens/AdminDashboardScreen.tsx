@@ -123,6 +123,9 @@ function SummaryCard({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${value}`}
+      accessibilityState={{ selected: !!active }}
       onPress={onPress}
       style={({ pressed }) => [
         st.summaryCard,
@@ -192,6 +195,9 @@ function UserTableRow({
   if (isPhone) {
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`User ${user.name || user.username}`}
+        accessibilityState={{ selected }}
         onPress={onPress}
         style={({ pressed }) => [
           st.userCardMobile,
@@ -237,6 +243,9 @@ function UserTableRow({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`User ${user.name || user.username}`}
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
         st.tableRow,
@@ -537,6 +546,8 @@ function AdminDashboardScreen() {
             </View>
             {filterUserId != null && (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Clear user filter ${filterUserName ?? ''}`}
                 onPress={() => { setFilterUserId(undefined); setFilterUserName(undefined); }}
                 style={[st.filterChip, { backgroundColor: "#3498db" + "18" }]}
               >
@@ -616,6 +627,8 @@ function AdminDashboardScreen() {
             </View>
             {(filterUserId != null || filterTxnType || filterStock || filterDateFrom || filterDateTo) && (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("adminPanel.clearAll")}
                 onPress={clearAllFilters}
                 style={[st.filterChip, { backgroundColor: "#e74c3c" + "18" }]}
               >
@@ -706,6 +719,9 @@ function AdminDashboardScreen() {
                 return (
                   <Pressable
                     key={item.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.label}
+                    accessibilityState={{ selected: active }}
                     onPress={() => { setFilterTxnType(item.key); setActivityPage(1); }}
                     style={[
                       st.typeChip,
@@ -728,6 +744,8 @@ function AdminDashboardScreen() {
               <View style={st.filterChipRow}>
                 {filterUserId != null && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Clear user filter ${filterUserName ?? ''}`}
                     onPress={() => { setFilterUserId(undefined); setFilterUserName(undefined); setActivityPage(1); }}
                     style={[st.filterChip, { backgroundColor: "#3498db" + "18" }]}
                   >
@@ -738,6 +756,8 @@ function AdminDashboardScreen() {
                 )}
                 {filterStock !== "" && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Clear stock filter ${filterStock}`}
                     onPress={() => { setFilterStock(""); setActivityPage(1); }}
                     style={[st.filterChip, { backgroundColor: "#f39c12" + "18" }]}
                   >
@@ -748,6 +768,8 @@ function AdminDashboardScreen() {
                 )}
                 {filterDateFrom !== "" && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Clear from date ${filterDateFrom}`}
                     onPress={() => { setFilterDateFrom(""); setActivityPage(1); }}
                     style={[st.filterChip, { backgroundColor: "#8e44ad" + "18" }]}
                   >
@@ -758,6 +780,8 @@ function AdminDashboardScreen() {
                 )}
                 {filterDateTo !== "" && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Clear to date ${filterDateTo}`}
                     onPress={() => { setFilterDateTo(""); setActivityPage(1); }}
                     style={[st.filterChip, { backgroundColor: "#8e44ad" + "18" }]}
                   >
@@ -806,6 +830,9 @@ function AdminDashboardScreen() {
           {totalPages > 1 && (
             <View style={[st.pagination, { borderTopColor: colors.borderColor }]}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous page"
+                accessibilityState={{ disabled: activityPage <= 1 }}
                 onPress={() => setActivityPage((p) => Math.max(1, p - 1))}
                 disabled={activityPage <= 1}
                 style={[st.pageBtn, { backgroundColor: colors.bgPrimary, opacity: activityPage <= 1 ? 0.4 : 1 }]}
@@ -816,6 +843,9 @@ function AdminDashboardScreen() {
                 {t("adminPanel.pageOf", { current: activityPage, total: totalPages })}
               </Text>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next page"
+                accessibilityState={{ disabled: activityPage >= totalPages }}
                 onPress={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
                 disabled={activityPage >= totalPages}
                 style={[st.pageBtn, { backgroundColor: colors.bgPrimary, opacity: activityPage >= totalPages ? 0.4 : 1 }]}
@@ -841,6 +871,8 @@ function AdminDashboardScreen() {
               </View>
             </View>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("adminPanel.addUser")}
               onPress={() => {
                 setNewUsername("");
                 setNewPassword("");
@@ -902,6 +934,8 @@ function AdminDashboardScreen() {
                   </View>
                   <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit username for ${user.username}`}
                       onPress={() => {
                         setEditUser(user);
                         setEditField("username");
@@ -913,6 +947,8 @@ function AdminDashboardScreen() {
                       <FontAwesome name="pencil" size={12} color="#3498db" />
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reset password for ${user.username}`}
                       onPress={() => {
                         setEditUser(user);
                         setEditField("password");
@@ -924,6 +960,8 @@ function AdminDashboardScreen() {
                       <FontAwesome name="lock" size={12} color="#f39c12" />
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete user ${user.username}`}
                       onPress={() => {
                         setDeleteTarget(user);
                         setActionError("");
@@ -941,8 +979,8 @@ function AdminDashboardScreen() {
 
       {/* ══════════════════ Add User Modal ══════════════════ */}
       <Modal visible={showAddModal} transparent animationType="fade">
-        <Pressable style={st.modalOverlay} onPress={() => setShowAddModal(false)}>
-          <Pressable style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
+        <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={st.modalOverlay} onPress={() => setShowAddModal(false)}>
+          <Pressable accessibilityRole="none" style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
             <Text style={[st.modalTitle, { color: colors.textPrimary, fontSize: fonts.title }]}>
               {t("adminPanel.addNewUser")}
             </Text>
@@ -983,12 +1021,17 @@ function AdminDashboardScreen() {
             ) : null}
             <View style={st.modalActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.cancel")}
                 onPress={() => setShowAddModal(false)}
                 style={[st.modalBtn, { backgroundColor: colors.bgPrimary }]}
               >
                 <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>{t("app.cancel")}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("adminPanel.create")}
+                accessibilityState={{ disabled: createUser.isPending, busy: createUser.isPending }}
                 onPress={async () => {
                   if (!newUsername || !newPassword) {
                     setActionError(t("adminPanel.usernamePasswordRequired"));
@@ -1021,8 +1064,8 @@ function AdminDashboardScreen() {
 
       {/* ══════════════════ Edit Username / Password Modal ══════════════════ */}
       <Modal visible={editField !== null && editUser !== null} transparent animationType="fade">
-        <Pressable style={st.modalOverlay} onPress={() => { setEditField(null); setEditUser(null); }}>
-          <Pressable style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
+        <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={st.modalOverlay} onPress={() => { setEditField(null); setEditUser(null); }}>
+          <Pressable accessibilityRole="none" style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
             <Text style={[st.modalTitle, { color: colors.textPrimary, fontSize: fonts.title }]}>
               {editField === "username" ? t("adminPanel.changeUsername") : t("adminPanel.resetPassword")}
             </Text>
@@ -1046,12 +1089,17 @@ function AdminDashboardScreen() {
             ) : null}
             <View style={st.modalActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.cancel")}
                 onPress={() => { setEditField(null); setEditUser(null); }}
                 style={[st.modalBtn, { backgroundColor: colors.bgPrimary }]}
               >
                 <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>{t("app.cancel")}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.save")}
+                accessibilityState={{ disabled: updateUsername.isPending || updatePassword.isPending, busy: updateUsername.isPending || updatePassword.isPending }}
                 onPress={async () => {
                   if (!formValue) {
                     setActionError(editField === "username" ? t("adminPanel.usernameRequired") : t("adminPanel.passwordRequired"));
@@ -1085,8 +1133,8 @@ function AdminDashboardScreen() {
 
       {/* ══════════════════ Delete Confirmation Modal ══════════════════ */}
       <Modal visible={deleteTarget !== null} transparent animationType="fade">
-        <Pressable style={st.modalOverlay} onPress={() => setDeleteTarget(null)}>
-          <Pressable style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
+        <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={st.modalOverlay} onPress={() => setDeleteTarget(null)}>
+          <Pressable accessibilityRole="none" style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
             <View style={{ alignItems: "center", marginBottom: 12 }}>
               <View style={[st.summaryIconWrap, { backgroundColor: "#e74c3c" + "18" }]}>
                 <FontAwesome name="exclamation-triangle" size={22} color="#e74c3c" />
@@ -1106,12 +1154,17 @@ function AdminDashboardScreen() {
             ) : null}
             <View style={st.modalActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.cancel")}
                 onPress={() => setDeleteTarget(null)}
                 style={[st.modalBtn, { backgroundColor: colors.bgPrimary, flex: 1 }]}
               >
                 <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>{t("app.cancel")}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.delete")}
+                accessibilityState={{ disabled: deleteUser.isPending, busy: deleteUser.isPending }}
                 onPress={async () => {
                   try {
                     await deleteUser.mutateAsync(deleteTarget!.id);
