@@ -41,8 +41,8 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={s.backdrop} onPress={handleClose}>
-        <Pressable style={[s.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]} onPress={(e) => e.stopPropagation()}>
+      <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={s.backdrop} onPress={handleClose}>
+        <Pressable accessibilityRole="none" style={[s.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]} onPress={(e) => e.stopPropagation()}>
           <View style={s.header}>
             <FontAwesome
               name={step === "instructions" ? "info-circle" : "money"}
@@ -54,7 +54,7 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
                 ? t("kfhImport.howToSave")
                 : t("importCash.enterCashTitle")}
             </Text>
-            <Pressable onPress={handleClose} hitSlop={12}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('app.close') ?? 'Close'} onPress={handleClose} hitSlop={12}>
               <FontAwesome name="times" size={18} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -102,6 +102,8 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
               <View style={s.footer}>
                 {onUpload && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("importCash.next")}
                     onPress={handleNext}
                     style={[s.uploadBtn, { backgroundColor: colors.accentPrimary }]}
                   >
@@ -144,6 +146,8 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
 
               <View style={s.footerRow}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("importCash.back")}
                   onPress={() => setStep("instructions")}
                   style={[s.backBtn, { borderColor: colors.borderColor }]}
                 >
@@ -153,6 +157,8 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
                   </Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("kfhImport.uploadNow")}
                   onPress={handleUpload}
                   style={[s.uploadBtn, { backgroundColor: colors.accentPrimary, flex: 1 }]}
                 >

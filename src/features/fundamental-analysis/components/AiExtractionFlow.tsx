@@ -56,6 +56,9 @@ export function AiExtractionFlow({ mgr, colors }: AiExtractionFlowProps) {
 
       {/* ── Get Statements Online ────────────────────────────────── */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Get statements online"
+        accessibilityState={{ disabled: fetchingOnline || uploading, busy: fetchingOnline }}
         onPress={handleFetchOnline}
         disabled={fetchingOnline || uploading}
         style={({ pressed }) => [
@@ -101,6 +104,9 @@ export function AiExtractionFlow({ mgr, colors }: AiExtractionFlowProps) {
           return (
             <Pressable
               key={m}
+              accessibilityRole="button"
+              accessibilityLabel={`AI model ${label}`}
+              accessibilityState={{ selected: selectedModel === m, disabled: uploading }}
               onPress={() => setSelectedModel(m)}
               disabled={uploading}
               style={({ pressed }) => ({
@@ -157,7 +163,7 @@ export function AiExtractionFlow({ mgr, colors }: AiExtractionFlowProps) {
             );
           })}
           {allDone && !uploading && (
-            <Pressable onPress={dismissSteps} style={{ alignSelf: "flex-end", paddingVertical: 4, paddingHorizontal: 8 }} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss progress" onPress={dismissSteps} style={{ alignSelf: "flex-end", paddingVertical: 4, paddingHorizontal: 8 }} hitSlop={8}>
               <Text style={{ fontSize: 11, color: colors.accentPrimary, fontWeight: "600" }}>Dismiss</Text>
             </Pressable>
           )}
@@ -189,11 +195,13 @@ export function AiExtractionFlow({ mgr, colors }: AiExtractionFlowProps) {
           <View style={[st.rowCenter, { gap: 8 }]}>
             <FontAwesome name="exclamation-circle" size={16} color={colors.danger} />
             <Text style={{ color: colors.danger, fontSize: 13, fontWeight: "600", flex: 1 }}>{uploadError}</Text>
-            <Pressable onPress={dismissError} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss error" onPress={dismissError} hitSlop={8}>
               <FontAwesome name="times" size={14} color={colors.textMuted} />
             </Pressable>
           </View>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
             onPress={handlePickAndUpload}
             style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8, paddingVertical: 4, paddingHorizontal: 8 }}
             hitSlop={8}
@@ -225,7 +233,7 @@ function ResultBanner({ text, isError, colors, onDismiss }: { text: string; isEr
       <Text style={{ flex: 1, fontSize: 11, color: isError ? colors.danger : colors.success }}>
         {text}
       </Text>
-      <Pressable onPress={onDismiss} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" onPress={onDismiss} hitSlop={8}>
         <FontAwesome name="times" size={12} color={colors.textMuted} />
       </Pressable>
     </View>

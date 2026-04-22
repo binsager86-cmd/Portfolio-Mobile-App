@@ -207,7 +207,7 @@ export default function AddStockScreen() {
       >
         {/* ── Header ────────────────────────────── */}
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('app.back') ?? 'Back'} onPress={() => router.back()} style={styles.backBtn}>
             <FontAwesome name="arrow-left" size={18} color={colors.textPrimary} />
           </Pressable>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{t('addStock.title')}</Text>
@@ -221,6 +221,9 @@ export default function AddStockScreen() {
             return (
               <Pressable
                 key={m}
+                accessibilityRole="button"
+                accessibilityLabel={m === "Kuwait Market" ? t('addStock.kuwait') : t('addStock.us')}
+                accessibilityState={{ selected: active }}
                 onPress={() => handleMarketChange(m)}
                 style={[
                   styles.segmentBtn,
@@ -281,6 +284,8 @@ export default function AddStockScreen() {
             />
             {searchQuery ? (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
                 onPress={() => {
                   setSearchQuery("");
                   setSelectedStock(null);
@@ -326,6 +331,8 @@ export default function AddStockScreen() {
                     const dup = existingSymbols.has(item.symbol.toUpperCase());
                     return (
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${item.symbol} ${item.name}${dup ? ' (already in portfolio)' : ''}`}
                         onPress={() => handleSelectStock(item)}
                         style={({ pressed }) => [
                           styles.dropdownItem,
@@ -426,6 +433,9 @@ export default function AddStockScreen() {
             return (
               <Pressable
                 key={p}
+                accessibilityRole="button"
+                accessibilityLabel={p}
+                accessibilityState={{ selected: active }}
                 onPress={() => setPortfolio(p)}
                 style={[
                   styles.segmentBtn,
@@ -454,6 +464,9 @@ export default function AddStockScreen() {
             return (
               <Pressable
                 key={c}
+                accessibilityRole="button"
+                accessibilityLabel={c}
+                accessibilityState={{ selected: active }}
                 onPress={() => setCurrency(c)}
                 style={[
                   styles.segmentBtn,
@@ -476,6 +489,9 @@ export default function AddStockScreen() {
 
         {/* ── Submit Button ─────────────────────── */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('addStock.title')}
+          accessibilityState={{ disabled: !selectedStock || isDuplicate || isSubmitting, busy: isSubmitting }}
           onPress={() => createMutation.mutate()}
           disabled={!selectedStock || isDuplicate || isSubmitting}
           style={({ pressed }) => [
