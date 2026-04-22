@@ -128,7 +128,7 @@ export function FormScreen({
         {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.headerRow}>
           {!hideBack && (
-            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
               <FontAwesome name="arrow-left" size={18} color={colors.textPrimary} />
             </Pressable>
           )}
@@ -180,6 +180,9 @@ export function FormScreen({
           <Pressable
             onPress={onSubmit}
             disabled={isSubmitting}
+            accessibilityRole="button"
+            accessibilityLabel={submitLabel}
+            accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
             style={[
               styles.submitBtn,
               {

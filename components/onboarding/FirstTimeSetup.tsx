@@ -67,6 +67,8 @@ export function FirstTimeSetup({ visible, onComplete }: FirstTimeSetupProps) {
             {/* Options */}
             <Pressable
               onPress={handleImportExcel}
+              accessibilityRole="button"
+              accessibilityLabel={t("onboarding.importFromExcel")}
               style={[styles.optionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
             >
               <FontAwesome name="upload" size={24} color={colors.success} />
@@ -78,6 +80,8 @@ export function FirstTimeSetup({ visible, onComplete }: FirstTimeSetupProps) {
 
             <Pressable
               onPress={handleAddManual}
+              accessibilityRole="button"
+              accessibilityLabel={t("onboarding.addManually")}
               style={[styles.optionCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
             >
               <FontAwesome name="plus-circle" size={24} color={colors.accentPrimary} />
@@ -160,6 +164,8 @@ export function FirstTimeSetup({ visible, onComplete }: FirstTimeSetupProps) {
 
             <Pressable
               onPress={onComplete}
+              accessibilityRole="button"
+              accessibilityLabel={t("onboarding.startUsingApp")}
               style={[styles.finishButton, { backgroundColor: colors.accentSecondary }]}
             >
               <Text style={styles.finishButtonText}>{t("onboarding.startUsingApp")}</Text>
@@ -179,6 +185,8 @@ export function FirstTimeSetup({ visible, onComplete }: FirstTimeSetupProps) {
           {step < 3 && (
             <Pressable
               onPress={() => onComplete()}
+              accessibilityRole="button"
+              accessibilityLabel={t("onboarding.skipForNow")}
               style={styles.skipButton}
             >
               <Text style={[styles.skipText, { color: colors.textMuted }]}>{t("onboarding.skipForNow")}</Text>

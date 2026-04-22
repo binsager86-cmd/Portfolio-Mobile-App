@@ -161,6 +161,9 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
     }}>
       <Pressable
         onPress={() => setExpanded((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={`Saved reports (${pdfs.length})`}
+        accessibilityState={{ expanded }}
         style={[st.rowCenter, { gap: 8, paddingVertical: 4 }]}
       >
         <FontAwesome name="folder-open" size={14} color={colors.accentPrimary} />
@@ -203,10 +206,10 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
                   {formatFileSize(pdf.file_size)} · {formatDate(pdf.created_at)}
                 </Text>
               </View>
-              <Pressable onPress={() => handleDownload(pdf)} hitSlop={8} style={{ padding: 6 }}>
+              <Pressable onPress={() => handleDownload(pdf)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Download ${pdf.original_name}`} style={{ padding: 6 }}>
                 <FontAwesome name="download" size={14} color={colors.accentPrimary} />
               </Pressable>
-              <Pressable onPress={() => handleDelete(pdf)} hitSlop={8} style={{ padding: 6 }}>
+              <Pressable onPress={() => handleDelete(pdf)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete ${pdf.original_name}`} style={{ padding: 6 }}>
                 <FontAwesome name="trash-o" size={14} color={colors.danger + "80"} />
               </Pressable>
             </View>
