@@ -222,6 +222,8 @@ export function NewsFeed({
           {i18n.t('news.unableToLoad')}
         </Text>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t('app.retry')}
           onPress={() => refetch()}
           style={[s.retryBtn, { borderColor: colors.accentPrimary }]}
         >
@@ -246,6 +248,9 @@ export function NewsFeed({
               return (
                 <Pressable
                   key={cat.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={i18n.t('news.' + cat.label)}
+                  accessibilityState={{ selected: active }}
                   onPress={() => setActiveCategory(cat.key)}
                   style={[
                     s.filterChip,
@@ -311,7 +316,7 @@ export function NewsFeed({
                 <Text style={{ color: colors.textMuted, fontSize: 12, marginLeft: 6, flex: 1 }}>
                   {i18n.t('news.showingCached')}
                 </Text>
-                <Pressable onPress={() => refetch()} hitSlop={8}>
+                <Pressable accessibilityRole="button" accessibilityLabel={i18n.t('app.retry')} onPress={() => refetch()} hitSlop={8}>
                   <Text style={{ color: colors.accentPrimary, fontSize: 12, fontWeight: "600" }}>{i18n.t('app.retry')}</Text>
                 </Pressable>
               </View>
@@ -358,7 +363,7 @@ export function NewsFeed({
               <Text style={[s.modalTitle, { color: colors.textPrimary }]} numberOfLines={2}>
                 {selectedDetail?.title ?? selectedItem?.title}
               </Text>
-              <Pressable onPress={() => setSelectedItem(null)} hitSlop={8}>
+              <Pressable accessibilityRole="button" accessibilityLabel={i18n.t('app.close', 'Close')} onPress={() => setSelectedItem(null)} hitSlop={8}>
                 <FontAwesome name="times" size={18} color={colors.textMuted} />
               </Pressable>
             </View>
@@ -375,12 +380,16 @@ export function NewsFeed({
 
             <View style={s.modalActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={i18n.t('app.close', 'Close')}
                 onPress={() => setSelectedItem(null)}
                 style={[s.modalBtn, { borderColor: colors.borderColor }]}
               >
                 <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>{i18n.t('app.close', 'Close')}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={i18n.t('news.openSource', 'Open Source')}
                 onPress={() => selectedItem && openExternal(selectedItem)}
                 style={[s.modalBtn, { borderColor: colors.accentPrimary, backgroundColor: colors.accentPrimary + "15" }]}
               >

@@ -105,6 +105,9 @@ export function Chip({
 }: { label: string; active: boolean; onPress: () => void; colors: ThemePalette; icon?: IconName }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={[
         st.chip,
@@ -151,6 +154,9 @@ export function StatementTabBar({
         return (
           <Pressable
             key={t.key ?? "_all"}
+            accessibilityRole="tab"
+            accessibilityLabel={t.label}
+            accessibilityState={{ selected: active }}
             onPress={() => onChange(t.key)}
             style={({ pressed }) => ({
               flex: 1, alignItems: "center", paddingVertical: 10, paddingHorizontal: 4,
@@ -218,7 +224,7 @@ export function ExportBar({
   const dropdown = (
     <View style={[st.exportDropdown, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       {items.map(({ fmt, icon, label, color }) => (
-        <Pressable key={fmt} onPress={() => handle(fmt)} style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}>
+        <Pressable key={fmt} accessibilityRole="button" accessibilityLabel={`Export as ${label}`} onPress={() => handle(fmt)} style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}>
           <FontAwesome name={icon} size={12} color={color} style={{ width: 18, textAlign: "center" }} />
           <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "600", marginLeft: 8 }}>{label}</Text>
         </Pressable>
@@ -229,6 +235,9 @@ export function ExportBar({
   return (
     <View ref={triggerRef} style={{ zIndex: 50 }}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Export"
+        accessibilityState={{ disabled: off, expanded: open, busy: !!busy }}
         onPress={openMenu}
         disabled={off}
         style={({ pressed }) => ([
@@ -248,7 +257,7 @@ export function ExportBar({
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)}>
+        <Pressable accessibilityRole="none" accessibilityLabel="Close menu" style={{ flex: 1 }} onPress={() => setOpen(false)}>
           <View style={menuPos ? { position: "absolute", top: menuPos.y, right: Platform.OS === "web" ? undefined : 16, ...(Platform.OS === "web" ? { left: menuPos.x - 160 } : {}) } : { position: "absolute", top: 60, right: 16 }}>
             {dropdown}
           </View>
@@ -313,6 +322,9 @@ export function LabeledInput({
         </Text>
         {helperText ? (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Help: ${label}`}
+            accessibilityState={{ expanded: showHelper }}
             onPress={() => setShowHelper(v => !v)}
             hitSlop={8}
             style={{ marginLeft: 5 }}
@@ -363,6 +375,9 @@ export function ActionButton({
   const textMap = { primary: "#fff", success: "#fff", secondary: colors.textPrimary, danger: "#fff" };
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       onPress={onPress}
       disabled={disabled || loading}
       style={[st.actionBtn, {

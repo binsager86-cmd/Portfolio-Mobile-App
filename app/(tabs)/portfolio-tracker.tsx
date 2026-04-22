@@ -332,6 +332,9 @@ export default function PortfolioTrackerScreen() {
         <Text style={[st.pageTitle, { color: colors.textPrimary }]}>{t('tracker.title')}</Text>
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('tracker.refreshPrices')}
+            accessibilityState={{ disabled: refreshPricesMutation.isPending, busy: refreshPricesMutation.isPending }}
             onPress={() => refreshPricesMutation.mutate()}
             disabled={refreshPricesMutation.isPending}
             style={[st.actionBtn, { backgroundColor: isDark ? "#0ea5e9" : "#0284c7", opacity: refreshPricesMutation.isPending ? 0.5 : 1 }]}
@@ -340,6 +343,9 @@ export default function PortfolioTrackerScreen() {
             <Text style={st.actionBtnText}>{refreshPricesMutation.isPending ? t('tracker.refreshing') : t('tracker.refreshPrices')}</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('tracker.saveSnapshot')}
+            accessibilityState={{ disabled: saveMutation.isPending, busy: saveMutation.isPending }}
             onPress={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             style={[st.actionBtn, { backgroundColor: colors.accentPrimary, opacity: saveMutation.isPending ? 0.5 : 1 }]}
@@ -349,6 +355,9 @@ export default function PortfolioTrackerScreen() {
           </Pressable>
           {snapshots.length > 0 && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('tracker.recalculate')}
+              accessibilityState={{ disabled: recalcMutation.isPending, busy: recalcMutation.isPending }}
               onPress={() => recalcMutation.mutate()}
               disabled={recalcMutation.isPending}
               style={[st.actionBtn, { backgroundColor: colors.success, opacity: recalcMutation.isPending ? 0.5 : 1 }]}
@@ -358,7 +367,7 @@ export default function PortfolioTrackerScreen() {
             </Pressable>
           )}
           {snapshots.length > 0 && (
-            <Pressable onPress={handleDeleteAll} style={[st.actionBtn, { backgroundColor: colors.danger }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('tracker.clearAll')} onPress={handleDeleteAll} style={[st.actionBtn, { backgroundColor: colors.danger }]}>
               <FontAwesome name="trash" size={14} color="#fff" />
               <Text style={st.actionBtnText}>{t('tracker.clearAll')}</Text>
             </Pressable>
@@ -484,7 +493,7 @@ export default function PortfolioTrackerScreen() {
                     <Text style={[st.td, st.colMoney, { color: ng >= 0 ? colors.success : colors.danger, fontWeight: "600" }]}>{fmtNum(ng)}</Text>
                     <Text style={[st.td, st.colPct, { color: cp >= 0 ? colors.success : colors.danger, fontWeight: "600" }]}>{formatPercent(cp)}</Text>
                     <View style={st.colAction}>
-                      <Pressable onPress={() => handleDeleteOne(snap)} style={{ padding: 4 }}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Delete snapshot ${snap.snapshot_date}`} onPress={() => handleDeleteOne(snap)} style={{ padding: 4 }}>
                         <FontAwesome name="trash-o" size={14} color={colors.danger} />
                       </Pressable>
                     </View>
