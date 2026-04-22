@@ -71,7 +71,9 @@ interface AIFinancialIntelligenceProps {
   aiPrompt: string;
   setAiPrompt: (v: string) => void;
   aiResult: string | null;
-  aiMutation: UseMutationResult<{ analysis: string } | undefined, Error, string>;
+  // Component only reads `isPending` — keep the type narrow so callers don't
+  // have to perfectly match the mutation's success/error generics.
+  aiMutation: Pick<UseMutationResult<unknown, unknown, string>, "isPending">;
   handleAiAnalyze: (prompt: string) => void;
   aiStatusData?: { configured: boolean } | undefined;
   /** Optional stock context — when provided, generates an expertise-level summary card */

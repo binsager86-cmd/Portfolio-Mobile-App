@@ -17,7 +17,7 @@ import React, {
     useRef,
     useState,
 } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
 import Animated, {
     runOnJS,
     useAnimatedStyle,
@@ -128,6 +128,8 @@ function ToastItem({
       <Pressable
         onPress={() => onDismiss(toast.id)}
         hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss notification"
         style={styles.closeBtn}
       >
         <Text style={[styles.closeText, { color: textColor }]}>✕</Text>
@@ -159,8 +161,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ show, success, error, info }}>
       {children}
       <View
-        style={styles.container}
-        pointerEvents="box-none"
+        style={[styles.container, Platform.OS === "web" ? ({ pointerEvents: "none" } as ViewStyle) : null]}
+        pointerEvents={Platform.OS === "web" ? undefined : "box-none"}
       >
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={dismiss} />

@@ -14,7 +14,7 @@ import type { ThemePalette } from "@/constants/theme";
 
 import type { PortfolioValueEntry } from "@/services/api";
 
-export interface PortfolioCardData extends PortfolioValueEntry {}
+export type PortfolioCardData = PortfolioValueEntry;
 
 interface PortfolioCardProps {
   /** Portfolio name (e.g. "KFH", "BBYN", "USA") */
@@ -91,6 +91,8 @@ export const PortfolioCard = React.memo(function PortfolioCard({ name, data, onP
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${name} portfolio, ${formatCurrency(data.market_value_kwd, "KWD")}`}
         style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
       >
         {content}

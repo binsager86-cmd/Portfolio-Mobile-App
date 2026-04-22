@@ -1,0 +1,96 @@
+# Keep EAS upload minimal and avoid Windows/OneDrive metadata issues.
+# Syntax follows .gitignore rules.
+
+# Dependencies and local environments
+node_modules/
+.venv/
+venv/
+
+# Local tooling/editor metadata
+.vscode/
+.idea/
+.husky/
+
+# Expo / build outputs
+.expo/
+dist/
+web-build/
+
+# Native generated folders
+android/
+ios/
+
+# Tests and local diagnostics not needed for cloud build
+__tests__/
+e2e/
+*.log
+
+# VCS and docs
+.git/
+.github/
+
+# Env files should never be uploaded
+.env
+.env.*
+!.env.example
+# Python virtual environment
+.venv/
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Environment variables
+.env
+.env.*
+.env*.local
+!.env.example
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# test / debug scripts
+_*.py
+_*.mjs
+*-audit.txt
+
+# misc
+dist_test/
+__tests__/
+__mocks__/
+e2e/
+jest.config.js
+jest.setup.js
+test-results.json
+
+# Deploy configs
+.do

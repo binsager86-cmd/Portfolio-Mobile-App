@@ -56,14 +56,20 @@ export default function TabLayout() {
     try {
       const saved = localStorage.getItem("sidebar_collapsed");
       return saved === "true";
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   });
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => {
       const next = !prev;
       if (Platform.OS === "web") {
-        try { localStorage.setItem("sidebar_collapsed", String(next)); } catch {}
+        try {
+          localStorage.setItem("sidebar_collapsed", String(next));
+        } catch {
+          return next;
+        }
       }
       return next;
     });
@@ -72,7 +78,7 @@ export default function TabLayout() {
   // Keyboard shortcuts: Ctrl+B sidebar, Ctrl+1-5 tab nav, Alt+←/→ browser nav
   const shortcuts = useMemo<Shortcut[]>(() => [
     { key: "b", ctrl: true, handler: toggleSidebar },
-    { key: "1", ctrl: true, handler: () => router.push("/(tabs)/") },
+    { key: "1", ctrl: true, handler: () => router.push("/") },
     { key: "2", ctrl: true, handler: () => router.push("/(tabs)/dividends") },
     { key: "3", ctrl: true, handler: () => router.push("/(tabs)/market") },
     { key: "4", ctrl: true, handler: () => router.push("/(tabs)/news") },
@@ -210,7 +216,6 @@ export default function TabLayout() {
             name="index"
             options={{
               title: t("nav.overview"),
-              headerShown: false,
               href: isAdmin ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="line-chart" color={color} />
@@ -272,7 +277,7 @@ export default function TabLayout() {
             name="trading"
             options={{
               title: t("nav.trading"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart-o" color={color} />,
             }}
           />
@@ -280,13 +285,12 @@ export default function TabLayout() {
             name="fundamental-analysis"
             options={{
               title: t("tabs.analysis"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="flask" color={color} />
               ),
             }}
           />
-          <Tabs.Screen name="two" options={{ href: null, title: "Holdings (Legacy)" }} />
           <Tabs.Screen
             name="portfolio-tracker"
             options={{
@@ -299,7 +303,6 @@ export default function TabLayout() {
             name="dividends"
             options={{
               title: t("nav.dividends"),
-              headerShown: false,
               href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="money" color={color} />
@@ -310,7 +313,7 @@ export default function TabLayout() {
             name="alerts"
             options={{
               title: t("nav.alerts"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="bell" color={color} />
               ),

@@ -13,7 +13,7 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { ExpertiseLevel, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter, type Href } from "expo-router";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -23,6 +23,7 @@ import {
     StyleSheet,
     Text,
     View,
+    type ViewStyle,
 } from "react-native";
 
 // ── Nav items ───────────────────────────────────────────────────────
@@ -43,14 +44,14 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "overview", icon: "line-chart", path: "/(tabs)", section: "sectionDashboard" },
   { label: "market", icon: "globe", path: "/(tabs)/market" },
   { label: "holdings", icon: "briefcase", path: "/(tabs)/portfolio-analysis" },
-  { label: "trading", icon: "bar-chart-o", path: "/(tabs)/trading", section: "sectionAnalysis", minLevel: "intermediate" },
-  { label: "fundamentals", icon: "flask", path: "/(tabs)/fundamental-analysis", minLevel: "intermediate" },
+  { label: "trading", icon: "bar-chart-o", path: "/(tabs)/trading", section: "sectionAnalysis", minLevel: "normal" },
+  { label: "fundamentals", icon: "flask", path: "/(tabs)/fundamental-analysis", minLevel: "normal" },
   { label: "tracker", icon: "camera", path: "/(tabs)/portfolio-tracker" },
   { label: "dividends", icon: "money", path: "/(tabs)/dividends" },
   { label: "transactions", icon: "exchange", path: "/(tabs)/transactions", section: "sectionManagement" },
   { label: "deposits", icon: "bank", path: "/(tabs)/deposits" },
-  { label: "alerts", icon: "bell", path: "/(tabs)/alerts", minLevel: "intermediate" },
-  { label: "news", icon: "newspaper-o", path: "/(tabs)/news", minLevel: "intermediate" },
+  { label: "alerts", icon: "bell", path: "/(tabs)/alerts", minLevel: "normal" },
+  { label: "news", icon: "newspaper-o", path: "/(tabs)/news", minLevel: "normal" },
   { label: "planner", icon: "calculator", path: "/(tabs)/planner", minLevel: "normal" },
   { label: "pfm", icon: "pie-chart", path: "/(tabs)/pfm", minLevel: "advanced" },
   { label: "integrity", icon: "stethoscope", path: "/(tabs)/integrity", section: "sectionSystem", minLevel: "advanced" },
@@ -107,7 +108,7 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
   };
 
   const handleNav = (path: string) => {
-    router.push(path as any);
+    router.push(path as Href);
   };
 
   return (
@@ -152,7 +153,7 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
               )}
               <Pressable
                 onPress={() => handleNav(item.path)}
-                style={({ pressed, hovered }: any) => [
+                style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
                   s.navItem,
                   isCollapsed && s.navItemCollapsed,
                   {
@@ -165,7 +166,7 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
                       : "transparent",
                     borderStartColor: active ? colors.accentPrimary : "transparent",
                   },
-                  Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as any),
+                  Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as unknown as ViewStyle),
                 ]}
                 accessibilityLabel={t('nav.' + item.label)}
                 accessibilityRole="link"
@@ -199,11 +200,11 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
       <View style={[s.bottomSection, { borderTopColor: colors.borderColor }]}>
         <Pressable
           onPress={toggle}
-          style={({ pressed, hovered }: any) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             s.actionBtn,
             isCollapsed && s.actionBtnCollapsed,
             { backgroundColor: hovered ? colors.bgCardHover : pressed ? colors.bgCardHover : "transparent" },
-            Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as any),
+            Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as unknown as ViewStyle),
           ]}
           accessibilityLabel={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -222,11 +223,11 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
 
         <Pressable
           onPress={handleLogout}
-          style={({ pressed, hovered }: any) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             s.actionBtn,
             isCollapsed && s.actionBtnCollapsed,
             { backgroundColor: hovered ? colors.bgCardHover : pressed ? colors.bgCardHover : "transparent" },
-            Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as any),
+            Platform.OS === "web" && ({ cursor: "pointer", transition: "background-color 0.15s" } as unknown as ViewStyle),
           ]}
           accessibilityLabel={t('nav.signOut')}
         >

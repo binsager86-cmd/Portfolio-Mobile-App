@@ -40,7 +40,7 @@ type TabKey = "all" | "by-stock" | "bonus" | "calculator" | "projections";
 export default function DividendsScreen() {
   const { colors, toggle, mode } = useThemeStore();
   const ss = useScreenStyles();
-  const { isDesktop } = useResponsive();
+  const { isDesktop, showSidebar } = useResponsive();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -115,7 +115,11 @@ export default function DividendsScreen() {
       queryClient.invalidateQueries({ queryKey: ["dividends-by-stock"] });
       queryClient.invalidateQueries({ queryKey: ["bonus-shares"] });
       const msg = t("dividends.recordDeleted");
-      Platform.OS === "web" ? window.alert(msg) : Alert.alert(t("dividends.success"), msg);
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert(t("dividends.success"), msg);
+      }
     },
     onError: (err) => showErrorAlert(t("dividends.error"), err, t("dividends.deleteFailed")),
   });
@@ -243,7 +247,7 @@ export default function DividendsScreen() {
     <ScrollView
       style={ss.container}
       contentContainerStyle={{
-        paddingTop: insets.top + 8,
+        paddingTop: showSidebar ? insets.top + 8 : 8,
         paddingHorizontal: 12,
         paddingBottom: 80,
         ...(isDesktop ? { maxWidth: 960, alignSelf: "center" as const, width: "100%" as const } : {}),
@@ -254,22 +258,24 @@ export default function DividendsScreen() {
       keyboardShouldPersistTaps="handled"
       stickyHeaderIndices={[3]}
     >
-      {/* ── Inline scrollable header ── */}
-      <View style={s.inlineHeader}>
-        <Text style={[s.inlineHeaderTitle, { color: colors.textPrimary }]}>
-          {t("dividends.title")}
-        </Text>
-        <Pressable onPress={toggle} style={s.inlineHeaderBtn}>
-          {({ pressed }) => (
-            <FontAwesome
-              name={mode === "dark" ? "lightbulb-o" : "moon-o"}
-              size={20}
-              color={colors.textSecondary}
-              style={{ opacity: pressed ? 0.5 : 1 }}
-            />
-          )}
-        </Pressable>
-      </View>
+      {/* ── Inline scrollable header (only on web/desktop where tab header is hidden) ── */}
+      {showSidebar && (
+        <View style={s.inlineHeader}>
+          <Text style={[s.inlineHeaderTitle, { color: colors.textPrimary }]}>
+            {t("dividends.title")}
+          </Text>
+          <Pressable onPress={toggle} style={s.inlineHeaderBtn}>
+            {({ pressed }) => (
+              <FontAwesome
+                name={mode === "dark" ? "lightbulb-o" : "moon-o"}
+                size={20}
+                color={colors.textSecondary}
+                style={{ opacity: pressed ? 0.5 : 1 }}
+              />
+            )}
+          </Pressable>
+        </View>
+      )}
 
       {/* ── Totals Row ── */}
       {totals ? (
