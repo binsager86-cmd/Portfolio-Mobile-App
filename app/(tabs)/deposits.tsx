@@ -116,6 +116,8 @@ const DepositRow = React.memo(function DepositRow({
         </View>
         {onEdit && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${isDeposit ? "deposit" : "withdrawal"} ${formatCurrency(item.amount, item.currency ?? "KWD")}`}
             onPress={() => onEdit(item)}
             style={({ pressed }) => [{ padding: 12, minWidth: 44, minHeight: 44, alignItems: "center" as const, justifyContent: "center" as const, opacity: pressed ? 0.5 : 0.7 }]}
           >
@@ -124,6 +126,8 @@ const DepositRow = React.memo(function DepositRow({
         )}
         {onDelete && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${isDeposit ? "deposit" : "withdrawal"} ${formatCurrency(item.amount, item.currency ?? "KWD")}`}
             onPress={() => onDelete(item)}
             style={({ pressed }) => [{ padding: 12, minWidth: 44, minHeight: 44, alignItems: "center" as const, justifyContent: "center" as const, opacity: pressed ? 0.5 : 0.7 }]}
           >
@@ -361,6 +365,9 @@ export default function DepositsScreen() {
         ]}
       >
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous page"
+          accessibilityState={{ disabled: page <= 1 }}
           onPress={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page <= 1}
           style={[
@@ -378,6 +385,9 @@ export default function DepositsScreen() {
           {t('depositsScreen.pageInfo', { page: pagination.page, pages: pagination.total_pages, total: pagination.total_items })}
         </Text>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next page"
+          accessibilityState={{ disabled: page >= pagination.total_pages }}
           onPress={() => setPage((p) => Math.min(pagination.total_pages, p + 1))}
           disabled={page >= pagination.total_pages}
           style={[
@@ -410,6 +420,9 @@ export default function DepositsScreen() {
             </Text>
           )}
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('depositsScreen.upload')}
+            accessibilityState={{ expanded: showUpload }}
             onPress={() => setShowUpload(!showUpload)}
             style={({ pressed }) => [
               s.exportBtn,
@@ -423,6 +436,9 @@ export default function DepositsScreen() {
             <Text style={s.exportBtnText}>{t('depositsScreen.upload')}</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('depositsScreen.export')}
+            accessibilityState={{ disabled: exporting, busy: exporting }}
             onPress={handleExportExcel}
             disabled={exporting}
             style={({ pressed }) => [
@@ -453,6 +469,9 @@ export default function DepositsScreen() {
           <View style={s.uploadModeRow}>
             <Text style={[s.uploadModeLabel, { color: colors.textSecondary }]}>{t('depositsScreen.mode')}</Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('depositsScreen.mergeAppend')}
+              accessibilityState={{ selected: uploadMode === "merge" }}
               onPress={() => setUploadMode("merge")}
               style={[
                 s.uploadModeChip,
@@ -467,6 +486,9 @@ export default function DepositsScreen() {
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('depositsScreen.replaceAll')}
+              accessibilityState={{ selected: uploadMode === "replace" }}
               onPress={() => setUploadMode("replace")}
               style={[
                 s.uploadModeChip,
@@ -494,6 +516,8 @@ export default function DepositsScreen() {
           {/* Action buttons */}
           <View style={s.uploadActions}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('depositsScreen.template')}
               onPress={handleDownloadTemplate}
               style={[s.uploadActionBtn, { borderColor: colors.borderColor }]}
             >
@@ -504,6 +528,9 @@ export default function DepositsScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={uploading ? t('depositsScreen.importing') : t('depositsScreen.chooseFileImport')}
+              accessibilityState={{ disabled: uploading, busy: uploading }}
               onPress={handleUploadFile}
               disabled={uploading}
               style={[
@@ -576,6 +603,8 @@ export default function DepositsScreen() {
                 </View>
               </View>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("importCash.goToHoldings")}
                 onPress={() => router.push("/(tabs)/holdings")}
                 style={{
                   flexDirection: "row",

@@ -122,6 +122,8 @@ const TxnRow = React.memo(function TxnRow({
         </View>
         {onEdit && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit transaction ${txn.stock_symbol ?? txn.txn_type}`}
             onPress={() => onEdit(txn)}
             style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 0.7 }]}
           >
@@ -130,6 +132,8 @@ const TxnRow = React.memo(function TxnRow({
         )}
         {onDelete && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete transaction ${txn.stock_symbol ?? txn.txn_type}`}
             onPress={() => onDelete(txn)}
             style={({ pressed }) => [styles.actionBtn, { opacity: pressed ? 0.5 : 0.7 }]}
           >
@@ -182,7 +186,7 @@ const ReconBanner = React.memo(function ReconBanner({
         <Text style={[rs.bannerTitle, { color: colors.textPrimary }]}>
           {t("reconciliation.sectionTitle")} — {portfolio}
         </Text>
-        <Pressable onPress={onDismiss} hitSlop={12}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("reconciliation.skip")} onPress={onDismiss} hitSlop={12}>
           <FontAwesome name="times" size={14} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -238,13 +242,15 @@ const ReconBanner = React.memo(function ReconBanner({
       {/* Actions */}
       <View style={rs.actions}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("reconciliation.reviewManually")}
           onPress={onReview}
           style={[rs.reviewBtn, { backgroundColor: colors.accentPrimary }]}
         >
           <FontAwesome name="balance-scale" size={12} color="#fff" />
           <Text style={rs.reviewBtnText}>{t("reconciliation.reviewManually")}</Text>
         </Pressable>
-        <Pressable onPress={onDismiss} style={[rs.dismissBtn, { borderColor: colors.borderColor }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("reconciliation.skip")} onPress={onDismiss} style={[rs.dismissBtn, { borderColor: colors.borderColor }]}>
           <Text style={[rs.dismissBtnText, { color: colors.textSecondary }]}>
             {t("reconciliation.skip")}
           </Text>
@@ -519,6 +525,8 @@ function TransactionsScreen() {
               {t("transactionsScreen.noTransactionsYet")}
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("transactionsScreen.addTransaction")}
               onPress={() => router.push("/(tabs)/add-transaction" as Href)}
               style={[{ backgroundColor: colors.accentPrimary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 8, marginTop: 12 }, Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : undefined]}
             >
@@ -530,6 +538,9 @@ function TransactionsScreen() {
           totalPages > 1 ? (
             <View style={styles.pagination}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous page"
+                accessibilityState={{ disabled: page <= 1 }}
                 onPress={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 style={[
@@ -551,6 +562,9 @@ function TransactionsScreen() {
                 {page} / {totalPages}
               </Text>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next page"
+                accessibilityState={{ disabled: page >= totalPages }}
                 onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 style={[
@@ -575,6 +589,8 @@ function TransactionsScreen() {
 
       {/* FAB */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("transactionsScreen.addTransaction")}
         onPress={() => router.push("/(tabs)/add-transaction" as Href)}
         style={({ pressed }) => [
           styles.fab,
