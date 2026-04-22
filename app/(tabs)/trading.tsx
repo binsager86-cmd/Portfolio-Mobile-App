@@ -611,6 +611,8 @@ function TradingScreen() {
       {/* Clear Filters */}
       {hasActiveFilters && (
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('trading.clearAllFilters')}
           onPress={clearAllFilters}
           style={[s.clearBtn, { borderColor: colors.danger }]}
         >
@@ -633,7 +635,7 @@ function TradingScreen() {
           autoCorrect={false}
         />
         {search.length > 0 && (
-          <Pressable onPress={() => setSearch("")}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('trading.clearSearch') ?? 'Clear search'} onPress={() => setSearch("")}>
             <FontAwesome name="times-circle" size={16} color={colors.textMuted} />
           </Pressable>
         )}
@@ -654,6 +656,9 @@ function TradingScreen() {
       {/* Action buttons */}
       <View style={s.actionRow}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('trading.recalculateWAC')}
+          accessibilityState={{ disabled: recalcMutation.isPending, busy: recalcMutation.isPending }}
           onPress={() => recalcMutation.mutate()}
           disabled={recalcMutation.isPending}
           style={[
@@ -676,6 +681,8 @@ function TradingScreen() {
         </Pressable>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('trading.exportExcel')}
           onPress={handleExport}
           style={[
             s.actionBtn,
@@ -699,6 +706,9 @@ function TradingScreen() {
       {/* View / Edit mode toggle */}
       <View style={[editStyles.modeToggle, { borderColor: colors.borderColor }]}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('trading.view')}
+          accessibilityState={{ selected: !editMode }}
           onPress={() => { if (editMode) exitEditMode(); }}
           style={[
             editStyles.modeBtn,
@@ -713,6 +723,9 @@ function TradingScreen() {
           </Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('trading.editMode')}
+          accessibilityState={{ selected: editMode }}
           onPress={() => { if (!editMode) enterEditMode(); }}
           style={[
             editStyles.modeBtn,
@@ -743,6 +756,9 @@ function TradingScreen() {
         <>
           <View style={editStyles.editActionRow}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('trading.saveChanges')}
+              accessibilityState={{ disabled: isSaving, busy: isSaving }}
               onPress={handleSaveChanges}
               disabled={isSaving}
               style={[
@@ -765,6 +781,9 @@ function TradingScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('trading.deleteCount', { count: selectedIds.size })}
+              accessibilityState={{ disabled: selectedIds.size === 0 || isDeleting, busy: isDeleting }}
               onPress={() => {
                 if (selectedIds.size === 0) return;
                 setDeleteConfirmPending(true);
@@ -795,6 +814,8 @@ function TradingScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('app.cancel')}
               onPress={exitEditMode}
               style={[editStyles.editActionBtn, { borderColor: colors.borderColor }]}
             >
@@ -811,6 +832,9 @@ function TradingScreen() {
               </Text>
               <View style={editStyles.confirmBtnRow}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('trading.yesDelete')}
+                  accessibilityState={{ disabled: isDeleting, busy: isDeleting }}
                   onPress={handleDeleteSelected}
                   disabled={isDeleting}
                   style={[editStyles.confirmBtn, { backgroundColor: colors.danger, borderColor: colors.danger }]}
@@ -825,6 +849,8 @@ function TradingScreen() {
                   </Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('app.cancel')}
                   onPress={() => setDeleteConfirmPending(false)}
                   style={[editStyles.confirmBtn, { borderColor: colors.borderColor }]}
                 >
@@ -948,6 +974,9 @@ function TradingScreen() {
         {totalPages > 1 && (
           <View style={s.pagination}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Previous page"
+              accessibilityState={{ disabled: page <= 1 }}
               onPress={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               style={[
@@ -965,6 +994,9 @@ function TradingScreen() {
               {page} / {totalPages}
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Next page"
+              accessibilityState={{ disabled: page >= totalPages }}
               onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               style={[
