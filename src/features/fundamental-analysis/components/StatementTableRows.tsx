@@ -76,10 +76,10 @@ export const EditableCell = React.memo(function EditableCell({
             }}
             onSubmitEditing={handleSubmit}
           />
-          <Pressable onPress={handleSubmit} hitSlop={6}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save value" onPress={handleSubmit} hitSlop={6}>
             <FontAwesome name="check" size={12} color={colors.success} />
           </Pressable>
-          <Pressable onPress={onCancel} hitSlop={6}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={onCancel} hitSlop={6}>
             <FontAwesome name="times" size={12} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -90,6 +90,8 @@ export const EditableCell = React.memo(function EditableCell({
   return (
     <View style={{ width: colWidth, alignItems: "flex-end", justifyContent: "center" }}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${value ?? 0}`}
         onPress={() => { if (actualKey) onStartEdit(actualKey, String(value ?? "0")); }}
         style={{ flexDirection: "row", alignItems: "center" }}
       >
@@ -160,7 +162,7 @@ export function SortableRow({
       ...(mergeSelected ? { backgroundColor: colors.accentPrimary + "25", borderLeft: `3px solid ${colors.accentPrimary}` } : {}),
     }}>
       {mergeMode && (
-        <Pressable onPress={() => onToggleMerge(item.code)} hitSlop={4} style={{ marginRight: 4, padding: 2 }}>
+        <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select ${item.name} for merge`} accessibilityState={{ checked: mergeSelected }} onPress={() => onToggleMerge(item.code)} hitSlop={4} style={{ marginRight: 4, padding: 2 }}>
           <View style={{
             width: 18, height: 18, borderRadius: 4, borderWidth: 1.5,
             borderColor: mergeSelected ? colors.accentPrimary : colors.textMuted,
@@ -185,7 +187,7 @@ export function SortableRow({
       }}>
         {item.name}
       </Text>
-      <Pressable onPress={() => onDeleteRow(item.code, item.name)} hitSlop={4} style={{ marginRight: 2, padding: 2 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Delete row ${item.name}`} onPress={() => onDeleteRow(item.code, item.name)} hitSlop={4} style={{ marginRight: 2, padding: 2 }}>
         <FontAwesome name="trash-o" size={10} color={colors.danger + "80"} />
       </Pressable>
       {periods.map((p) => {

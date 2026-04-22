@@ -108,6 +108,9 @@ export function TransactionImport() {
           {(["KFH", "BBYN", "USA"] as const).map((p) => (
             <Pressable
               key={p}
+              accessibilityRole="button"
+              accessibilityLabel={p}
+              accessibilityState={{ selected: uploadPortfolio === p }}
               onPress={() => setUploadPortfolio(p)}
               style={[
                 styles.segmentBtn,
@@ -135,6 +138,9 @@ export function TransactionImport() {
           ]).map((m) => (
             <Pressable
               key={m.key}
+              accessibilityRole="button"
+              accessibilityLabel={m.label}
+              accessibilityState={{ selected: uploadMode === m.key }}
               onPress={() => setUploadMode(m.key)}
               style={[
                 styles.segmentBtn,
@@ -165,6 +171,8 @@ export function TransactionImport() {
 
       {/* File picker */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={selectedFile ? selectedFile.name : t("addTransaction.chooseExcelFile")}
         onPress={pickFile}
         style={[styles.filePickBtn, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}
       >
@@ -176,6 +184,9 @@ export function TransactionImport() {
 
       {/* Upload button */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("addTransaction.uploadImport")}
+        accessibilityState={{ disabled: !selectedFile || uploadMutation.isPending, busy: uploadMutation.isPending }}
         onPress={() => uploadMutation.mutate()}
         disabled={!selectedFile || uploadMutation.isPending}
         style={({ pressed }) => [
@@ -226,6 +237,9 @@ export function TransactionImport() {
       </Text>
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("addTransaction.deleteAllTransactions")}
+        accessibilityState={{ disabled: deleteMutation.isPending, busy: deleteMutation.isPending }}
         onPress={confirmDeleteAll}
         disabled={deleteMutation.isPending}
         style={({ pressed }) => [
