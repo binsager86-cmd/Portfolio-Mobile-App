@@ -277,7 +277,7 @@ export default function SettingsScreen() {
                 placeholder={t('settings.name')}
                 placeholderTextColor={colors.textSecondary}
               />
-              <Pressable onPress={handleSaveName} disabled={nameMutation.isPending} style={{ opacity: nameMutation.isPending ? 0.5 : 1 }}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Save name" accessibilityState={{ disabled: nameMutation.isPending, busy: nameMutation.isPending }} onPress={handleSaveName} disabled={nameMutation.isPending} style={{ opacity: nameMutation.isPending ? 0.5 : 1 }}>
                 {nameMutation.isPending ? (
                   <ActivityIndicator size="small" color={colors.accentPrimary} />
                 ) : (
@@ -304,6 +304,8 @@ export default function SettingsScreen() {
           <Text style={[s.cardTitle, { color: colors.textPrimary }]}>{t('settings.appearance')}</Text>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={mode === "dark" ? t('settings.switchToLight') : t('settings.switchToDark')}
           onPress={() => { haptics.light(); toggle(); }}
           style={[s.settingBtn, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}
         >
@@ -326,6 +328,9 @@ export default function SettingsScreen() {
           {EXPERTISE_LEVELS.map((level) => (
             <Pressable
               key={level.key}
+              accessibilityRole="radio"
+              accessibilityLabel={t(`settings.${level.key}`)}
+              accessibilityState={{ selected: preferences.expertiseLevel === level.key }}
               onPress={() => handleLevelSelect(level.key)}
               style={[
                 s.levelCard,
@@ -391,6 +396,9 @@ export default function SettingsScreen() {
           </View>
           <View style={s.segmentRow}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="English"
+              accessibilityState={{ selected: preferences.language === "en" }}
               onPress={() => { setLanguage("en"); i18n.changeLanguage("en"); }}
               style={[
                 s.segmentBtn,
@@ -412,6 +420,9 @@ export default function SettingsScreen() {
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Arabic"
+              accessibilityState={{ selected: preferences.language === "ar" }}
               onPress={() => { setLanguage("ar"); i18n.changeLanguage("ar"); }}
               style={[
                 s.segmentBtn,
@@ -437,7 +448,7 @@ export default function SettingsScreen() {
 
         {/* Show Advanced Metrics (only if not normal) */}
         {preferences.expertiseLevel !== "normal" && (
-          <Pressable onPress={() => { haptics.selection(); toggleAdvancedMetrics(); }} style={s.switchRow}>
+          <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.showAdvancedMetrics')} accessibilityState={{ checked: preferences.showAdvancedMetrics }} onPress={() => { haptics.selection(); toggleAdvancedMetrics(); }} style={s.switchRow}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, flex: 1, marginBottom: 0 }]}>
               {t('settingsScreen.showAdvancedMetrics')}
             </Text>
@@ -458,7 +469,7 @@ export default function SettingsScreen() {
         )}
 
         {/* Enable Sharia Filter */}
-        <Pressable onPress={() => { haptics.selection(); toggleShariaFilter(); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.enableShariaFilter')} accessibilityState={{ checked: preferences.enableShariaFilter }} onPress={() => { haptics.selection(); toggleShariaFilter(); }} style={s.switchRow}>
           <Text style={[s.prefLabel, { color: colors.textSecondary, flex: 1, marginBottom: 0 }]}>
             {t('settingsScreen.enableShariaFilter')}
           </Text>
@@ -478,7 +489,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         {/* Dividend Focus Mode */}
-        <Pressable onPress={() => { haptics.selection(); toggleDividendFocus(); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.dividendFocusMode')} accessibilityState={{ checked: preferences.dividendFocus }} onPress={() => { haptics.selection(); toggleDividendFocus(); }} style={s.switchRow}>
           <Text style={[s.prefLabel, { color: colors.textSecondary, flex: 1, marginBottom: 0 }]}>
             {t('settingsScreen.dividendFocusMode')}
           </Text>
@@ -499,6 +510,8 @@ export default function SettingsScreen() {
 
         {/* Reset to Defaults */}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsScreen.resetToDefaults')}
           onPress={resetToDefaults}
           style={[s.settingBtn, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor, marginTop: 8 }]}
         >
@@ -519,7 +532,7 @@ export default function SettingsScreen() {
         </Text>
 
         {/* News Notifications */}
-        <Pressable onPress={() => { haptics.selection(); toggleNotification("newsNotifications"); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.newsNotifications')} accessibilityState={{ checked: preferences.notifications.newsNotifications }} onPress={() => { haptics.selection(); toggleNotification("newsNotifications"); }} style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
               {t('settingsScreen.newsNotifications')}
@@ -534,7 +547,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         {/* Portfolio Updates */}
-        <Pressable onPress={() => { haptics.selection(); toggleNotification("portfolioUpdates"); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.portfolioUpdates')} accessibilityState={{ checked: preferences.notifications.portfolioUpdates }} onPress={() => { haptics.selection(); toggleNotification("portfolioUpdates"); }} style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
               {t('settingsScreen.portfolioUpdates')}
@@ -549,7 +562,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         {/* Price Alerts */}
-        <Pressable onPress={() => { haptics.selection(); toggleNotification("priceAlerts"); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.priceAlertsLabel')} accessibilityState={{ checked: preferences.notifications.priceAlerts }} onPress={() => { haptics.selection(); toggleNotification("priceAlerts"); }} style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
               {t('settingsScreen.priceAlertsLabel')}
@@ -564,7 +577,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         {/* Daily Price Updates */}
-        <Pressable onPress={() => { haptics.selection(); toggleNotification("dailyPriceUpdates"); }} style={s.switchRow}>
+        <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.dailyPriceUpdates')} accessibilityState={{ checked: preferences.notifications.dailyPriceUpdates }} onPress={() => { haptics.selection(); toggleNotification("dailyPriceUpdates"); }} style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
               {t('settingsScreen.dailyPriceUpdates')}
@@ -581,6 +594,8 @@ export default function SettingsScreen() {
         {/* Open Phone Notification Settings (native only) */}
         {Platform.OS !== "web" && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsScreen.phoneNotificationSettings')}
             onPress={async () => {
               const granted = await requestNotificationPermissions();
               if (!granted) {
@@ -618,6 +633,8 @@ export default function SettingsScreen() {
           {t('settingsScreen.aiApiKeyDescFull')}
         </Text>
         <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={t('settingsScreen.howToGetKey')}
           onPress={() => import("expo-linking").then((Linking) => Linking.openURL("https://aistudio.google.com/apikey"))}
           style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}
         >
@@ -643,11 +660,14 @@ export default function SettingsScreen() {
             onChangeText={setApiKeyInput}
             style={[s.input, { flex: 1, backgroundColor: colors.bgPrimary, color: colors.textPrimary, borderColor: colors.borderColor }]}
           />
-          <Pressable onPress={() => setShowApiKey(!showApiKey)} style={{ padding: 8 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={showApiKey ? "Hide API key" : "Show API key"} onPress={() => setShowApiKey(!showApiKey)} style={{ padding: 8 }}>
             <FontAwesome name={showApiKey ? "eye-slash" : "eye"} size={16} color={colors.textSecondary} />
           </Pressable>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsScreen.saveApiKey')}
+          accessibilityState={{ disabled: apiKeyMutation.isPending || !apiKeyInput.trim(), busy: apiKeyMutation.isPending }}
           onPress={() => apiKeyMutation.mutate()}
           disabled={apiKeyMutation.isPending || !apiKeyInput.trim()}
           style={[
@@ -675,6 +695,9 @@ export default function SettingsScreen() {
           {t('settingsScreen.priceUpdatesDescFull')}
         </Text>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsScreen.updateAllPrices')}
+          accessibilityState={{ disabled: priceMutation.isPending, busy: priceMutation.isPending }}
           onPress={() => priceMutation.mutate()}
           disabled={priceMutation.isPending}
           style={[
@@ -722,6 +745,9 @@ export default function SettingsScreen() {
           style={[s.input, { backgroundColor: colors.bgPrimary, color: colors.textPrimary, borderColor: colors.borderColor }]}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsScreen.changePassword')}
+          accessibilityState={{ disabled: pwMutation.isPending, busy: pwMutation.isPending }}
           onPress={handleChangePw}
           disabled={pwMutation.isPending}
           style={[
@@ -748,6 +774,9 @@ export default function SettingsScreen() {
           {t('settingsScreen.resetDescription')}
         </Text>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('settingsScreen.deleteAllData')}
+          accessibilityState={{ disabled: resetMutation.isPending, busy: resetMutation.isPending }}
           onPress={handleResetAccount}
           disabled={resetMutation.isPending}
           style={[
@@ -766,6 +795,8 @@ export default function SettingsScreen() {
 
       {/* Logout */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('settingsScreen.signOut')}
         onPress={handleLogout}
         style={[s.logoutBtn, { borderColor: colors.danger }]}
       >
@@ -784,6 +815,8 @@ export default function SettingsScreen() {
       onRequestClose={() => setPendingLevel(null)}
     >
       <Pressable
+        accessibilityRole="none"
+        accessibilityLabel="Close dialog"
         style={s.modalBackdrop}
         onPress={() => setPendingLevel(null)}
       >
@@ -827,12 +860,16 @@ export default function SettingsScreen() {
 
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('app.cancel')}
                     onPress={() => setPendingLevel(null)}
                     style={[s.modalBtn, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor, borderWidth: 1, flex: 1 }]}
                   >
                     <Text style={{ color: colors.textPrimary, fontWeight: "600", fontSize: 14 }}>{t('app.cancel')}</Text>
                   </Pressable>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('app.confirm')}
                     onPress={confirmLevelChange}
                     style={[s.modalBtn, { backgroundColor: colors.accentPrimary, flex: 1 }]}
                   >
