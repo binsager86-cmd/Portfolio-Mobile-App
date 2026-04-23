@@ -73,6 +73,7 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 
 // ── Sub-tab type ─────────────────────────────────────────────────────
 
@@ -631,6 +632,27 @@ function OverviewScreen() {
             )}
             <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
               {savingSnapshot ? t('dashboard.saving') : t('dashboard.saveSnapshot')}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/(tabs)/trading")}
+            accessibilityRole="button"
+            accessibilityLabel="Add transaction"
+            style={({ pressed }) => ({
+              flexDirection: "row" as const,
+              alignItems: "center" as const,
+              justifyContent: "center" as const,
+              gap: 7,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 10,
+              backgroundColor: pressed ? "#7c3aed" : "#8b5cf6",
+            })}
+          >
+            <FontAwesome name="plus" size={14} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
+              Add Transaction
             </Text>
           </Pressable>
         </View>

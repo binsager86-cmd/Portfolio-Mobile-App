@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "558384086556",
+    "project_id": "saham-app-e7242",
+    "storage_bucket": "saham-app-e7242.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:558384086556:android:52acac076636e20a2a69d9",
+        "android_client_info": {
+          "package_name": "com.portfoliotracker.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnhKfD6V6fkDYLTaUKQd_-aVCWE5iKlU4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

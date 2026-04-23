@@ -206,24 +206,9 @@ function TradingScreen() {
 
   const transactions = data?.transactions ?? [];
 
-  // Client-side multi-select filtering (backend only supports single values)
-  const filteredTransactions = useMemo(() => {
-    let txns = transactions;
-    if (portfolios.length > 1) {
-      txns = txns.filter((t) => portfolios.includes(t.portfolio ?? ""));
-    }
-    if (txnTypes.length > 1) {
-      txns = txns.filter((t) => {
-        const ttype = (t.type ?? "").toLowerCase();
-        return txnTypes.some((ft) => {
-          const ftl = ft.toLowerCase();
-          if (ftl === "dividend_only") return ttype === "dividend" || ttype.includes("div");
-          return ttype === ftl || ttype.includes(ftl);
-        });
-      });
-    }
-    return txns;
-  }, [transactions, portfolios, txnTypes]);
+  // Backend handles all server-side filtering for the single-select chips,
+  // dates and search. No client-side filter needed (would clobber pagination).
+  const filteredTransactions = transactions;
 
   const sortedTransactions = useMemo(
     () => sortTransactions(filteredTransactions, sortCol, sortDir),
@@ -442,8 +427,9 @@ function TradingScreen() {
       {/* Summary metrics */}
       {summary && <TradingSummaryCards summary={summary} dateFrom={dateFrom} dateTo={dateTo} />}
 
-      {/* ── Risk Metrics ──────────────────────────────────── */}
-      {riskData && (
+      {/* ── Risk Metrics card hidden per request (sharpe / sortino) ── */}
+      {/* eslint-disable-next-line no-constant-binary-expression */}
+      {false && riskData && (
         <View style={{ paddingHorizontal: spacing?.pagePx ?? 16 }}>
           <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
             <FontAwesome name="shield" size={16} color={colors.accentPrimary} /> {t('portfolioAnalysis.riskMetrics')}
@@ -457,77 +443,7 @@ function TradingScreen() {
         </View>
       )}
 
-      {/* ── Realized Profit ───────────────────────────────── */}
-      {realizedData && (
-        <View style={{ paddingHorizontal: spacing?.pagePx ?? 16 }}>
-          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-            <FontAwesome name="check-circle" size={16} color={colors.accentPrimary} /> {t('portfolioAnalysis.realizedProfit')}
-          </Text>
-          <View style={s.kpiGrid}>
-            <KpiCard label={t('portfolioAnalysis.totalRealized')} value={formatCurrency(realizedData.total_realized_kwd, "KWD")} color={realizedData.total_realized_kwd >= 0 ? colors.success : colors.danger} colors={colors} />
-            <KpiCard label={t('portfolioAnalysis.profit')} value={formatCurrency(realizedData.total_profit_kwd, "KWD")} color={colors.success} colors={colors} />
-            <KpiCard label={t('portfolioAnalysis.loss')} value={formatCurrency(realizedData.total_loss_kwd, "KWD")} color={colors.danger} colors={colors} />
-          </View>
-
-          {realizedData.details.length > 0 && (
-            <View style={[s.detailTable, { borderColor: colors.borderColor, marginTop: 8 }]}>
-              <View style={[s.detailRow, { backgroundColor: colors.bgSecondary, borderBottomColor: colors.borderColor }]}>
-                <View style={{ width: 22 }} />
-                <Text style={[s.detailCell, { color: colors.textSecondary, fontWeight: "700", flex: 2 }]}>{t('portfolioAnalysis.symbol')}</Text>
-                <Text style={[s.detailCell, { color: colors.textSecondary, fontWeight: "700" }]}>{t('portfolioAnalysis.date')}</Text>
-                <Text style={[s.detailCell, { color: colors.textSecondary, fontWeight: "700" }]}>{t('portfolioAnalysis.plKWD')}</Text>
-              </View>
-              {realizedData.details.slice(0, 30).map((d) => {
-                const isOpen = expandedRealized.has(d.id);
-                return (
-                  <View key={d.id}>
-                    <Pressable
-                      onPress={() => toggleRealized(d.id)}
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: isOpen }}
-                      accessibilityLabel={`${d.symbol} ${isOpen ? 'collapse' : 'expand'} details`}
-                      style={({ pressed }) => [s.detailRow, { borderBottomColor: colors.borderColor, alignItems: "center", backgroundColor: pressed ? colors.bgSecondary + "40" : "transparent" }]}
-                    >
-                      <FontAwesome name={isOpen ? "chevron-down" : "chevron-right"} size={11} color={colors.textMuted} style={{ width: 22 }} />
-                      <Text style={[s.detailCell, { color: colors.textPrimary, flex: 2 }]}>{d.symbol}</Text>
-                      <Text style={[s.detailCell, { color: colors.textSecondary }]}>{d.txn_date}</Text>
-                      <Text style={[s.detailCell, { color: d.realized_pnl_kwd >= 0 ? colors.success : colors.danger }]}>{formatCurrency(d.realized_pnl_kwd, "KWD")}</Text>
-                    </Pressable>
-                    {isOpen && (
-                      <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.bgSecondary + "30", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderColor }}>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{t('portfolioAnalysis.portfolio') ?? 'Portfolio'}</Text>
-                          <Text style={[s.detailKvValue, { color: colors.textPrimary }]}>{d.portfolio || '—'}</Text>
-                        </View>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{t('portfolioAnalysis.shares') ?? 'Shares'}</Text>
-                          <Text style={[s.detailKvValue, { color: colors.textPrimary }]}>{fmtNum(d.shares)}</Text>
-                        </View>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{t('portfolioAnalysis.sellValue') ?? 'Sell Value'}</Text>
-                          <Text style={[s.detailKvValue, { color: colors.textPrimary }]}>{formatCurrency(d.sell_value, d.currency)}</Text>
-                        </View>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{t('portfolioAnalysis.avgCost') ?? 'Avg Cost'}</Text>
-                          <Text style={[s.detailKvValue, { color: colors.textPrimary }]}>{formatCurrency(d.avg_cost_at_txn, d.currency)}</Text>
-                        </View>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{`${t('portfolioAnalysis.realizedPnl') ?? 'Realized P&L'} (${d.currency})`}</Text>
-                          <Text style={[s.detailKvValue, { color: d.realized_pnl >= 0 ? colors.success : colors.danger }]}>{formatCurrency(d.realized_pnl, d.currency)}</Text>
-                        </View>
-                        <View style={s.detailKvRow}>
-                          <Text style={[s.detailKvLabel, { color: colors.textMuted }]}>{t('portfolioAnalysis.source') ?? 'Source'}</Text>
-                          <Text style={[s.detailKvValue, { color: colors.textPrimary }]}>{d.source || '—'}</Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-      )}
+      {/* ── Realized Profit card removed per request ──────── */}
 
       {/* Section header: Filters */}
       <View style={[s.sectionHeader, { borderBottomColor: colors.borderColor }]}>
@@ -535,7 +451,7 @@ function TradingScreen() {
         <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>{t('trading.filters')}</Text>
       </View>
 
-      {/* Portfolio filter */}
+      {/* Portfolio filter (single-select) */}
       <View style={s.filterRow}>
         {PORTFOLIOS.map((pf) => (
           <FilterChip
@@ -543,9 +459,7 @@ function TradingScreen() {
             label={pf}
             active={portfolios.includes(pf)}
             onPress={() => {
-              setPortfolios((prev) =>
-                prev.includes(pf) ? prev.filter((p) => p !== pf) : [...prev, pf]
-              );
+              setPortfolios((prev) => (prev[0] === pf ? [] : [pf]));
               setPage(1);
             }}
             colors={colors}
@@ -553,7 +467,7 @@ function TradingScreen() {
         ))}
       </View>
 
-      {/* Type filter */}
+      {/* Type filter (single-select) */}
       <View style={s.filterRow}>
         {TXN_TYPES.map((tp) => (
           <FilterChip
@@ -561,9 +475,7 @@ function TradingScreen() {
             label={tp === "Dividend_Only" ? "Div Only" : tp}
             active={txnTypes.includes(tp)}
             onPress={() => {
-              setTxnTypes((prev) =>
-                prev.includes(tp) ? prev.filter((t) => t !== tp) : [...prev, tp]
-              );
+              setTxnTypes((prev) => (prev[0] === tp ? [] : [tp]));
               setPage(1);
             }}
             activeColor={

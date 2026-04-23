@@ -9,6 +9,16 @@
 import { Platform } from "react-native";
 import { create } from "zustand";
 
+// Lazy import to avoid pulling fetch + auth into stores that don't need it.
+async function syncPrefsToBackend(prefs: NotificationPreferences): Promise<void> {
+  try {
+    const mod = await import("../../services/notifications/notificationPrefsService");
+    await mod.pushNotificationPrefs(prefs);
+  } catch (err) {
+    if (__DEV__) console.warn("[UserPrefsStore] backend sync failed:", err);
+  }
+}
+
 export type ExpertiseLevel = "normal" | "intermediate" | "advanced";
 export type AppLanguage = "en" | "ar";
 
@@ -223,6 +233,8 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     };
     set({ preferences: next });
     savePrefs(next);
+    // Mirror the change to the backend so the push dispatcher honors it.
+    void syncPrefsToBackend(next.notifications);
   },
 
   resetToDefaults: () => {
