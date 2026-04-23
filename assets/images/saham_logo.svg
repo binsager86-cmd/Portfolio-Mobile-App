@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="bg1" x1="140" y1="120" x2="900" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#08070D"/>
+      <stop offset="1" stop-color="#171022"/>
+    </linearGradient>
+    <linearGradient id="g1" x1="330" y1="270" x2="710" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D7C2FF"/>
+      <stop offset="1" stop-color="#8E5BFF"/>
+    </linearGradient>
+    <filter id="shadow1" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity=".24"/>
+    </filter>
+  </defs>
+
+  <rect x="96" y="96" width="832" height="832" rx="176" fill="url(#bg1)"/>
+
+  <g filter="url(#shadow1)">
+    <!-- Clean stylized S -->
+    <path d="M690 298C646 274 593 262 534 264C433 268 353 326 334 410C318 481 366 530 460 552L578 580C632 592 658 612 656 648C652 695 600 730 522 736C446 742 381 716 340 672L296 730C352 786 434 816 526 810C649 803 743 733 754 635C763 552 713 503 614 481L493 454C443 443 421 424 424 391C428 348 471 334 538 332C595 330 643 345 682 371L690 298Z" fill="url(#g1)"/>
+
+    <!-- Minimal market bars integrated -->
+    <g fill="#F6F3FF">
+      <rect x="454" y="414" width="34" height="118" rx="12"/>
+      <rect x="514" y="382" width="34" height="150" rx="12"/>
+      <rect x="574" y="348" width="34" height="184" rx="12"/>
+    </g>
+  </g>
+</svg>

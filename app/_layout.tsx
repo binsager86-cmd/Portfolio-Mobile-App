@@ -133,13 +133,19 @@ function RootLayoutNav() {
           // value we stashed in lib/googleAuth.ts. Drop everything
           // otherwise — protects against attacker-crafted hash injection.
           let expectedState: string | null = null;
-          try { expectedState = window.sessionStorage.getItem("google_oauth_state"); } catch { /* storage may be disabled */ }
+          // Read from localStorage first; fall back to sessionStorage for
+          // backward compatibility with any in-flight legacy requests.
+          try { expectedState = window.localStorage.getItem("google_oauth_state"); } catch { /* storage may be disabled */ }
+          if (!expectedState) {
+            try { expectedState = window.sessionStorage.getItem("google_oauth_state"); } catch { /* storage may be disabled */ }
+          }
           // Always clean the URL so the token isn't visible / replayable.
           window.history.replaceState(
             null,
             "",
             window.location.pathname + window.location.search,
           );
+          try { window.localStorage.removeItem("google_oauth_state"); } catch { /* noop */ }
           try { window.sessionStorage.removeItem("google_oauth_state"); } catch { /* noop */ }
           if (
             accessToken &&
