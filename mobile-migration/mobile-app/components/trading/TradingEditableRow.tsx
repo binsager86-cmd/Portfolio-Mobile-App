@@ -235,6 +235,9 @@ function StockPickerDropdown({
             return (
               <Pressable
                 key={s.symbol}
+                accessibilityRole="button"
+                accessibilityLabel={`${s.symbol}${s.name ? ' ' + s.name : ''}`}
+                accessibilityState={{ selected }}
                 onPress={() => { onChange(s.symbol); close(); }}
                 style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
                   spk.item,
@@ -268,6 +271,9 @@ function StockPickerDropdown({
     <View style={[editStyles.editCell, { width, zIndex: open ? 200 : 1 }]}>
       <Pressable
         ref={triggerRef}
+        accessibilityRole="button"
+        accessibilityLabel={value || "Select stock"}
+        accessibilityState={{ expanded: open }}
         onPress={handleOpen}
         style={({ hovered }: { hovered?: boolean }) => [
           spk.trigger,
@@ -399,6 +405,9 @@ function PortfolioDropdown({
   return (
     <View style={[editStyles.editCell, { width }]}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Portfolio ${value}`}
+        accessibilityState={{ expanded: open }}
         onPress={() => setOpen(!open)}
         style={[editStyles.dropdownBtn, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
       >
@@ -410,6 +419,9 @@ function PortfolioDropdown({
           {PORTFOLIO_OPTIONS.map((opt) => (
             <Pressable
               key={opt}
+              accessibilityRole="button"
+              accessibilityLabel={opt}
+              accessibilityState={{ selected: opt === value }}
               onPress={() => { onChange(opt); setOpen(false); }}
               style={[editStyles.dropdownItem, opt === value && { backgroundColor: colors.accentPrimary + "20" }]}
             >
@@ -453,7 +465,7 @@ export const EditableTableRow = React.memo(function EditableTableRow({
 
   return (
     <View style={[ts.dataRow, { backgroundColor: rowBg, borderBottomColor: colors.borderColor }]}>
-      <Pressable onPress={() => onToggleSelect(row.id)} style={[editStyles.editCell, { width: 40, alignItems: "center" }]}>
+      <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select transaction ${row.id} for delete`} accessibilityState={{ checked: isSelected }} onPress={() => onToggleSelect(row.id)} style={[editStyles.editCell, { width: 40, alignItems: "center" }]}>
         <View style={[editStyles.checkbox, { borderColor: isSelected ? colors.danger : colors.borderColor, backgroundColor: isSelected ? colors.danger : "transparent" }]}>
           {isSelected && <FontAwesome name="check" size={10} color="#fff" />}
         </View>

@@ -32,16 +32,28 @@ export const PressableCard: React.FC<{
   const handlePressIn = () => {
     if (disabled) return;
     scale.value = withSpring(0.97, Motion.spring.snappy);
-    haptics.light();
+    // Note: do NOT fire haptics here — Android fires onPressIn the moment a
+    // finger touches the card, including at the start of a scroll gesture,
+    // which causes spurious vibrations while scrolling lists. Fire on the
+    // confirmed onPress instead, which Pressable cancels if the touch moves
+    // past the slop threshold.
   };
 
   const handlePressOut = () => {
     scale.value = withSpring(1, Motion.spring.snappy);
   };
 
+  const handlePress = () => {
+    if (disabled) return;
+    if (onPress) {
+      haptics.light();
+      onPress();
+    }
+  };
+
   return (
     <AnimatedPressable
-      onPress={onPress}
+      onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}

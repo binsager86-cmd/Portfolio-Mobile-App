@@ -857,6 +857,9 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
               {/* ── WACC toggle ────────────────────────────── */}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4, marginTop: 4 }}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Use WACC as discount rate"
+                  accessibilityState={{ checked: useWacc }}
                   onPress={() => setUseWacc(!useWacc)}
                   style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6, borderWidth: 1, borderColor: useWacc ? "#6366f1" : colors.borderColor, backgroundColor: useWacc ? "#6366f1" + "18" : "transparent" }}
                 >
@@ -977,6 +980,9 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Add peer for comparison"
+                      accessibilityState={{ expanded: showPeerPicker }}
                       onPress={() => setShowPeerPicker((p) => !p)}
                       style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.accentPrimary + "18", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 }}
                     >
@@ -1002,7 +1008,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         style={{ flex: 1, color: colors.textPrimary, fontSize: 13, padding: 0 }}
                       />
                       {peerSearch.length > 0 && (
-                        <Pressable onPress={() => setPeerSearch("")} hitSlop={8}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setPeerSearch("")} hitSlop={8}>
                           <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
                         </Pressable>
                       )}
@@ -1013,6 +1019,9 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         return (
                           <Pressable
                             key={s.symbol}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${already ? "Already added" : "Add peer"} ${s.symbol} ${s.name}`}
+                            accessibilityState={{ disabled: !!already || addPeerMut.isPending }}
                             onPress={() => {
                               if (!already && !addPeerMut.isPending) {
                                 addPeerMut.mutate(s.yf_ticker || s.symbol);
@@ -1096,6 +1105,8 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                             {/* Delete button */}
                             <View style={{ width: 40, justifyContent: "center", alignItems: "center" }}>
                               <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Remove peer ${peer.symbol}`}
                                 onPress={() => {
                                   const doDelete = () => deletePeerMut.mutate(peer.stock_id);
                                   if (Platform.OS === "web") {
@@ -1248,6 +1259,8 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
               <SectionHeader title={`${model.toUpperCase()} History`} icon="history" iconColor={colors.accentSecondary} badge={filteredValuations.length} colors={colors} />
             </View>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Delete all ${model.toUpperCase()} valuations`}
               onPress={() => {
                 const ids = filteredValuations.map((v) => v.id);
                 const doDelete = async () => {
@@ -1305,6 +1318,8 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                       <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "500" }}>Intrinsic Value</Text>
                     </View>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${v.model_type} valuation from ${v.valuation_date}`}
                       onPress={() => {
                         const doDelete = async () => {
                           try { await deleteValuation(stockId, v.id); refetch(); } catch { /* ignore */ }

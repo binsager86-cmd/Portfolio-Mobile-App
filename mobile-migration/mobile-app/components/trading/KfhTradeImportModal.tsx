@@ -63,8 +63,9 @@ export default function KfhTradeImportModal({ visible, preview, onClose, onImpor
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={s.backdrop} onPress={handleClose}>
+      <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={s.backdrop} onPress={handleClose}>
         <Pressable
+          accessibilityRole="none"
           style={[s.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
           onPress={(e) => e.stopPropagation()}
         >
@@ -77,7 +78,7 @@ export default function KfhTradeImportModal({ visible, preview, onClose, onImpor
                 {preview.fileName}
               </Text>
             </View>
-            <Pressable onPress={handleClose} hitSlop={12}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('app.close') ?? 'Close'} onPress={handleClose} hitSlop={12}>
               <FontAwesome name="times" size={18} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -222,6 +223,8 @@ export default function KfhTradeImportModal({ visible, preview, onClose, onImpor
           {/* Actions */}
           <View style={[s.footer, { borderTopColor: colors.borderColor }]}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={result ? "Close" : "Cancel"}
               onPress={handleClose}
               style={[s.btn, { borderColor: colors.borderColor }]}
             >
@@ -232,6 +235,9 @@ export default function KfhTradeImportModal({ visible, preview, onClose, onImpor
 
             {!result && (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Import ${preview.readyRows.length} rows`}
+                accessibilityState={{ disabled: importing || preview.readyRows.length === 0, busy: importing }}
                 onPress={handleImport}
                 disabled={importing || preview.readyRows.length === 0}
                 style={[

@@ -91,6 +91,42 @@ interface OverviewHoldingRow {
   priceBasis: "persisted" | "estimated" | "unavailable";
 }
 
+// ── Plain-language help text for each KPI card (written for people with zero finance background) ─
+const HELP = {
+  totalValue:
+    "Think of this as your account balance today. It's the price you'd get if you sold every stock right now and added the cash sitting in your account. It moves up and down every day with stock prices.",
+  totalDeposits:
+    "All the money you've personally put in from your bank account, minus anything you've taken back out. This is your own cash — not profits. Compare it with Total Value above to see if you're ahead or behind.",
+  netGain:
+    "Your actual profit (or loss) in real money. Simple math: Total Value minus Total Deposits. If it's green, you've grown your money. If it's red, you're currently down.",
+  activeHoldings:
+    "How many different companies you currently own shares in. Owning more companies spreads your risk — if one drops, the others can balance it out. Owning too many can be hard to follow.",
+  dailyMovement:
+    "How much your portfolio went up or down today only. Don't panic over daily swings — markets bounce around constantly. What matters is the trend over months and years, not one day.",
+  realizedProfit:
+    "Profit from stocks you've already sold — the money is real and safely in your account. Once you sell, the gain (or loss) is locked in and can't change anymore.",
+  unrealizedPL:
+    "Profit (or loss) on stocks you still own. It's only \"on paper\" right now — the number changes every minute the market is open. You only get to keep this profit if you sell; otherwise it can disappear.",
+  twr:
+    "How well your investing choices performed, ignoring when you happened to add or take out money. Use this to compare yourself fairly to things like \"the stock market\" — for example, the S&P 500 index.",
+  mwrr:
+    "Your real personal return, including the impact of when you added or withdrew cash. If you put in more money right before stocks went up, this number rewards you for the good timing (and punishes bad timing).",
+  sharpeRatio:
+    "How much reward you got for the risk (the bumpy ride) you took. A higher number means smoother, better returns. Above 1 = good. Above 2 = excellent. Below 1 = you took a lot of stress for not much reward.",
+  cagr:
+    "If your portfolio grew steadily every year (no ups and downs), this is the yearly growth rate that would get you here. A simple way to say \"on average, I made X% per year.\"",
+  winRate:
+    "Out of every 10 trades you've closed, how many made money? A 60% win rate means 6 out of 10 trades were profitable. A high win rate sounds great, but one giant loss can wipe out many small wins — also check Profit Factor.",
+  profitFactor:
+    "For every $1 you've lost on losing trades, how many dollars did you make on winning trades? Above 1 means you're making more than you lose. Above 2 is excellent. Below 1 means losses are eating your profits.",
+  cashYieldDiv:
+    "How much cash income (dividends) your portfolio pays you each year, as a percentage of its value. Like the interest rate a savings account pays — except it comes from companies sharing their profits with shareholders.",
+  cashDividends:
+    "Total cash that companies have paid you just for owning their shares. Free money — you don't have to sell anything to receive it. Many companies pay this every 3 months.",
+  yieldOnCost:
+    "Same idea as Cash Yield, but compared to what you originally paid — not today's price. As good companies grow and pay bigger dividends over time, this number grows too. Long-term investors love watching this rise.",
+};
+
 // ── Main Screen ─────────────────────────────────────────────────────
 
 function OverviewScreen() {
@@ -418,14 +454,20 @@ function OverviewScreen() {
     // CAGR — from backend (CFA: V_start = first deposit, V_end = live value, t = years since first deposit)
     const cagr = data.cagr_percent ?? 0;
 
-    // Win rate + profit factor from realized trades
+    // Win rate + profit factor from realized trades.
+    // A trade is considered a "win" when realized P&L plus dividends
+    // received on that position is positive — so a stock sold at a loss
+    // can still count as a winning trade if dividends more than offset
+    // the price loss.
     const trades = realizedData?.details ?? [];
-    const profitableTrades = trades.filter((t) => t.realized_pnl > 0);
-    const losingTrades = trades.filter((t) => t.realized_pnl < 0);
+    const tradeNet = (t: typeof trades[number]) =>
+      (t.net_pnl_kwd ?? (t.realized_pnl_kwd + (t.dividends_allocated_kwd ?? 0)));
+    const profitableTrades = trades.filter((t) => tradeNet(t) > 0);
+    const losingTrades = trades.filter((t) => tradeNet(t) < 0);
     const totalTrades = trades.length;
     const winRate = totalTrades > 0 ? (profitableTrades.length / totalTrades) * 100 : 0;
-    const grossProfit = profitableTrades.reduce((s, t) => s + t.realized_pnl_kwd, 0);
-    const grossLoss = Math.abs(losingTrades.reduce((s, t) => s + t.realized_pnl_kwd, 0));
+    const grossProfit = profitableTrades.reduce((s, t) => s + tradeNet(t), 0);
+    const grossLoss = Math.abs(losingTrades.reduce((s, t) => s + tradeNet(t), 0));
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
 
     // Cash yield dividend = total dividends / total deposits
@@ -578,7 +620,7 @@ function OverviewScreen() {
         </Text>
 
         {/* Action buttons */}
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, rowGap: 10, marginTop: 16 }}>
           <Pressable
             onPress={onRefresh}
             disabled={refreshing || savingSnapshot}
@@ -636,7 +678,7 @@ function OverviewScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/(tabs)/trading")}
+            onPress={() => router.push("/(tabs)/transactions")}
             accessibilityRole="button"
             accessibilityLabel="Add transaction"
             style={({ pressed }) => ({
@@ -717,6 +759,7 @@ function OverviewScreen() {
           accentColor={colors.accentPrimary}
           icon="suitcase"
           width={colW}
+          helpText={HELP.totalValue}
         />
         <MetricCard
           emoji="💰"
@@ -724,6 +767,7 @@ function OverviewScreen() {
           value={formatCurrency(metrics.totalDeposits)}
           accentColor="#a855f7"
           width={colW}
+          helpText={HELP.totalDeposits}
         />
         <MetricCard
           label={t('dashboard.netGain')}
@@ -732,6 +776,7 @@ function OverviewScreen() {
           trend={metrics.netGain >= 0 ? "up" : "down"}
           icon="line-chart"
           width={colW}
+          helpText={HELP.netGain}
         />
         <MetricCard
           emoji="📊"
@@ -740,6 +785,7 @@ function OverviewScreen() {
           subline={`${metrics.txnCount} ${t('dashboard.transactions')}`}
           accentColor={colors.warning}
           width={colW}
+          helpText={HELP.activeHoldings}
         />
         <MetricCard
           label={t('dashboard.dailyMovement')}
@@ -748,6 +794,7 @@ function OverviewScreen() {
           trend={metrics.dailyMovement >= 0 ? "up" : "down"}
           icon="area-chart"
           width={colW}
+          helpText={HELP.dailyMovement}
         />
       </View>
 
@@ -849,7 +896,8 @@ function OverviewScreen() {
           subline={t('dashboard.closedTrades')}
           trend={metrics.realizedPnl >= 0 ? "up" : "down"}
           icon="check-circle"
-          width={isPhone ? "48%" : "32%"}
+          width={isPhone ? "48%" : "49%"}
+          helpText={HELP.realizedProfit}
         />
         <MetricCard
           label={t('dashboard.unrealizedPL')}
@@ -857,7 +905,8 @@ function OverviewScreen() {
           subline={t('dashboard.openPositions')}
           trend={metrics.unrealizedPnl >= 0 ? "up" : "down"}
           icon="bar-chart"
-          width={isPhone ? "48%" : "32%"}
+          width={isPhone ? "48%" : "49%"}
+          helpText={HELP.unrealizedPL}
         />
       </View>
       )}
@@ -874,7 +923,8 @@ function OverviewScreen() {
           subline={t('dashboard.timeWeightedReturn')}
           icon="line-chart"
           accentColor="#3b82f6"
-          width={isPhone ? "48%" : "24%"}
+          width={isPhone ? "48%" : "32%"}
+          helpText={HELP.twr}
         />
         <MetricCard
           label={t('dashboard.mwrr')}
@@ -882,7 +932,8 @@ function OverviewScreen() {
           subline={t('dashboard.moneyWeightedReturn')}
           icon="line-chart"
           accentColor="#8b5cf6"
-          width={isPhone ? "48%" : "24%"}
+          width={isPhone ? "48%" : "32%"}
+          helpText={HELP.mwrr}
         />
         <MetricCard
           label={t('dashboard.sharpeRatio')}
@@ -890,7 +941,8 @@ function OverviewScreen() {
           subline={customRfRate != null ? t('dashboard.rfRate', { rate: customRfRate.toFixed(2) }) : t('dashboard.setRfRate')}
           icon="balance-scale"
           accentColor="#06b6d4"
-          width={isPhone ? "48%" : "24%"}
+          width={isPhone ? "48%" : "32%"}
+          helpText={HELP.sharpeRatio}
         />
       </View>
 
@@ -902,6 +954,7 @@ function OverviewScreen() {
           icon="line-chart"
           accentColor="#f59e0b"
           width={isPhone ? "48%" : "24%"}
+          helpText={HELP.cagr}
         />
         <MetricCard
           label={t('dashboard.winRate')}
@@ -910,6 +963,7 @@ function OverviewScreen() {
           icon="trophy"
           accentColor={metrics.winRate >= 50 ? colors.success : colors.danger}
           width={isPhone ? "48%" : "24%"}
+          helpText={HELP.winRate}
         />
         <MetricCard
           label={t('dashboard.profitFactor')}
@@ -918,6 +972,7 @@ function OverviewScreen() {
           icon="balance-scale"
           accentColor={metrics.profitFactor >= 1 ? colors.success : colors.danger}
           width={isPhone ? "48%" : "24%"}
+          helpText={HELP.profitFactor}
         />
         <MetricCard
           label={t('dashboard.cashYieldDiv')}
@@ -926,6 +981,7 @@ function OverviewScreen() {
           icon="money"
           accentColor="#8b5cf6"
           width={isPhone ? "48%" : "24%"}
+          helpText={HELP.cashYieldDiv}
         />
       </View>
       </>)}
@@ -952,6 +1008,7 @@ function OverviewScreen() {
           subline={t('dashboard.yieldSubline', { yield: formatPercent(metrics.cashYieldDiv) })}
           accentColor={colors.success}
           width={dividendFocus ? (isPhone ? "100%" : "32%") : (isPhone ? "48%" : "48%")}
+          helpText={HELP.cashDividends}
         />
         {dividendFocus && (
           <MetricCard
@@ -961,19 +1018,12 @@ function OverviewScreen() {
             subline={t('dashboard.depositsSubline', { amount: formatCurrency(metrics.totalDeposits) })}
             accentColor="#8b5cf6"
             width={isPhone ? "48%" : "32%"}
+            helpText={HELP.yieldOnCost}
           />
         )}
       </View>
 
-      {/* ── Realized Trades Breakdown (expandable) ── */}
-      {expertiseLevel !== "normal" && realizedData && realizedData.details.length > 0 && (
-        <RealizedTradesSection
-          data={realizedData}
-          colors={colors}
-          fonts={fonts}
-          isPhone={isPhone}
-        />
-      )}
+      {/* ── Realized Trades Breakdown — hidden from overview per request ── */}
 
       {/* ── Per-portfolio Breakdown ── */}
       {expertiseLevel !== "normal" && data.portfolio_values &&

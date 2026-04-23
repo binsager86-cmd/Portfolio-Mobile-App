@@ -47,8 +47,12 @@ export function RealizedTradesSection({
     if (!details) return { profitCount: 0, lossCount: 0 };
     let wins = 0, losses = 0;
     for (const d of details) {
-      if (d.realized_pnl > 0) wins++;
-      else if (d.realized_pnl < 0) losses++;
+      // Count a trade as a win when realized P&L plus the dividends
+      // collected on that position is positive — losses offset by
+      // dividends still count as winning trades.
+      const net = d.net_pnl_kwd ?? (d.realized_pnl_kwd + (d.dividends_allocated_kwd ?? 0));
+      if (net > 0) wins++;
+      else if (net < 0) losses++;
     }
     return { profitCount: wins, lossCount: losses };
   }, [data?.details]);

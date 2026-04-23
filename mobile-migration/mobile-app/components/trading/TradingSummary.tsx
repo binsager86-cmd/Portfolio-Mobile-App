@@ -89,20 +89,9 @@ export function TradingSummaryCards({ summary, dateFrom, dateTo }: { summary: Tr
         <Card icon="sign-out" iconColor="#ef4444" label={t("trading.withdrawals")} value={formatCurrency(summary.total_withdrawals, "KWD")} sub={t("trading.transactionsCount", { count: summary.withdrawal_count })} borderAccent="#ef4444" />
       </ResponsiveGrid>
 
-      <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t("trading.profitAndLoss")}</Text>
-      <ResponsiveGrid columns={{ phone: 2, tablet: 4, desktop: 4 }}>
-        <Card icon="line-chart" iconColor={pnlColor(summary.unrealized_pnl)} label={t("trading.unrealizedPL")} value={formatSignedCurrency(summary.unrealized_pnl, "KWD")} sub={t("trading.openPositions")} valueColor={pnlColor(summary.unrealized_pnl)} borderAccent={pnlColor(summary.unrealized_pnl)} />
-        <Card icon="check-circle" iconColor={pnlColor(summary.realized_pnl)} label={t("trading.realizedPL")} value={formatSignedCurrency(summary.realized_pnl, "KWD")} sub={t("trading.closedPositions")} valueColor={pnlColor(summary.realized_pnl)} borderAccent={pnlColor(summary.realized_pnl)} />
-        <Card icon="trophy" iconColor={pnlColor(summary.total_pnl)} label={t("trading.totalPL")} value={formatSignedCurrency(summary.total_pnl, "KWD")} sub={`${t("trading.unrealizedPL")} (${formatSignedCurrency(summary.unrealized_pnl, "KWD")}) + ${t("trading.realizedPL")} (${formatSignedCurrency(summary.realized_pnl, "KWD")})`} valueColor={pnlColor(summary.total_pnl)} borderAccent={pnlColor(summary.total_pnl)} />
-        <Card icon="list-ol" iconColor={colors.accentPrimary} label={t("trading.totalTxns")} value={fmtNum(summary.total_transactions, 0)} sub={t("trading.allTransactionTypes")} borderAccent={colors.accentPrimary} />
-      </ResponsiveGrid>
+      {/* P&L row hidden per request (unrealized / realized / total P&L / total txns) */}
 
-      <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t("trading.returnsAndIncome")}</Text>
-      <ResponsiveGrid columns={{ phone: 2, tablet: 4, desktop: 4 }}>
-        <Card icon="money" iconColor="#8b5cf6" label={t("trading.cashDividends")} value={formatCurrency(summary.total_dividends, "KWD")} sub={t("trading.recordsCount", { count: summary.dividend_count })} borderAccent="#8b5cf6" />
-        <Card icon="percent" iconColor="#6366f1" label={t("trading.totalFees")} value={formatCurrency(summary.total_fees, "KWD")} sub={t("trading.brokerageCommissions")} borderAccent="#6366f1" />
-        <Card icon="area-chart" iconColor={pnlColor(summary.total_return_pct)} label={t("trading.totalReturn")} value={summary.total_buys > 0 ? formatPercent(summary.total_return_pct) : "N/A"} sub={t("trading.includingDividends")} valueColor={pnlColor(summary.total_return_pct)} borderAccent={pnlColor(summary.total_return_pct)} />
-      </ResponsiveGrid>
+      {/* Returns & Income row hidden per request (cash dividends, total fees, total return) */}
     </View>
   );
 }

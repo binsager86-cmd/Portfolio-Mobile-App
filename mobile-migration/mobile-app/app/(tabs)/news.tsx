@@ -59,7 +59,7 @@ export default function NewsScreen() {
             autoComplete="off"
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8} accessibilityRole="button" accessibilityLabel={t("news.clearSearch") ?? "Clear search"}>
               <FontAwesome name="times-circle" size={16} color={colors.textMuted} />
             </Pressable>
           )}
@@ -69,6 +69,9 @@ export default function NewsScreen() {
         <View style={s.toggleRow}>
           <Pressable
             onPress={() => setPortfolioOnly(true)}
+            accessibilityRole="tab"
+            accessibilityLabel={t("news.myHoldings")}
+            accessibilityState={{ selected: portfolioOnly }}
             style={[
               s.toggleBtn,
               {
@@ -95,6 +98,9 @@ export default function NewsScreen() {
           </Pressable>
           <Pressable
             onPress={() => setPortfolioOnly(false)}
+            accessibilityRole="tab"
+            accessibilityLabel={t("news.allMarket")}
+            accessibilityState={{ selected: !portfolioOnly }}
             style={[
               s.toggleBtn,
               {

@@ -219,7 +219,7 @@ export default function AlertsScreen() {
                   thumbColor={rule.enabled ? colors.accentPrimary : colors.textMuted}
                 />
 
-                <Pressable onPress={() => handleDelete(rule.id)} style={st.deleteBtn}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('alerts.deleteAlert') ?? 'Delete alert'} onPress={() => handleDelete(rule.id)} style={st.deleteBtn}>
                   <FontAwesome name="trash-o" size={18} color={colors.danger} />
                 </Pressable>
               </View>
@@ -230,6 +230,7 @@ export default function AlertsScreen() {
 
       {/* ── FAB ── */}
       <Pressable
+        accessibilityRole="button"
         onPress={() => openAddModal()}
         style={[st.fab, { backgroundColor: colors.accentPrimary }]}
         accessibilityLabel="Add alert"
@@ -346,7 +347,7 @@ function AddAlertModal({
             <Text style={[st.modalTitle, { color: colors.textPrimary }]}>
               {t('alerts.addAlert')}
             </Text>
-            <Pressable onPress={onClose} style={st.modalCloseBtn}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('app.close') ?? 'Close'} onPress={onClose} style={st.modalCloseBtn}>
               <FontAwesome name="times" size={20} color={colors.textSecondary} />
             </Pressable>
           </View>
@@ -390,6 +391,9 @@ function AddAlertModal({
                   render={({ field: { value, onChange } }) => (
                     <View>
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t("alerts.stockSymbol")}
+                        accessibilityState={{ expanded: showStockDropdown }}
                         onPress={() => setShowStockDropdown(!showStockDropdown)}
                         style={[st.stockPickerBtn, {
                           backgroundColor: colors.bgSecondary,
@@ -431,6 +435,9 @@ function AddAlertModal({
                               {filteredStocks.map((stock) => (
                                 <Pressable
                                   key={stock.symbol}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${stock.symbol} ${stock.name}`}
+                                  accessibilityState={{ selected: value === stock.symbol }}
                                   onPress={() => {
                                     onChange(stock.symbol);
                                     setShowStockDropdown(false);
@@ -555,6 +562,8 @@ function AddAlertModal({
                   ).map((hint) => (
                     <Pressable
                       key={hint}
+                      accessibilityRole="button"
+                      accessibilityLabel={hint}
                       onPress={() => {
                         // For % suggestions — just set threshold
                         const num = parseFloat(hint);
@@ -581,6 +590,8 @@ function AddAlertModal({
             {/* Actions */}
             <View style={st.modalActions}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("app.cancel")}
                 onPress={onClose}
                 style={[
                   st.actionBtn,
@@ -592,6 +603,8 @@ function AddAlertModal({
                 </Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("alerts.saveAlert")}
                 onPress={handleSubmit(onSubmit)}
                 style={[st.actionBtn, { backgroundColor: colors.accentPrimary }]}
               >

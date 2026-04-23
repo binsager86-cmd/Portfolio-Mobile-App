@@ -106,6 +106,9 @@ export default function PfmScreen() {
           <Pressable
             key={tb.key}
             onPress={() => setTab(tb.key)}
+            accessibilityRole="tab"
+            accessibilityLabel={tb.label}
+            accessibilityState={{ selected: tab === tb.key }}
             style={[s.tabBtn, tab === tb.key && { borderBottomColor: colors.accentPrimary, borderBottomWidth: 2 }]}
           >
             <FontAwesome name={tb.icon} size={14} color={tab === tb.key ? colors.accentPrimary : colors.textMuted} />
@@ -132,6 +135,9 @@ export default function PfmScreen() {
                 <Pressable
                   key={snap.id}
                   onPress={() => { setSelectedId(snap.id); setTab("balance"); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Snapshot ${snap.snapshot_date}`}
+                  accessibilityState={{ selected: selectedId === snap.id }}
                   style={[s.snapCard, { backgroundColor: selectedId === snap.id ? colors.accentPrimary + "18" : colors.bgCard, borderColor: colors.borderColor }]}
                 >
                   <View style={{ flex: 1 }}>
@@ -147,7 +153,7 @@ export default function PfmScreen() {
                       {formatCurrency(snap.net_worth, "KWD")}
                     </Text>
                     <Text style={{ fontSize: 10, color: colors.textMuted }}>{t('pfm.netWorth')}</Text>
-                    <Pressable onPress={() => handleDelete(snap)} style={{ padding: 4, marginTop: 4 }}>
+                    <Pressable onPress={() => handleDelete(snap)} accessibilityRole="button" accessibilityLabel={`Delete snapshot ${snap.snapshot_date}`} style={{ padding: 4, marginTop: 4 }}>
                       <FontAwesome name="trash-o" size={14} color={colors.danger} />
                     </Pressable>
                   </View>

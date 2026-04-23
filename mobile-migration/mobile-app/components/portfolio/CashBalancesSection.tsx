@@ -143,10 +143,10 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
                   placeholderTextColor={colors.textMuted}
                   autoFocus
                 />
-                <Pressable onPress={() => handleSaveOverride(pf)} style={[cs.editBtn, { backgroundColor: colors.success + "22" }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Save cash balance for ${pf}`} onPress={() => handleSaveOverride(pf)} style={[cs.editBtn, { backgroundColor: colors.success + "22" }]}>
                   <FontAwesome name="check" size={12} color={colors.success} />
                 </Pressable>
-                <Pressable onPress={() => { setEditingPf(null); setEditValue(""); }} style={[cs.editBtn, { backgroundColor: colors.danger + "22" }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingPf(null); setEditValue(""); }} style={[cs.editBtn, { backgroundColor: colors.danger + "22" }]}>
                   <FontAwesome name="times" size={12} color={colors.danger} />
                 </Pressable>
               </View>
@@ -166,6 +166,8 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
             {!isEditing && (
               <View style={[cs.cellActions, cs.cellInner, cs.actionsRow]}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit cash balance for ${pf}`}
                   onPress={() => { setEditingPf(pf); setEditValue(balance.toString()); }}
                   style={({ pressed }) => [cs.actionBtn, { backgroundColor: colors.accentPrimary + "20", borderColor: colors.accentPrimary + "44", opacity: pressed ? 0.6 : 1 }]}
                 >
@@ -173,6 +175,8 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
                 </Pressable>
                 {isManual && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("holdingsScreen.clearOverride")}
                     onPress={() => {
                       const msg = t("holdingsScreen.clearOverrideMessage", { portfolio: pf });
                       if (Platform.OS === "web") { if (window.confirm(msg)) clearMutation.mutate(pf); }
@@ -185,6 +189,8 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
                 )}
                 {onReconcile && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reconcile ${pf}`}
                     onPress={() => onReconcile(pf)}
                     style={({ pressed }) => [cs.actionBtn, { backgroundColor: colors.accentSecondary + "20", borderColor: colors.accentSecondary + "44", opacity: pressed ? 0.6 : 1 }]}
                   >

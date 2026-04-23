@@ -264,7 +264,7 @@ export default function DividendsScreen() {
           <Text style={[s.inlineHeaderTitle, { color: colors.textPrimary }]}>
             {t("dividends.title")}
           </Text>
-          <Pressable onPress={toggle} style={s.inlineHeaderBtn}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Toggle theme" onPress={toggle} style={s.inlineHeaderBtn}>
             {({ pressed }) => (
               <FontAwesome
                 name={mode === "dark" ? "lightbulb-o" : "moon-o"}
@@ -304,6 +304,9 @@ export default function DividendsScreen() {
         <View style={[s.chartContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           {projection && projection.totalProjected > 0 && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("dividends.projectionMode")}
+              accessibilityState={{ selected: showProjectionOnChart }}
               onPress={() => setShowProjectionOnChart((v) => !v)}
               style={[
                 s.projectionToggle,
@@ -341,6 +344,9 @@ export default function DividendsScreen() {
           {visibleTabs.map((tb) => (
             <Pressable
               key={tb.key}
+              accessibilityRole="button"
+              accessibilityLabel={tb.label}
+              accessibilityState={{ selected: tab === tb.key }}
               onPress={() => setTab(tb.key)}
               style={[
                 s.tabBtn,
@@ -391,7 +397,7 @@ export default function DividendsScreen() {
                         {t("dividends.reinvestedLabel")} {formatCurrency(item.reinvested_kwd, "KWD")}
                       </Text>
                     )}
-                    <Pressable onPress={() => handleDelete(item.id)} hitSlop={8}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Delete dividend for ${item.stock_symbol}`} onPress={() => handleDelete(item.id)} hitSlop={8}>
                       <FontAwesome name="trash-o" size={14} color={colors.danger} />
                     </Pressable>
                   </View>
@@ -401,6 +407,9 @@ export default function DividendsScreen() {
             {(divData?.pagination?.total_pages ?? 1) > 1 && (
               <View style={s.pagination}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous page"
+                  accessibilityState={{ disabled: page <= 1 }}
                   onPress={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
                   style={[s.pageBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, opacity: page <= 1 ? 0.4 : 1 }]}
@@ -411,6 +420,9 @@ export default function DividendsScreen() {
                   {page} / {divData?.pagination?.total_pages ?? 1}
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Next page"
+                  accessibilityState={{ disabled: page >= (divData?.pagination?.total_pages ?? 1) }}
                   onPress={() => setPage((p) => Math.min(divData?.pagination?.total_pages ?? 1, p + 1))}
                   disabled={page >= (divData?.pagination?.total_pages ?? 1)}
                   style={[s.pageBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, opacity: page >= (divData?.pagination?.total_pages ?? 1) ? 0.4 : 1 }]}
@@ -594,6 +606,9 @@ export default function DividendsScreen() {
 
               {/* Checkbox: include cash dividend in ex-date price adjustment */}
               <Pressable
+                accessibilityRole="checkbox"
+                accessibilityLabel={t("dividends.includeCashInExDate")}
+                accessibilityState={{ checked: calcIncludeCashInEx }}
                 onPress={() => setCalcIncludeCashInEx((v) => !v)}
                 style={s.checkboxRow}
               >
@@ -760,6 +775,8 @@ export default function DividendsScreen() {
 
                 {/* ── Export PDF Button ── */}
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Export yield calculation as PDF"
                   onPress={async () => {
                     const { exportYieldCalcPdf } = await import("@/lib/exportYieldPdf");
                     await exportYieldCalcPdf(

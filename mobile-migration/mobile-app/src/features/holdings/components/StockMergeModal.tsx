@@ -119,6 +119,7 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
         <Pressable
           style={[ms.box, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
           onPress={() => {}}
+          accessibilityRole="none"
         >
           {/* Title */}
           <View style={ms.titleRow}>
@@ -181,6 +182,9 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
                   <Pressable
                     key={stock.id}
                     onPress={() => setMergeTargetId(selected ? null : stock.id)}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`${stock.symbol} ${stock.name}`}
+                    accessibilityState={{ selected, checked: selected }}
                     style={[
                       ms.stockItem,
                       {
@@ -208,6 +212,8 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
           <View style={ms.btnRow}>
             <Pressable
               onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("holdingsScreen.cancel")}
               style={[ms.btn, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor, borderWidth: 1 }]}
             >
               <Text style={[ms.btnText, { color: colors.textSecondary }]}>{t("holdingsScreen.cancel")}</Text>
@@ -215,6 +221,9 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
             <Pressable
               onPress={handleMerge}
               disabled={!mergeTargetId || mergeMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel={t("holdingsScreen.mergeSelected")}
+              accessibilityState={{ disabled: !mergeTargetId || mergeMutation.isPending, busy: mergeMutation.isPending }}
               style={[
                 ms.btn,
                 {

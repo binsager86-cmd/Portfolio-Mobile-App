@@ -115,12 +115,12 @@ export function StocksPanel({
             style={[st.searchInput, { color: colors.textPrimary }]}
           />
           {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearch("")} hitSlop={8}>
               <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
             </Pressable>
           )}
         </View>
-        <Pressable onPress={() => setShowAdd(true)} style={[st.addBtn, { backgroundColor: colors.accentPrimary }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add stock" onPress={() => setShowAdd(true)} style={[st.addBtn, { backgroundColor: colors.accentPrimary }]}>
           <FontAwesome name="plus" size={12} color="#fff" />
           <Text style={S.addBtnText}>Add</Text>
         </Pressable>
@@ -137,7 +137,7 @@ export function StocksPanel({
           refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={colors.accentPrimary} />}
           renderItem={({ item, index }) => (
             <FadeIn delay={index * 40}>
-              <Pressable onPress={() => onSelect(item)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`View ${item.symbol} ${item.company_name}`} onPress={() => onSelect(item)}>
                 <Card colors={colors} style={st.rowCenter}>
                   <View style={[st.symbolBadge, ts.symbolBadgeBg]}>
                     <Text style={ts.symbolText}>
@@ -165,10 +165,10 @@ export function StocksPanel({
                   </View>
                   <View style={S.actionsCol}>
                     <View style={S.actionsRow}>
-                      <Pressable onPress={() => setEditStock(item)} hitSlop={10} style={[st.iconBtn, ts.editBtnBg]}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${item.symbol}`} onPress={() => setEditStock(item)} hitSlop={10} style={[st.iconBtn, ts.editBtnBg]}>
                         <FontAwesome name="pencil" size={12} color={colors.accentPrimary} />
                       </Pressable>
-                      <Pressable onPress={() => handleDelete(item)} hitSlop={10} style={[st.iconBtn, ts.deleteBtnBg]}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.symbol}`} onPress={() => handleDelete(item)} hitSlop={10} style={[st.iconBtn, ts.deleteBtnBg]}>
                         <FontAwesome name="trash-o" size={12} color={colors.danger} />
                       </Pressable>
                     </View>
@@ -187,7 +187,7 @@ export function StocksPanel({
               <Text style={[st.emptySubtitle, ts.emptySubtitle]}>
                 Add your first stock profile to begin{"\n"}fundamental analysis
               </Text>
-              <Pressable onPress={() => setShowAdd(true)} style={[st.addBtn, ts.addStockBtn]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Add stock" onPress={() => setShowAdd(true)} style={[st.addBtn, ts.addStockBtn]}>
                 <FontAwesome name="plus" size={12} color="#fff" />
                 <Text style={S.addStockBtnText}>Add Stock</Text>
               </Pressable>
@@ -265,13 +265,13 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={st.modalOverlay} onPress={onClose}>
-        <Pressable style={[st.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, maxHeight: "85%" }]} onPress={() => {}}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close stock form" style={st.modalOverlay} onPress={onClose}>
+        <Pressable accessibilityRole="none" style={[st.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, maxHeight: "85%" }]} onPress={() => {}}>
           <View style={[st.rowBetween, { marginBottom: 16 }]}>
             <Text style={[st.modalTitle, { color: colors.textPrimary }]}>
               {isEdit ? `Edit ${stock?.symbol ?? "Stock"}` : "Add Analysis Stock"}
             </Text>
-            <Pressable onPress={onClose} hitSlop={12} style={[st.iconBtn, { backgroundColor: colors.bgInput }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={12} style={[st.iconBtn, { backgroundColor: colors.bgInput }]}>
               <FontAwesome name="times" size={14} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -298,7 +298,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                     style={[st.searchInput, { color: colors.textPrimary, fontSize: 13 }]}
                   />
                   {pickerSearch.length > 0 && (
-                    <Pressable onPress={() => setPickerSearch("")} hitSlop={8}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setPickerSearch("")} hitSlop={8}>
                       <FontAwesome name="times-circle" size={13} color={colors.textMuted} />
                     </Pressable>
                   )}
@@ -318,6 +318,8 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                       maxToRenderPerBatch={10}
                       renderItem={({ item, index }) => (
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Pick ${item.symbol} ${item.name}`}
                           onPress={() => handlePickStock(item)}
                           style={[st.pickerRow, {
                             backgroundColor: index % 2 === 0 ? "transparent" : colors.bgPrimary + "40",
@@ -377,7 +379,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                       </View>
                     </View>
                   </View>
-                  <Pressable onPress={() => { setSelectedEntry(null); setSymbol(""); setCompanyName(""); }} hitSlop={10} style={[st.iconBtn, { backgroundColor: colors.bgInput }]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Change selected stock" onPress={() => { setSelectedEntry(null); setSymbol(""); setCompanyName(""); }} hitSlop={10} style={[st.iconBtn, { backgroundColor: colors.bgInput }]}>
                     <FontAwesome name="exchange" size={11} color={colors.textMuted} />
                   </Pressable>
                 </View>

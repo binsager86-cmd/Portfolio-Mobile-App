@@ -169,7 +169,7 @@ export function ReconciliationModal({
                 {t("reconciliation.subtitle", { portfolio })}
               </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={12}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('app.close')} onPress={onClose} hitSlop={12}>
               <FontAwesome name="times" size={18} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -353,6 +353,8 @@ export function ReconciliationModal({
               <>
                 {onSkip && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('reconciliation.skip')}
                     onPress={onSkip}
                     style={({ pressed }) => [
                       ms.btn,
@@ -368,6 +370,8 @@ export function ReconciliationModal({
                 {/* Delete selected transactions button */}
                 {totalDeletions > 0 && onDeleteTransactions && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('reconciliation.deleteSelected', { count: totalDeletions })}
                     onPress={handleProceedToDelete}
                     style={({ pressed }) => [
                       ms.btn,
@@ -381,6 +385,9 @@ export function ReconciliationModal({
                   </Pressable>
                 )}
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={applying ? t('reconciliation.applying') : t('reconciliation.apply')}
+                  accessibilityState={{ disabled: applying, busy: applying }}
                   onPress={handleApply}
                   disabled={applying}
                   style={({ pressed }) => [
@@ -400,6 +407,8 @@ export function ReconciliationModal({
             ) : (
               <>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('reconciliation.back')}
                   onPress={() => setStep("review")}
                   style={({ pressed }) => [
                     ms.btn,
@@ -412,6 +421,9 @@ export function ReconciliationModal({
                   </Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={deleting ? t('reconciliation.deleting') : t('reconciliation.confirmDelete', { count: totalDeletions })}
+                  accessibilityState={{ disabled: deleting, busy: deleting }}
                   onPress={handleConfirmDelete}
                   disabled={deleting}
                   style={({ pressed }) => [
@@ -455,6 +467,9 @@ function AllWithdrawalRow({
 
   return (
     <Pressable
+      accessibilityRole="checkbox"
+      accessibilityLabel={`Withdrawal ${deposit.deposit_date} ${Math.abs(deposit.amount)} ${currency}`}
+      accessibilityState={{ checked: selected }}
       onPress={() => onToggle(deposit.id)}
       style={[
         ms.wRow,
@@ -512,6 +527,9 @@ function WithdrawalRow({
 
   return (
     <Pressable
+      accessibilityRole="checkbox"
+      accessibilityLabel={`Withdrawal ${w.txn_date} ${Math.abs(w.purchase_cost ?? w.sell_value ?? w.cash_dividend ?? 0)} ${currency}`}
+      accessibilityState={{ checked: selected }}
       onPress={() => onToggle(w.id)}
       style={[
         ms.wRow,
@@ -568,6 +586,9 @@ function OrphanedSellRow({
 
   return (
     <Pressable
+      accessibilityRole="checkbox"
+      accessibilityLabel={`Orphaned sell ${txn.stock_symbol} ${txn.txn_date}`}
+      accessibilityState={{ checked: selected }}
       onPress={() => onToggle(txn.id)}
       style={[
         ms.wRow,

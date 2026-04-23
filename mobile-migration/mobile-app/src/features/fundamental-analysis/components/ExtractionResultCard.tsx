@@ -44,7 +44,7 @@ export function ExtractionResultCard({
         <Text style={{ color: colors.success, fontSize: 13, fontWeight: "700", flex: 1 }}>
           AI Vision Extraction Complete
         </Text>
-        <Pressable onPress={dismissResult} hitSlop={8}>
+        <Pressable onPress={dismissResult} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss extraction result">
           <FontAwesome name="times" size={14} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -143,6 +143,9 @@ export function ExtractionResultCard({
             <Pressable
               onPress={() => setAttributionDismissed(true)}
               disabled={attributing}
+              accessibilityRole="button"
+              accessibilityLabel="Decline AI attribution review"
+              accessibilityState={{ disabled: attributing }}
               style={({ pressed }) => [{
                 paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8,
                 borderWidth: 1, borderColor: colors.borderColor,
@@ -154,6 +157,9 @@ export function ExtractionResultCard({
             <Pressable
               onPress={handleAttribution}
               disabled={attributing}
+              accessibilityRole="button"
+              accessibilityLabel="Run AI attribution review"
+              accessibilityState={{ disabled: attributing, busy: attributing }}
               style={({ pressed }) => [{
                 paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8,
                 backgroundColor: pressed ? colors.accentPrimary + "CC" : colors.accentPrimary,
@@ -186,7 +192,7 @@ export function ExtractionResultCard({
             <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "600", flex: 1 }}>
               {attributionResult.message}
             </Text>
-            <Pressable onPress={() => setAttributionResult(null)} hitSlop={8}>
+            <Pressable onPress={() => setAttributionResult(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss attribution result">
               <FontAwesome name="times" size={12} color={colors.textMuted} />
             </Pressable>
           </View>

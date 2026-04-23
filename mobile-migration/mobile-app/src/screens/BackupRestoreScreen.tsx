@@ -143,6 +143,9 @@ export default function BackupRestoreScreen() {
         <Pressable
           onPress={() => exportMutation.mutate()}
           disabled={exportMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={t('backup.downloadExcel')}
+          accessibilityState={{ disabled: exportMutation.isPending, busy: exportMutation.isPending }}
           style={({ pressed }) => [
             s.btn,
             {
@@ -175,6 +178,9 @@ export default function BackupRestoreScreen() {
             <Pressable
               key={m}
               onPress={() => setImportMode(m)}
+              accessibilityRole="radio"
+              accessibilityLabel={`${t('backup.importMode')}: ${m}`}
+              accessibilityState={{ selected: importMode === m, checked: importMode === m }}
               style={[
                 s.chip,
                 {
@@ -205,6 +211,9 @@ export default function BackupRestoreScreen() {
         <Pressable
           onPress={handlePickFile}
           disabled={importMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={selectedFileName ?? t('backup.chooseExcelFile')}
+          accessibilityState={{ disabled: importMutation.isPending }}
           style={({ pressed }) => [
             s.btn,
             {
@@ -227,6 +236,9 @@ export default function BackupRestoreScreen() {
         <Pressable
           onPress={handleImport}
           disabled={importMutation.isPending || !pendingFile}
+          accessibilityRole="button"
+          accessibilityLabel={t('backup.importMode')}
+          accessibilityState={{ disabled: importMutation.isPending || !pendingFile, busy: importMutation.isPending }}
           style={({ pressed }) => [
             s.btn,
             {
@@ -403,7 +415,12 @@ function ImportSuccessCard({
         </View>
       )}
 
-      <Pressable onPress={onDismiss} style={{ marginTop: 12 }}>
+      <Pressable
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+        style={{ marginTop: 12 }}
+      >
         <Text style={{ color: colors.accentPrimary, fontSize: 13, fontWeight: "600" }}>Dismiss</Text>
       </Pressable>
     </View>

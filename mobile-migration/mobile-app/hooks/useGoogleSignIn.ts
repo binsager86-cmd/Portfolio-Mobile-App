@@ -66,6 +66,20 @@ function signInWebRedirect(): void {
   // Build the redirect URI from the current origin
   const redirectUri = window.location.origin;
 
+  // CSRF defence: generate a random state token, stash it in localStorage
+  // (NOT sessionStorage — some browsers / privacy modes wipe sessionStorage
+  // across the full-page Google redirect, which silently breaks login),
+  // and include it in the request. _layout.tsx will reject the callback
+  // unless the returned state matches what we stored here.
+  const stateBytes = new Uint8Array(16);
+  (window.crypto || (window as unknown as { msCrypto: Crypto }).msCrypto).getRandomValues(stateBytes);
+  const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    window.localStorage.setItem("google_oauth_state", state);
+  } catch {
+    /* storage may be disabled — callback handler will reject */
+  }
+
   // Build Google's implicit-flow authorization URL
   const params = new URLSearchParams({
     client_id: GOOGLE_WEB_CLIENT_ID!,
@@ -73,6 +87,7 @@ function signInWebRedirect(): void {
     response_type: "token",
     scope: "openid profile email",
     prompt: "select_account",
+    state,
   });
 
   const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

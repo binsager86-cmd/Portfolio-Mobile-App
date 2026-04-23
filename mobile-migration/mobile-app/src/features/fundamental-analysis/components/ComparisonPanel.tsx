@@ -198,7 +198,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
             <View style={{ marginHorizontal: 12, marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: colors.success + "18", flexDirection: "row", alignItems: "center", gap: 8 }}>
               <FontAwesome name="check-circle" size={14} color={colors.success} />
               <Text style={{ flex: 1, fontSize: 13, color: colors.success }}>{mergeResult}</Text>
-              <Pressable onPress={() => setMergeResult(null)}><FontAwesome name="times" size={14} color={colors.textMuted} /></Pressable>
+              <Pressable onPress={() => setMergeResult(null)} accessibilityRole="button" accessibilityLabel="Dismiss merge result"><FontAwesome name="times" size={14} color={colors.textMuted} /></Pressable>
             </View>
           )}
 
@@ -208,6 +208,9 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
               <Pressable
                 onPress={handleMerge}
                 disabled={mergeMut.isPending}
+                accessibilityRole="button"
+                accessibilityLabel={`Merge ${mergeSelection.length} rows`}
+                accessibilityState={{ disabled: mergeMut.isPending, busy: mergeMut.isPending }}
                 style={({ pressed }) => [{
                   flexDirection: "row", alignItems: "center", gap: 5,
                   paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
@@ -225,6 +228,9 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
             {/* Merge toggle button */}
             <Pressable
               onPress={() => { setMergeMode((v) => !v); setMergeSelection([]); }}
+              accessibilityRole="button"
+              accessibilityLabel={mergeMode ? "Cancel merge" : "Enable merge rows"}
+              accessibilityState={{ selected: mergeMode }}
               style={({ pressed }) => [{
                 flexDirection: "row", alignItems: "center", gap: 5,
                 paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
@@ -341,6 +347,9 @@ function SortableCompRow({
         <Pressable
           onPress={() => onToggleMerge(item.code)}
           hitSlop={4}
+          accessibilityRole="checkbox"
+          accessibilityLabel={`Select ${item.name} for merge`}
+          accessibilityState={{ checked: mergeSelected }}
           style={{ marginRight: 4, padding: 2 }}
         >
           <View style={{

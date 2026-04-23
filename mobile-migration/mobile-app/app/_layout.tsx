@@ -105,6 +105,7 @@ function RootLayoutNav() {
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const themeMode = useThemeStore((s) => s.mode);
   const hydrateUserPrefs = useUserPrefsStore((s) => s.hydrate);
+  const pullRemoteUserPrefs = useUserPrefsStore((s) => s.pullRemote);
   const language = useUserPrefsStore((s) => s.preferences.language);
 
   // ── Session guard: periodic heartbeat + focus re-validation ────
@@ -188,6 +189,10 @@ function RootLayoutNav() {
   // Prefetch critical data on login so first screens render instantly
   useEffect(() => {
     if (!token) return; // only after login
+
+    // Pull the user's server-side preferences so expertise level / language
+    // / feature flags follow the account across devices and re-installs.
+    void pullRemoteUserPrefs();
 
     // Portfolio overview — the first thing the user sees
     queryClient.prefetchQuery({

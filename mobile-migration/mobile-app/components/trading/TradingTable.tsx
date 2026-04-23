@@ -210,6 +210,9 @@ export const HeaderCell = React.memo(function HeaderCell({
   return (
     <Pressable
       onPress={() => onSort(col.key)}
+      accessibilityRole="button"
+      accessibilityLabel={`Sort by ${t(col.label)}${isActive ? sortDir === "asc" ? " ascending" : " descending" : ""}`}
+      accessibilityState={{ selected: isActive }}
       style={[
         ts.headerCell,
         { width: col.width, backgroundColor: isActive ? colors.bgCardHover : "transparent" },
@@ -322,6 +325,8 @@ function EditableCompanyCell({
         />
         <Pressable
           onPress={handleCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel rename"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" }}
         >
@@ -338,6 +343,8 @@ function EditableCompanyCell({
   return (
     <Pressable
       onLongPress={Platform.OS !== "web" ? handleDoubleClick : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={`${companyName}, long-press or double-click to edit`}
       style={[ts.dataCell, { width }]}
       {...webProps}
     >

@@ -120,6 +120,9 @@ function SummaryHero({
               <Pressable
                 key={s.label}
                 onPress={() => onSelect(s.label)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${s.label} metric`}
+                accessibilityState={{ selected: active }}
                 style={({ pressed }) => ({
                   flexDirection: "row", alignItems: "center",
                   paddingHorizontal: 12, paddingVertical: 8,
@@ -374,6 +377,9 @@ export function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWi
                   <Pressable
                     key={vm.key}
                     onPress={() => setViewMode(vm.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={vm.label}
+                    accessibilityState={{ selected: active }}
                     style={{
                       flexDirection: "row", alignItems: "center",
                       paddingHorizontal: 10, paddingVertical: 6,
@@ -556,6 +562,9 @@ export function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWi
                     <Pressable
                       key={label}
                       onPress={() => { setSelectedLabel(label); if (viewMode === "line") setViewMode("bar"); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${label} growth`}
+                      accessibilityState={{ selected: selectedLabel === label }}
                       style={({ pressed }) => ({
                         flexDirection: "row", alignItems: "center",
                         paddingVertical: 8, paddingHorizontal: 2,

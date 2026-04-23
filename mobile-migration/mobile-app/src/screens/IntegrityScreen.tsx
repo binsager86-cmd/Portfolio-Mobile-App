@@ -387,6 +387,9 @@ export default function IntegrityScreen() {
       <Pressable
         onPress={() => checkMutation.mutate()}
         disabled={checkMutation.isPending}
+        accessibilityRole="button"
+        accessibilityLabel={t('integrity.runFullCheck')}
+        accessibilityState={{ disabled: checkMutation.isPending, busy: checkMutation.isPending }}
         style={({ pressed }) => [
           s.runBtn,
           {
@@ -462,6 +465,9 @@ export default function IntegrityScreen() {
               <Pressable
                 key={item.key}
                 onPress={() => setTab(item.key)}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: tab === item.key }}
                 style={[
                   s.tabChip,
                   {
@@ -513,6 +519,8 @@ export default function IntegrityScreen() {
           <Pressable
             key={pf}
             onPress={() => cashCheckMutation.mutate(pf)}
+            accessibilityRole="button"
+            accessibilityLabel={`${t('integrity.quickCashCheck')} ${pf}`}
             style={[s.pfBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
           >
             <FontAwesome name="money" size={14} color={colors.accentPrimary} />
@@ -537,6 +545,9 @@ export default function IntegrityScreen() {
               key={pf}
               onPress={() => openReconciliation(pf)}
               disabled={reconLoading}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('reconciliation.sectionTitle')} ${pf}`}
+              accessibilityState={{ disabled: reconLoading, busy: reconLoading && reconPortfolio === pf }}
               style={({ pressed }) => [
                 s.pfBtn,
                 {

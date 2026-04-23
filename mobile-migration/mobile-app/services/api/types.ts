@@ -290,6 +290,8 @@ export interface RealizedProfitDetail {
   avg_cost_at_txn: number;
   realized_pnl: number;
   realized_pnl_kwd: number;
+  dividends_allocated_kwd?: number;
+  net_pnl_kwd?: number;
   currency: string;
   source: string;
 }
@@ -298,6 +300,7 @@ export interface RealizedProfitData {
   total_realized_kwd: number;
   total_profit_kwd: number;
   total_loss_kwd: number;
+  total_dividends_allocated_kwd?: number;
   details: RealizedProfitDetail[];
 }
 

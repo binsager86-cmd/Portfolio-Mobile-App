@@ -100,6 +100,16 @@ export async function registerPushToken(): Promise<string | null> {
 
     if (resp.ok) {
       if (__DEV__) console.info("[Push] Token registered with backend");
+      // After the device is known to the backend, sync the user's current
+      // notification preferences so the dispatcher can honor disabled toggles.
+      try {
+        const { useUserPrefsStore } = await import("@/src/store/userPrefsStore");
+        const { pushNotificationPrefs } = await import("./notificationPrefsService");
+        const notifPrefs = useUserPrefsStore.getState().preferences.notifications;
+        void pushNotificationPrefs(notifPrefs);
+      } catch (err) {
+        if (__DEV__) console.warn("[Push] prefs sync after register failed:", err);
+      }
     } else {
       const err = await resp.text();
       console.warn("[Push] Backend registration failed:", resp.status, err);

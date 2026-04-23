@@ -84,9 +84,11 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
     // CSRF protection for the URL-hash redirect fallback path: stash the
     // randomly-generated `state` so `app/_layout.tsx` can verify any
     // returned `#access_token=...&state=...` was issued by *this* request
-    // and not injected by an attacker via a crafted link.
+    // and not injected by an attacker via a crafted link. Use localStorage
+    // because Google's full-page redirect can wipe sessionStorage in some
+    // browsers / privacy modes.
     if (typeof window !== "undefined" && request.state) {
-      try { window.sessionStorage.setItem("google_oauth_state", request.state); } catch { /* storage may be disabled */ }
+      try { window.localStorage.setItem("google_oauth_state", request.state); } catch { /* storage may be disabled */ }
     }
 
     // Open the Google consent screen in a popup

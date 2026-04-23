@@ -382,6 +382,9 @@ function TopControls({
       </Text>
       <Pressable
         onPress={onToggleSectorPicker}
+        accessibilityRole="button"
+        accessibilityLabel="Toggle sector picker"
+        accessibilityState={{ expanded: showSectorPicker }}
         style={{
           flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 9,
           borderRadius: 10, borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.bgInput,
@@ -399,6 +402,9 @@ function TopControls({
             <Pressable
               key={opt.key}
               onPress={() => { onSectorChange(opt.key); onToggleSectorPicker(); }}
+              accessibilityRole="radio"
+              accessibilityLabel={opt.label}
+              accessibilityState={{ selected: sector === opt.key, checked: sector === opt.key }}
               style={({ pressed }) => ({
                 paddingHorizontal: 14, paddingVertical: 10,
                 backgroundColor: sector === opt.key ? colors.accentPrimary + "15" : pressed ? colors.bgCard : "transparent",
@@ -613,6 +619,9 @@ function QualitativeItemRow({
             <Pressable
               key={opt.value}
               onPress={() => onAnswer(opt.value)}
+              accessibilityRole="radio"
+              accessibilityLabel={opt.label}
+              accessibilityState={{ selected: isSelected, checked: isSelected }}
               style={{
                 paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
                 borderWidth: 1.5,
