@@ -73,6 +73,7 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 
 // ── Sub-tab type ─────────────────────────────────────────────────────
 
@@ -633,6 +634,27 @@ function OverviewScreen() {
               {savingSnapshot ? t('dashboard.saving') : t('dashboard.saveSnapshot')}
             </Text>
           </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/(tabs)/trading")}
+            accessibilityRole="button"
+            accessibilityLabel="Add transaction"
+            style={({ pressed }) => ({
+              flexDirection: "row" as const,
+              alignItems: "center" as const,
+              justifyContent: "center" as const,
+              gap: 7,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 10,
+              backgroundColor: pressed ? "#7c3aed" : "#8b5cf6",
+            })}
+          >
+            <FontAwesome name="plus" size={14} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
+              Add Transaction
+            </Text>
+          </Pressable>
         </View>
       </View>
 
@@ -837,15 +859,6 @@ function OverviewScreen() {
           icon="bar-chart"
           width={isPhone ? "48%" : "32%"}
         />
-        <MetricCard
-          label={t('dashboard.totalProfit')}
-          value={formatSignedCurrency(metrics.totalProfit)}
-          subline={t('dashboard.inclDividends', { amount: formatCurrency(metrics.totalDividends) })}
-          trend={metrics.totalProfit >= 0 ? "up" : "down"}
-          icon="trophy"
-          accentColor={colors.accentTertiary}
-          width={isPhone ? "100%" : "32%"}
-        />
       </View>
       )}
 
@@ -939,14 +952,6 @@ function OverviewScreen() {
           subline={t('dashboard.yieldSubline', { yield: formatPercent(metrics.cashYieldDiv) })}
           accentColor={colors.success}
           width={dividendFocus ? (isPhone ? "100%" : "32%") : (isPhone ? "48%" : "48%")}
-        />
-        <MetricCard
-          emoji="📈"
-          label={t('dashboard.netIncome')}
-          value={formatSignedCurrency(metrics.totalDividends - (data.total_fees ?? 0))}
-          subline={t('dashboard.dividendsMinusFees')}
-          trend={(metrics.totalDividends - (data.total_fees ?? 0)) >= 0 ? "up" : "down"}
-          width={dividendFocus ? (isPhone ? "48%" : "32%") : (isPhone ? "48%" : "48%")}
         />
         {dividendFocus && (
           <MetricCard
