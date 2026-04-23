@@ -118,6 +118,7 @@ export function FormScreen({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
+        style={styles.flex}
         contentContainerStyle={[
           styles.scroll,
           isDesktop && { maxWidth, alignSelf: "center" as const, width: "100%" },
@@ -215,6 +216,8 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 20,
     paddingBottom: 60,
+    flexGrow: 1,
+    justifyContent: "flex-start",
   },
   headerRow: {
     flexDirection: "row",

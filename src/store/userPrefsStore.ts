@@ -19,6 +19,23 @@ async function syncPrefsToBackend(prefs: NotificationPreferences): Promise<void>
   }
 }
 
+// Mirror the non-notification prefs (expertise, language, feature flags) to
+// the backend so they follow the user across devices and re-installs.
+async function syncUserPrefsToBackend(prefs: UserPreferences): Promise<void> {
+  try {
+    const mod = await import("../../services/userPrefs/userPrefsService");
+    await mod.pushUserPrefs({
+      expertiseLevel: prefs.expertiseLevel,
+      language: prefs.language,
+      showAdvancedMetrics: prefs.showAdvancedMetrics,
+      enableShariaFilter: prefs.enableShariaFilter,
+      dividendFocus: prefs.dividendFocus,
+    });
+  } catch (err) {
+    if (__DEV__) console.warn("[UserPrefsStore] user-prefs sync failed:", err);
+  }
+}
+
 export type ExpertiseLevel = "normal" | "intermediate" | "advanced";
 export type AppLanguage = "en" | "ar";
 
@@ -161,6 +178,7 @@ interface UserPrefsState {
   preferences: UserPreferences;
   hydrated: boolean;
   hydrate: () => void;
+  pullRemote: () => Promise<void>;
   setExpertiseLevel: (level: ExpertiseLevel) => void;
   setLanguage: (lang: AppLanguage) => void;
   toggleAdvancedMetrics: () => void;
@@ -177,6 +195,33 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
   hydrate: async () => {
     const prefs = await loadPrefs();
     set({ preferences: prefs, hydrated: true });
+    // Best-effort remote pull. Safe to call even when unauthenticated —
+    // pullUserPrefs returns null without a token. Will be re-invoked by
+    // the layout once login completes.
+    await get().pullRemote();
+  },
+
+  pullRemote: async () => {
+    try {
+      const mod = await import("../../services/userPrefs/userPrefsService");
+      const remote = await mod.pullUserPrefs();
+      if (!remote) return;
+      const prev = get().preferences;
+      const merged: UserPreferences = {
+        ...prev,
+        expertiseLevel: remote.expertiseLevel ?? prev.expertiseLevel,
+        language: remote.language ?? prev.language,
+        showAdvancedMetrics:
+          remote.showAdvancedMetrics ?? prev.showAdvancedMetrics,
+        enableShariaFilter:
+          remote.enableShariaFilter ?? prev.enableShariaFilter,
+        dividendFocus: remote.dividendFocus ?? prev.dividendFocus,
+      };
+      set({ preferences: merged });
+      savePrefs(merged);
+    } catch (err) {
+      if (__DEV__) console.warn("[UserPrefsStore] remote hydrate failed:", err);
+    }
   },
 
   setExpertiseLevel: (level) => {
@@ -187,12 +232,14 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     };
     set({ preferences: next });
     savePrefs(next);
+    void syncUserPrefsToBackend(next);
   },
 
   setLanguage: (lang) => {
     const next = { ...get().preferences, language: lang };
     set({ preferences: next });
     savePrefs(next);
+    void syncUserPrefsToBackend(next);
   },
 
   toggleAdvancedMetrics: () => {
@@ -202,6 +249,7 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     };
     set({ preferences: next });
     savePrefs(next);
+    void syncUserPrefsToBackend(next);
   },
 
   toggleShariaFilter: () => {
@@ -211,6 +259,7 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     };
     set({ preferences: next });
     savePrefs(next);
+    void syncUserPrefsToBackend(next);
   },
 
   toggleDividendFocus: () => {
@@ -220,6 +269,7 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     };
     set({ preferences: next });
     savePrefs(next);
+    void syncUserPrefsToBackend(next);
   },
 
   toggleNotification: (key) => {
@@ -240,5 +290,7 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
   resetToDefaults: () => {
     set({ preferences: DEFAULT_PREFS });
     savePrefs(DEFAULT_PREFS);
+    void syncUserPrefsToBackend(DEFAULT_PREFS);
+    void syncPrefsToBackend(DEFAULT_PREFS.notifications);
   },
 }));

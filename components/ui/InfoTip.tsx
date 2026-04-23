@@ -15,20 +15,34 @@ interface InfoTipProps {
   size?: number;
 }
 
-export function InfoTip({ term, definition, size = 13 }: InfoTipProps) {
+export function InfoTip({ term, definition, size = 18 }: InfoTipProps) {
   const { colors } = useThemeStore();
   const [visible, setVisible] = useState(false);
+
+  // Make the icon a comfortable tap target on both phone and web (min 36px).
+  const target = Math.max(36, size + 18);
+  const buttonStyle: ViewStyle = {
+    width: target,
+    height: target,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: target / 2,
+  };
 
   return (
     <>
       <Pressable
         onPress={() => setVisible(true)}
-        hitSlop={8}
+        hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel={`Info about ${term}`}
-        style={Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : undefined}
+        style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+          buttonStyle,
+          (hovered || pressed) && { backgroundColor: colors.bgCardHover },
+          Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : undefined,
+        ]}
       >
-        <FontAwesome name="question-circle-o" size={size} color={colors.textMuted} />
+        <FontAwesome name="question-circle" size={size} color={colors.accentPrimary} />
       </Pressable>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>

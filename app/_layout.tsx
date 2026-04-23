@@ -7,6 +7,7 @@ import {
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import { router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -104,6 +105,7 @@ function RootLayoutNav() {
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const themeMode = useThemeStore((s) => s.mode);
   const hydrateUserPrefs = useUserPrefsStore((s) => s.hydrate);
+  const pullRemoteUserPrefs = useUserPrefsStore((s) => s.pullRemote);
   const language = useUserPrefsStore((s) => s.preferences.language);
 
   // ── Session guard: periodic heartbeat + focus re-validation ────
@@ -188,6 +190,10 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!token) return; // only after login
 
+    // Pull the user's server-side preferences so expertise level / language
+    // / feature flags follow the account across devices and re-installs.
+    void pullRemoteUserPrefs();
+
     // Portfolio overview — the first thing the user sees
     queryClient.prefetchQuery({
       queryKey: ["portfolio-overview", undefined],
@@ -238,26 +244,72 @@ function RootLayoutNav() {
   // instead of waiting for the next stale refetch.
   useEffect(() => {
     if (Platform.OS === "web") return;
-    let sub: { remove: () => void } | undefined;
+    let receivedSub: { remove: () => void } | undefined;
+    let responseSub: { remove: () => void } | undefined;
     let cancelled = false;
+
+    const routeFromData = (data: Record<string, unknown> | undefined) => {
+      if (!data) return;
+      const deepLink = typeof data.deepLink === "string" ? data.deepLink : null;
+      if (deepLink) {
+        try { router.push(deepLink as never); } catch { /* invalid path — ignore */ }
+        return;
+      }
+      const type = typeof data.type === "string" ? data.type : null;
+      if (type === "news") {
+        try { router.push("/(tabs)/news" as never); } catch { /* noop */ }
+        return;
+      }
+      if (type === "price_alert" || type === "portfolio_update") {
+        try { router.push("/(tabs)" as never); } catch { /* noop */ }
+      }
+    };
+
     (async () => {
       try {
         const Notifications = await import("expo-notifications");
         if (cancelled) return;
-        sub = Notifications.addNotificationReceivedListener(() => {
-          // Any incoming notification likely means new news; invalidate cheaply.
-          // Backend's ETag/Last-Modified short-circuits if it really hasn't changed.
+
+        // Foreground: refresh news feed so the new article shows up.
+        receivedSub = Notifications.addNotificationReceivedListener(() => {
           queryClient.invalidateQueries({ queryKey: ["news"] });
         });
+
+        // Tap (background / killed → foreground): navigate to the relevant screen.
+        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+          const data = response?.notification?.request?.content?.data as
+            | Record<string, unknown>
+            | undefined;
+          // Always refresh news on tap as well — covers the case where the app
+          // was killed and missed the foreground listener.
+          queryClient.invalidateQueries({ queryKey: ["news"] });
+          routeFromData(data);
+        });
+
+        // Cold-start: if the app was launched by tapping a notification,
+        // expo-notifications buffers the last response here.
+        try {
+          const initial = await Notifications.getLastNotificationResponseAsync();
+          if (initial && !cancelled) {
+            const data = initial.notification?.request?.content?.data as
+              | Record<string, unknown>
+              | undefined;
+            // Defer slightly so the navigator is mounted before we push.
+            setTimeout(() => routeFromData(data), 250);
+          }
+        } catch {
+          /* noop */
+        }
       } catch {
         // expo-notifications not available (e.g. Expo Go limitation) — ignore.
       }
     })();
     return () => {
       cancelled = true;
-      sub?.remove();
+      receivedSub?.remove();
+      responseSub?.remove();
     };
-  }, [queryClient]);
+  }, []);
 
   // Paper theme
   const paperTheme =

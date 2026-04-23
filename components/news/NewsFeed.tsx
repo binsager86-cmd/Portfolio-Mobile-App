@@ -293,7 +293,7 @@ export function NewsFeed({
             colors={colors}
             expertiseLevel={expertiseLevel}
             compact={compact}
-            onPress={() => setSelectedItem(item)}
+            onPress={() => openExternal(item)}
           />
         )}
         contentContainerStyle={{ padding: compact ? 0 : 14 }}

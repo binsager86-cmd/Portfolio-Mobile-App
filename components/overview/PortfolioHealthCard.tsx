@@ -9,10 +9,9 @@
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import type { ThemePalette } from "@/constants/theme";
 import type { Holding } from "@/services/api";
@@ -75,7 +74,6 @@ export function PortfolioHealthCard({
   roiPct,
   isBeginner,
 }: PortfolioHealthCardProps) {
-  const router = useRouter();
   const { t } = useTranslation();
 
   const items = useMemo<HealthItem[]>(() => {
@@ -266,28 +264,6 @@ export function PortfolioHealthCard({
           </View>
         );
       })}
-
-      {/* ── CTA: Analyze Your Stocks ──────────────────── */}
-      <Pressable
-        onPress={() => router.push("/(tabs)/fundamental-analysis")}
-        style={({ pressed }) => ({
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          marginTop: 14,
-          paddingVertical: 12,
-          borderRadius: 10,
-          backgroundColor: pressed ? colors.accentPrimary : colors.accentPrimary + "E8",
-        })}
-        accessibilityRole="button"
-        accessibilityLabel={t("portfolioHealth.analyzeStocks")}
-      >
-        <FontAwesome name="flask" size={14} color="#fff" />
-        <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>
-          {t("portfolioHealth.analyzeStocks")} →
-        </Text>
-      </Pressable>
     </View>
   );
 }

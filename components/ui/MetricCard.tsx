@@ -13,6 +13,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { UITokens } from "@/constants/uiTokens";
 import { useThemeStore } from "@/services/themeStore";
 import { useResponsive } from "@/hooks/useResponsive";
+import { InfoTip } from "@/components/ui/InfoTip";
 import type { ThemePalette } from "@/constants/theme";
 
 export type TrendDirection = "up" | "down" | "neutral";
@@ -34,6 +35,8 @@ export interface MetricCardProps {
   accentColor?: string;
   /** Card width (as percentage or number) */
   width?: string | number;
+  /** Optional plain-language explanation shown via a "?" icon next to the label. */
+  helpText?: string;
 }
 
 function trendColor(trend: TrendDirection | undefined, c: ThemePalette): string {
@@ -57,6 +60,7 @@ export const MetricCard = React.memo(function MetricCard({
   subline,
   accentColor,
   width = "48%",
+  helpText,
 }: MetricCardProps) {
   const { colors } = useThemeStore();
   const { isPhone, spacing } = useResponsive();
@@ -77,6 +81,13 @@ export const MetricCard = React.memo(function MetricCard({
       {/* Accent top bar */}
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
 
+      {/* Help icon — anchored top-right for consistent placement across all cards */}
+      {helpText ? (
+        <View style={styles.helpAnchor} pointerEvents="box-none">
+          <InfoTip term={label} definition={helpText} size={isPhone ? 16 : 14} />
+        </View>
+      ) : null}
+
       {/* Icon */}
       {icon ? (
         <FontAwesome
@@ -90,17 +101,21 @@ export const MetricCard = React.memo(function MetricCard({
       ) : null}
 
       {/* Label */}
-      <Text
-        style={[
-          styles.label,
-          {
-            color: colors.textSecondary,
-            fontSize: isPhone ? UITokens.metric.labelSize.phone : UITokens.metric.labelSize.desktop,
-          },
-        ]}
-      >
-        {label}
-      </Text>
+      <View style={styles.labelRow}>
+        <Text
+          style={[
+            styles.label,
+            {
+              color: colors.textSecondary,
+              fontSize: isPhone ? UITokens.metric.labelSize.phone : UITokens.metric.labelSize.desktop,
+              flexShrink: 1,
+              paddingRight: helpText ? 28 : 0,
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
 
       {/* Value + optional trend arrow */}
       <Text
@@ -165,7 +180,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.8,
     textTransform: "uppercase",
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 6,
+  },
+  helpAnchor: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    zIndex: 2,
   },
   value: {
     fontSize: 17,
