@@ -37,7 +37,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { ProgressBar } from "react-native-paper";
 
 const TOTAL_STEPS = 3;
 
@@ -231,11 +230,16 @@ export default function AddTransactionScreen() {
         footer={footerContent}
       >
         {/* ── Progress bar ── */}
-        <ProgressBar
-          progress={step / TOTAL_STEPS}
-          color={colors.accentPrimary}
-          style={styles.progressBar}
-        />
+        <View style={[styles.progressBar, { backgroundColor: colors.bgSecondary }]}>
+          <View
+            style={{
+              width: `${(step / TOTAL_STEPS) * 100}%`,
+              height: "100%",
+              backgroundColor: colors.accentPrimary,
+              borderRadius: 3,
+            }}
+          />
+        </View>
 
         {/* ── Step indicator with labels ── */}
         <View style={styles.stepRow}>
@@ -315,6 +319,8 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     marginBottom: UITokens.spacing.md,
+    overflow: "hidden",
+    width: "100%",
   },
   stepRow: {
     flexDirection: "row", alignItems: "flex-start", justifyContent: "center",

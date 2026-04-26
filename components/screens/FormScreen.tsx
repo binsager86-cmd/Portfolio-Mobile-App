@@ -112,6 +112,106 @@ export function FormScreen({
     }
   }, [error, errorOpacity, errorShake]);
 
+  // ── Body content (shared by web/native paths) ────────────────
+  const body = (
+    <>
+      {/* ── Header ──────────────────────────────────────────── */}
+      <View style={styles.headerRow}>
+        {!hideBack && (
+          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
+            <FontAwesome name="arrow-left" size={18} color={colors.textPrimary} />
+          </Pressable>
+        )}
+        <Text style={[styles.title, { color: colors.textPrimary }]}>
+          {title}
+        </Text>
+      </View>
+
+      {/* ── Error banner ────────────────────────────────────── */}
+      {error ? (
+        <Animated.View
+          style={[
+            styles.errorBanner,
+            {
+              backgroundColor: colors.danger + "12",
+              borderColor: colors.danger + "40",
+              opacity: errorOpacity,
+              transform: [{ translateX: errorShake }],
+            },
+          ]}
+        >
+          <View style={styles.errorRow}>
+            <Text style={styles.errorIcon}>⚠</Text>
+            <Text
+              style={[styles.errorText, { color: colors.danger }]}
+              numberOfLines={4}
+            >
+              {error}
+            </Text>
+            {onDismissError && (
+              <Pressable
+                onPress={onDismissError}
+                hitSlop={12}
+                style={styles.errorDismiss}
+                accessibilityLabel="Dismiss error"
+              >
+                <Text style={{ color: colors.danger, fontSize: 18 }}>✕</Text>
+              </Pressable>
+            )}
+          </View>
+        </Animated.View>
+      ) : null}
+
+      {/* ── Form content ────────────────────────────────────── */}
+      {children}
+
+      {/* ── Submit button ───────────────────────────────────── */}
+      {onSubmit && (
+        <Pressable
+          onPress={onSubmit}
+          disabled={isSubmitting}
+          accessibilityRole="button"
+          accessibilityLabel={submitLabel}
+          accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+          style={[
+            styles.submitBtn,
+            {
+              backgroundColor: submitColor ?? colors.accentPrimary,
+              opacity: isSubmitting ? 0.6 : 1,
+            },
+          ]}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.submitLabel}>{submitLabel}</Text>
+          )}
+        </Pressable>
+      )}
+
+      {/* ── Footer (danger-zone, import, etc.) ──────────────── */}
+      {footer}
+    </>
+  );
+
+  // ── Web path: plain scrollable div, top-aligned, no flex stretching ──
+  if (Platform.OS === "web") {
+    return (
+      <View style={[styles.flex, { backgroundColor: colors.bgPrimary, overflow: "scroll" } as ViewStyle]}>
+        <View
+          style={[
+            styles.scroll,
+            isDesktop && { maxWidth, alignSelf: "center" as const, width: "100%" },
+            contentStyle,
+          ]}
+        >
+          {body}
+        </View>
+      </View>
+    );
+  }
+
+  // ── Native path: KeyboardAvoidingView + ScrollView ──────────
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: colors.bgPrimary }]}
@@ -121,95 +221,12 @@ export function FormScreen({
         style={styles.flex}
         contentContainerStyle={[
           styles.scroll,
-          // On web we deliberately drop `flexGrow: 1` — short forms were
-          // getting stretched to the full viewport height (or worse, on
-          // some browsers, justified to the bottom), leaving a large
-          // empty area above the form. Native keeps flexGrow so the
-          // form fills the screen with the keyboard.
-          Platform.OS === "web"
-            ? { flexGrow: undefined as unknown as number }
-            : null,
-          isDesktop && { maxWidth, alignSelf: "center" as const, width: "100%" },
+          { flexGrow: 1, justifyContent: "flex-start" as const },
           contentStyle,
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Header ──────────────────────────────────────────── */}
-        <View style={styles.headerRow}>
-          {!hideBack && (
-            <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
-              <FontAwesome name="arrow-left" size={18} color={colors.textPrimary} />
-            </Pressable>
-          )}
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {title}
-          </Text>
-        </View>
-
-        {/* ── Error banner ────────────────────────────────────── */}
-        {error ? (
-          <Animated.View
-            style={[
-              styles.errorBanner,
-              {
-                backgroundColor: colors.danger + "12",
-                borderColor: colors.danger + "40",
-                opacity: errorOpacity,
-                transform: [{ translateX: errorShake }],
-              },
-            ]}
-          >
-            <View style={styles.errorRow}>
-              <Text style={styles.errorIcon}>⚠</Text>
-              <Text
-                style={[styles.errorText, { color: colors.danger }]}
-                numberOfLines={4}
-              >
-                {error}
-              </Text>
-              {onDismissError && (
-                <Pressable
-                  onPress={onDismissError}
-                  hitSlop={12}
-                  style={styles.errorDismiss}
-                  accessibilityLabel="Dismiss error"
-                >
-                  <Text style={{ color: colors.danger, fontSize: 18 }}>✕</Text>
-                </Pressable>
-              )}
-            </View>
-          </Animated.View>
-        ) : null}
-
-        {/* ── Form content ────────────────────────────────────── */}
-        {children}
-
-        {/* ── Submit button ───────────────────────────────────── */}
-        {onSubmit && (
-          <Pressable
-            onPress={onSubmit}
-            disabled={isSubmitting}
-            accessibilityRole="button"
-            accessibilityLabel={submitLabel}
-            accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
-            style={[
-              styles.submitBtn,
-              {
-                backgroundColor: submitColor ?? colors.accentPrimary,
-                opacity: isSubmitting ? 0.6 : 1,
-              },
-            ]}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitLabel}>{submitLabel}</Text>
-            )}
-          </Pressable>
-        )}
-
-        {/* ── Footer (danger-zone, import, etc.) ──────────────── */}
-        {footer}
+        {body}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -224,8 +241,6 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 20,
     paddingBottom: 60,
-    flexGrow: 1,
-    justifyContent: "flex-start",
   },
   headerRow: {
     flexDirection: "row",
