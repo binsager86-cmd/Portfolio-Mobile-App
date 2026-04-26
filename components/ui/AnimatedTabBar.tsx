@@ -136,6 +136,7 @@ const ICON_MAP: Record<string, React.ComponentProps<typeof FontAwesome>["name"]>
   deposits: "bank",
   trading: "bar-chart-o",
   "fundamental-analysis": "flask",
+  "trade-signals": "signal",
   "portfolio-tracker": "camera",
   dividends: "money",
   alerts: "bell",

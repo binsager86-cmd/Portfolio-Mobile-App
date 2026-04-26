@@ -292,6 +292,16 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
+            name="trade-signals"
+            options={{
+              title: t("nav.tradeSignals"),
+              href: isAdmin || !showSidebar ? null : undefined,
+              tabBarIcon: ({ color }) => (
+                <TabBarIcon name="signal" color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="portfolio-tracker"
             options={{
               title: t("nav.tracker"),

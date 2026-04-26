@@ -210,6 +210,7 @@ export default function RegisterScreen() {
       error: colors.danger,
     },
   };
+  const logoSize = Platform.OS === "web" ? 118 : 88;
 
   // ── Render ────────────────────────────────────────────────────────
 
@@ -240,8 +241,8 @@ export default function RegisterScreen() {
 
         {/* Logo / Title */}
         <View style={styles.header}>
-          <View style={styles.logoWrap}>
-            <Logo size={88} accessibilityLabel={t('app.title')} />
+          <View style={[styles.logoWrap, Platform.OS === "web" && styles.logoWrapWeb]}>
+            <Logo size={logoSize} accessibilityLabel={t('app.title')} />
           </View>
           <Text
             style={[styles.title, { color: colors.textPrimary }]}
@@ -552,6 +553,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", marginBottom: 28 },
   icon: { fontSize: 56, marginBottom: 12 },
   logoWrap: { marginBottom: 12, alignItems: "center" },
+  logoWrapWeb: { marginBottom: 16 },
   title: { fontSize: 28, fontWeight: "700", marginBottom: 4 },
   subtitle: { fontSize: 15 },
   card: {

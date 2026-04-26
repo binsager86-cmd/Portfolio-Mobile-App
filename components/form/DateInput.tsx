@@ -4,7 +4,7 @@
  * Native: shows a modal date picker.
  */
 
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { View, Pressable, StyleSheet, Platform, Text, Modal, TouchableOpacity } from "react-native";
 import { TextInput } from "./TextInput";
 import { FontAwesome } from "@expo/vector-icons";
@@ -19,11 +19,10 @@ interface DateInputProps {
 /* ── Web date picker (HTML <input type="date">) ── */
 function WebDateInput({ value, onChangeText, hasError }: DateInputProps) {
   const { colors } = useThemeStore();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <View style={styles.row}>
-      <Pressable
+      <View
         style={[
           styles.webDateBox,
           {
@@ -31,38 +30,32 @@ function WebDateInput({ value, onChangeText, hasError }: DateInputProps) {
             borderColor: hasError ? colors.danger : colors.borderColor,
           },
         ]}
-        onPress={() => {
-          // Open the native date picker (showPicker is supported in modern browsers)
-          try {
-            inputRef.current?.showPicker?.();
-          } catch {
-            inputRef.current?.click();
-          }
-        }}
       >
         <FontAwesome name="calendar" size={16} color={colors.accentPrimary} style={{ marginRight: 10 }} />
         <Text style={{ color: value ? colors.textPrimary : colors.textMuted, fontSize: 15, flex: 1 }}>
           {value || "Select date..."}
         </Text>
         <FontAwesome name="caret-down" size={14} color={colors.textSecondary} />
-      </Pressable>
-
-      {/* Hidden native HTML date input */}
-      <input
-        ref={inputRef}
-        type="date"
-        value={value}
-        aria-label="Select date"
-        title="Select date"
-        onChange={(e) => onChangeText(e.target.value)}
-        style={{
-          position: "absolute",
-          opacity: 0,
-          width: 1,
-          height: 1,
-          pointerEvents: "none",
-        }}
-      />
+        {/*
+          Keep the native input on top (transparent) so iOS/iPad Safari
+          treats taps as direct user interaction and reliably opens picker UI.
+        */}
+        <input
+          type="date"
+          value={value}
+          aria-label="Select date"
+          title="Select date"
+          onChange={(e) => onChangeText(e.target.value)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            opacity: 0,
+            cursor: "pointer",
+          }}
+        />
+      </View>
     </View>
   );
 }
