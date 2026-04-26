@@ -121,6 +121,14 @@ export function FormScreen({
         style={styles.flex}
         contentContainerStyle={[
           styles.scroll,
+          // On web we deliberately drop `flexGrow: 1` — short forms were
+          // getting stretched to the full viewport height (or worse, on
+          // some browsers, justified to the bottom), leaving a large
+          // empty area above the form. Native keeps flexGrow so the
+          // form fills the screen with the keyboard.
+          Platform.OS === "web"
+            ? { flexGrow: undefined as unknown as number }
+            : null,
           isDesktop && { maxWidth, alignSelf: "center" as const, width: "100%" },
           contentStyle,
         ]}

@@ -200,8 +200,8 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
 
   return (
     <View
-      style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ pointerEvents: "none" } as ViewStyle) : null]}
-      pointerEvents={Platform.OS === "web" ? undefined : "box-none"}
+      style={[StyleSheet.absoluteFill, { pointerEvents: "box-none" } as ViewStyle]}
+      pointerEvents="box-none"
     >
       {/* Backdrop */}
       <Animated.View style={[s.backdrop, backdropStyle]}>

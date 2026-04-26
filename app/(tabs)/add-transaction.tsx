@@ -20,7 +20,6 @@ import { useThemeStore } from "@/services/themeStore";
 import { Step1Type } from "@/src/features/transactions/components/Step1Type";
 import { Step2Details } from "@/src/features/transactions/components/Step2Details";
 import { Step3Review } from "@/src/features/transactions/components/Step3Review";
-import { TransactionImport } from "@/src/features/transactions/components/TransactionImport";
 import {
   PORTFOLIOS,
   STEP1_FIELDS,
@@ -215,7 +214,10 @@ export default function AddTransactionScreen() {
 
   const onFormSubmit = step < TOTAL_STEPS ? handleNext : handleSubmit(onSubmit);
 
-  const footerContent = !isEditMode && step === 1 ? <TransactionImport /> : undefined;
+  // Excel import / danger-zone UI was previously shown on Step 1.
+  // Hidden per product request — bulk import is available from the
+  // Transactions screen toolbar instead.
+  const footerContent = undefined;
 
   // ── Render ──────────────────────────────────────────────────────
 
