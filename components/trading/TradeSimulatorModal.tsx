@@ -21,11 +21,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    I18nManager,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
+  I18nManager,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -160,7 +159,7 @@ export function TradeSimulatorModal({ visible, onClose, initialSymbol }: Props) 
     >
       <KeyboardAvoidingView
         style={[s.root, { backgroundColor: colors.bgPrimary }]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
       >
         {/* Header */}
         <View style={[s.header, { borderBottomColor: colors.borderColor }]}>

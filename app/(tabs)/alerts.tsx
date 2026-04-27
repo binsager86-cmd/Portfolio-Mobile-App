@@ -29,11 +29,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import {
-    Alert,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
     StyleSheet,
     Switch,
     Text,
@@ -335,6 +336,7 @@ function AddAlertModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === "web" ? undefined : "padding"} style={{ flex: 1 }}>
       <View style={st.modalOverlay}>
         <View
           style={[
@@ -620,6 +622,7 @@ function AddAlertModal({
           </ScrollView>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

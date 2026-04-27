@@ -215,7 +215,7 @@ export function FormScreen({
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: colors.bgPrimary }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <ScrollView
         style={styles.flex}

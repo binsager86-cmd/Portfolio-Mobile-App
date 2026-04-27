@@ -11,6 +11,7 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
     Modal,
     Platform,
     Pressable,
@@ -248,6 +249,7 @@ export default function SettingsScreen() {
 
   return (
     <>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "web" ? undefined : "padding"}>
     <ScrollView
       style={ss.container}
       contentContainerStyle={[ss.content, isDesktop && { maxWidth: 600, alignSelf: "center", width: "100%" }]}
@@ -806,6 +808,7 @@ export default function SettingsScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
 
     {/* ── Level Change Confirmation Modal ── */}
     <Modal

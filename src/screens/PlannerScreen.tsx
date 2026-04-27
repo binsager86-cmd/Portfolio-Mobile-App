@@ -15,6 +15,8 @@ import {
   ScrollView,
   TextInput,
   Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTranslation } from "react-i18next";
@@ -218,6 +220,7 @@ export default function PlannerScreen() {
   const goalMeta = resultExt.goalMeta;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "web" ? undefined : "padding"}>
     <ScrollView
       style={ss.container}
       contentContainerStyle={[ss.content, isDesktop && { maxWidth: 700, alignSelf: "center", width: "100%" }]}
@@ -601,6 +604,7 @@ export default function PlannerScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

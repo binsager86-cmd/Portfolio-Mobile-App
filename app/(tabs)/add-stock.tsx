@@ -195,7 +195,7 @@ export default function AddStockScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <ScrollView
         style={[styles.screen, { backgroundColor: colors.bgPrimary }]}
