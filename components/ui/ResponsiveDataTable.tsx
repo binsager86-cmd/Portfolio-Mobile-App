@@ -42,10 +42,8 @@ export function ResponsiveDataTable<T>({
     return <>{desktopTable}</>;
   }
 
-  const visibleCols = isPhone
-    ? columns.filter((c) => c.priority === "high" || c.priority === undefined)
-    : columns;
-  const extraCount = columns.length - visibleCols.length;
+  const visibleCols = columns;
+  const extraCount = 0;
 
   return (
     <FlashList
