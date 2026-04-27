@@ -38,6 +38,7 @@ import { useTranslation } from "react-i18next";
 import {
     ActivityIndicator,
     Alert,
+  KeyboardAvoidingView,
     Platform,
     Pressable,
     RefreshControl,
@@ -786,6 +787,7 @@ function TradingScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.bgPrimary }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "web" ? undefined : "padding"}>
       <ScrollView
         contentContainerStyle={[
           s.list,
@@ -925,6 +927,7 @@ function TradingScreen() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Footer stats bar */}
       {summary && (
