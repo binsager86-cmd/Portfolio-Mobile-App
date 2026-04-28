@@ -223,21 +223,75 @@ export default function HoldingsScreen() {
                     : `${t("holdings.detailed", "Detailed")} (18)`}
                 </Text>
               </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
-                  {t("holdings.summary", "Summary")}
-                </Text>
-                <Switch
-                  value={viewMode === "detailed"}
-                  onValueChange={(isDetailed) => setViewMode(isDetailed ? "detailed" : "summary")}
-                  thumbColor="#ffffff"
-                  trackColor={{ false: colors.textMuted + "55", true: colors.accentPrimary }}
-                  accessibilityLabel={t("holdings.viewMode", "Holdings table view mode")}
-                />
-                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
-                  {t("holdings.detailed", "Detailed")}
-                </Text>
-              </View>
+              {Platform.OS === "web" ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("holdings.summary", "Summary")}
+                    onPress={() => setViewMode("summary")}
+                    style={({ pressed }) => ({
+                      borderWidth: 1,
+                      borderColor: viewMode === "summary" ? colors.accentPrimary : colors.borderColor,
+                      backgroundColor: viewMode === "summary" ? colors.accentPrimary + "22" : "transparent",
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: viewMode === "summary" ? colors.accentPrimary : colors.textMuted,
+                        fontSize: 12,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {t("holdings.summary", "Summary")}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("holdings.detailed", "Detailed")}
+                    onPress={() => setViewMode("detailed")}
+                    style={({ pressed }) => ({
+                      borderWidth: 1,
+                      borderColor: viewMode === "detailed" ? colors.accentPrimary : colors.borderColor,
+                      backgroundColor: viewMode === "detailed" ? colors.accentPrimary + "22" : "transparent",
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        color: viewMode === "detailed" ? colors.accentPrimary : colors.textMuted,
+                        fontSize: 12,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {t("holdings.detailed", "Detailed")}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                    {t("holdings.summary", "Summary")}
+                  </Text>
+                  <Switch
+                    value={viewMode === "detailed"}
+                    onValueChange={(isDetailed) => setViewMode(isDetailed ? "detailed" : "summary")}
+                    thumbColor="#ffffff"
+                    trackColor={{ false: colors.textMuted + "55", true: colors.accentPrimary }}
+                    accessibilityLabel={t("holdings.viewMode", "Holdings table view mode")}
+                  />
+                  <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                    {t("holdings.detailed", "Detailed")}
+                  </Text>
+                </View>
+              )}
             </View>
             <ResponsiveDataTable<Holding>
               key={viewMode}
