@@ -136,8 +136,24 @@ const MONEY_TOTAL_KEYS = new Set([
   "yield_amount", "current_pnl",
 ]);
 
+// Deduplicate company names like "KFH-KFH" → "KFH"
+export function cleanCompanyName(name: string | null | undefined): string {
+  if (!name) return "—";
+  const dashIdx = name.indexOf("-");
+  if (dashIdx > 0) {
+    const left = name.slice(0, dashIdx).trim();
+    const right = name.slice(dashIdx + 1).trim();
+    if (left === right) return left;
+  }
+  return name;
+}
+
 export function getCellValue(holding: Holding, key: string): unknown {
   const isUsd = (holding.currency ?? "KWD").toUpperCase() === "USD";
+
+  if (key === "company") {
+    return cleanCompanyName((holding as unknown as Record<string, unknown>)[key] as string);
+  }
 
   if (key === "yield_amount") {
     const raw = holding.cash_dividends ?? 0;

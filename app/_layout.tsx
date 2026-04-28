@@ -239,6 +239,34 @@ function RootLayoutNav() {
     });
   }, [token]);
 
+  // Ensure push notifications are visibly presented while the app is foregrounded.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const Notifications = await import("expo-notifications");
+        if (cancelled) return;
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+      } catch {
+        // expo-notifications not available in this runtime
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Foreground push handler: when a news push arrives while the app is open,
   // invalidate the news feed query so the new article appears immediately
   // instead of waiting for the next stale refetch.

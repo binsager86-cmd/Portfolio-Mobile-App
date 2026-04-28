@@ -15,6 +15,7 @@ import {
   type ColDef,
   type SortDir,
   TABLE_COLUMNS,
+  cleanCompanyName,
   fmtCell,
   getCellValue,
   getUsdOriginal,
@@ -209,7 +210,7 @@ export const HoldingRow = React.memo(function HoldingRow({
               ]}
               numberOfLines={1}
             >
-              {holding.company}
+              {cleanCompanyName(holding.company)}
             </Text>
           </Pressable>
         ) : (

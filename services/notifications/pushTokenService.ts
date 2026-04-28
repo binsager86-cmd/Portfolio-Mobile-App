@@ -38,6 +38,13 @@ export async function registerPushToken(): Promise<string | null> {
     return null;
   }
 
+  // Remote Expo push notifications are not supported in Expo Go.
+  // Use a development build / production build to receive backend pushes.
+  if ((Constants as { appOwnership?: string }).appOwnership === "expo") {
+    console.warn("[Push] Expo Go detected — remote push notifications are disabled. Use a dev build.");
+    return null;
+  }
+
   // Request permissions
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -113,6 +120,7 @@ export async function registerPushToken(): Promise<string | null> {
     } else {
       const err = await resp.text();
       console.warn("[Push] Backend registration failed:", resp.status, err);
+      return null;
     }
 
     return pushToken;
