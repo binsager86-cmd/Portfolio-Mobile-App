@@ -296,6 +296,11 @@ function PortfolioAnalysisScreen() {
                 borderRightColor: colors.borderColor,
                 backgroundColor: colors.bgCard,
                 flexShrink: 0,
+                shadowColor: "#000",
+                shadowOpacity: 0.16,
+                shadowRadius: 6,
+                shadowOffset: { width: 3, height: 0 },
+                elevation: 3,
               }}
             >
               <View style={[htStyles.headerRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>

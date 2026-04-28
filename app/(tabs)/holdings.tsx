@@ -246,6 +246,11 @@ export default function HoldingsScreen() {
                         backgroundColor: colors.bgCard,
                         zIndex: 1,
                         flexShrink: 0,
+                        shadowColor: "#000",
+                        shadowOpacity: 0.16,
+                        shadowRadius: 6,
+                        shadowOffset: { width: 3, height: 0 },
+                        elevation: 3,
                       }}
                     >
                       {/* Header */}
