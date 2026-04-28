@@ -193,54 +193,52 @@ export default function HoldingsScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Summary / Detailed true toggle */}
-          <View
-            style={[
-              s.viewToggleRow,
-              {
-                marginHorizontal: spacing.pagePx,
-                justifyContent: "space-between",
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: colors.borderColor,
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                backgroundColor: colors.bgCard,
-              },
-            ]}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <FontAwesome
-                name={viewMode === "summary" ? "list" : "table"}
-                size={13}
-                color={colors.accentPrimary}
-              />
-              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>
-                {viewMode === "summary"
-                  ? `${t("holdings.summary", "Summary")} (9)`
-                  : `${t("holdings.detailed", "Detailed")} (18)`}
-              </Text>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
-                {t("holdings.summary", "Summary")}
-              </Text>
-              <Switch
-                value={viewMode === "detailed"}
-                onValueChange={(isDetailed) => setViewMode(isDetailed ? "detailed" : "summary")}
-                thumbColor="#ffffff"
-                trackColor={{ false: colors.textMuted + "55", true: colors.accentPrimary }}
-                accessibilityLabel={t("holdings.viewMode", "Holdings table view mode")}
-              />
-              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
-                {t("holdings.detailed", "Detailed")}
-              </Text>
-            </View>
-          </View>
-
           {/* Holdings table — ResponsiveDataTable auto-switches to cards on phone */}
           <View style={{ marginHorizontal: spacing.pagePx, marginTop: 4, marginBottom: UITokens.spacing.lg }}>
+            <View
+              style={[
+                s.viewToggleRow,
+                {
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: colors.borderColor,
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  backgroundColor: colors.bgCard,
+                  marginBottom: 8,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <FontAwesome
+                  name={viewMode === "summary" ? "list" : "table"}
+                  size={13}
+                  color={colors.accentPrimary}
+                />
+                <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+                  {viewMode === "summary"
+                    ? `${t("holdings.summary", "Summary")} (9)`
+                    : `${t("holdings.detailed", "Detailed")} (18)`}
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                  {t("holdings.summary", "Summary")}
+                </Text>
+                <Switch
+                  value={viewMode === "detailed"}
+                  onValueChange={(isDetailed) => setViewMode(isDetailed ? "detailed" : "summary")}
+                  thumbColor="#ffffff"
+                  trackColor={{ false: colors.textMuted + "55", true: colors.accentPrimary }}
+                  accessibilityLabel={t("holdings.viewMode", "Holdings table view mode")}
+                />
+                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                  {t("holdings.detailed", "Detailed")}
+                </Text>
+              </View>
+            </View>
             <ResponsiveDataTable<Holding>
               key={viewMode}
               data={sortedHoldings}
