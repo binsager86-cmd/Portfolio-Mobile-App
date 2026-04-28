@@ -42,7 +42,7 @@ import { donutStyles, s } from "@/src/features/holdings/styles";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
@@ -73,6 +73,11 @@ export default function HoldingsScreen() {
 
   const [selectedHolding, setSelectedHolding] = useState<Holding | null>(null);
   const [viewMode, setViewMode] = useState<"summary" | "detailed">("summary");
+
+  // Ensure Summary is shown first when screen mounts so mode difference is immediately visible.
+  useEffect(() => {
+    setViewMode("summary");
+  }, []);
 
   const activeColumns = viewMode === "summary" ? SUMMARY_COLUMNS : TABLE_COLUMNS;
   const activeTableWidth = viewMode === "summary" ? SUMMARY_TABLE_WIDTH : TOTAL_TABLE_WIDTH;
@@ -211,15 +216,25 @@ export default function HoldingsScreen() {
                   style={{ marginRight: 6 }}
                 />
                 <Text style={{ color: viewMode === mode ? "#fff" : colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                  {mode === "summary" ? t("holdings.summary", "Summary") : t("holdings.detailed", "Detailed")}
+                  {mode === "summary"
+                    ? `${t("holdings.summary", "Summary")} (9)`
+                    : `${t("holdings.detailed", "Detailed")} (18)`}
                 </Text>
               </Pressable>
             ))}
+          </View>
+          <View style={{ marginHorizontal: spacing.pagePx, marginBottom: 6 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+              {viewMode === "summary"
+                ? "Summary table is active: company, quantity, avg cost, market price, market value, unrealized P/L, cash div, P&L, P&L%."
+                : "Detailed table is active: full holdings breakdown columns."}
+            </Text>
           </View>
 
           {/* Holdings table — ResponsiveDataTable auto-switches to cards on phone */}
           <View style={{ marginHorizontal: spacing.pagePx, marginTop: 4, marginBottom: UITokens.spacing.lg }}>
             <ResponsiveDataTable<Holding>
+              key={viewMode}
               data={sortedHoldings}
               columns={mobileColumns}
               keyExtractor={mobileHoldingKeyExtractor}
