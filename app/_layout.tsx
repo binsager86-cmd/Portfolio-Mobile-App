@@ -303,6 +303,7 @@ function RootLayoutNav() {
     if (Platform.OS === "web") return;
     let receivedSub: { remove: () => void } | undefined;
     let responseSub: { remove: () => void } | undefined;
+    let droppedSub: { remove: () => void } | undefined;
     let cancelled = false;
 
     const routeFromData = (data: Record<string, unknown> | undefined) => {
@@ -343,6 +344,11 @@ function RootLayoutNav() {
           routeFromData(data);
         });
 
+        // Android/FCM only: helps diagnose overload situations where messages are dropped.
+        droppedSub = Notifications.addNotificationsDroppedListener(() => {
+          analytics.logEvent("notifications_dropped_by_service", { platform: Platform.OS });
+        });
+
         // Cold-start: if the app was launched by tapping a notification,
         // expo-notifications buffers the last response here.
         try {
@@ -365,6 +371,7 @@ function RootLayoutNav() {
       cancelled = true;
       receivedSub?.remove();
       responseSub?.remove();
+      droppedSub?.remove();
     };
   }, []);
 
