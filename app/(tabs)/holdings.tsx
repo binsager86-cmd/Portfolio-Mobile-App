@@ -236,7 +236,7 @@ export default function HoldingsScreen() {
                     },
                   ]}
                 >
-                  <View style={{ flexDirection: "row" }}>
+                  <View style={{ flexDirection: "row", minWidth: 0 }}>
                     {/* ── Frozen company column ─────────────────────────────────── */}
                     <View
                       style={{
@@ -245,6 +245,7 @@ export default function HoldingsScreen() {
                         borderRightColor: colors.borderColor,
                         backgroundColor: colors.bgCard,
                         zIndex: 1,
+                        flexShrink: 0,
                       }}
                     >
                       {/* Header */}

@@ -316,11 +316,22 @@ export const TotalCell = React.memo(function TotalCell({ col, totals, colors }: 
 });
 
 /** Single holding data row with zebra-striped background and USD bracket text. */
-export const HoldingRow = React.memo(function HoldingRow({ holding, colors, isEven }: { holding: Holding; colors: ThemePalette; isEven: boolean }) {
+export const HoldingRow = React.memo(function HoldingRow({
+  holding,
+  colors,
+  isEven,
+  columns,
+}: {
+  holding: Holding;
+  colors: ThemePalette;
+  isEven: boolean;
+  columns?: ColDef[];
+}) {
   const rowBg = isEven ? "transparent" : colors.bgCardHover + "30";
+  const cols = columns ?? TABLE_COLUMNS;
   return (
     <View style={[htStyles.dataRow, { backgroundColor: rowBg, borderBottomColor: colors.borderColor }]}>
-      {TABLE_COLUMNS.map((col) => (
+      {cols.map((col) => (
         <DataCell key={col.key} col={col} holding={holding} colors={colors} />
       ))}
     </View>

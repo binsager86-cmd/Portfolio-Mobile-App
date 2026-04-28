@@ -817,60 +817,91 @@ function OverviewScreen() {
           columns={holdingsMobileColumns}
           keyExtractor={(r) => r.symbol}
           desktopTable={
-            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 980 }}>
-              <View style={{ minWidth: 980 }}>
+            <View style={{ flexDirection: "row", minWidth: 0 }}>
+              <View
+                style={{
+                  width: 280,
+                  borderRightWidth: 1,
+                  borderRightColor: colors.borderColor,
+                  backgroundColor: colors.bgCard,
+                  flexShrink: 0,
+                }}
+              >
                 <View style={[styles.holdingsHeadRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
                   <Text style={[styles.holdingsHeadCell, styles.companyCol, { color: colors.textSecondary }]}>Company Name</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Quantity</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Cost / Price</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Prev. Close</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Last Price</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Change %</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numColWide, { color: colors.textSecondary }]}>Total Value Change</Text>
                 </View>
 
-                {holdingsRows.map((row, idx) => {
-                  const changeColor = row.changePct == null ? colors.textMuted : pnlColor(row.changePct, colors);
-                  const valueColor = row.totalValueChange == null ? colors.textMuted : pnlColor(row.totalValueChange, colors);
-
-                  return (
-                    <View
-                      key={row.symbol}
-                      style={[
-                        styles.holdingsDataRow,
-                        {
-                          borderBottomColor: colors.borderColor,
-                          backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
-                        },
-                      ]}
-                    >
-                      <View style={[styles.companyCol, { paddingRight: 10 }]}> 
-                        <Text style={[styles.companyText, { color: colors.textPrimary }]} numberOfLines={1}>{row.company}</Text>
-                        <Text style={[styles.symbolText, { color: colors.textMuted }]}>
-                          {row.symbol} • {row.priceBasis === "persisted" ? "live" : row.priceBasis === "estimated" ? "estimated" : "no baseline"}
-                        </Text>
-                      </View>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.quantity.toLocaleString()}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.costPerPrice)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.prevClose == null ? "—" : formatCurrency(row.prevClose)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.lastPrice)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: changeColor, fontWeight: "700" }]}>
-                        {row.changePct == null ? "—" : `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%`}
-                      </Text>
-                      <Text style={[styles.holdingsDataCell, styles.numColWide, { color: valueColor, fontWeight: "700" }]}>
-                        {row.totalValueChange == null ? "—" : formatSignedCurrency(row.totalValueChange)}
+                {holdingsRows.map((row, idx) => (
+                  <View
+                    key={row.symbol}
+                    style={[
+                      styles.holdingsDataRow,
+                      {
+                        borderBottomColor: colors.borderColor,
+                        backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
+                      },
+                    ]}
+                  >
+                    <View style={[styles.companyCol, { paddingRight: 10 }]}> 
+                      <Text style={[styles.companyText, { color: colors.textPrimary }]} numberOfLines={1}>{row.company}</Text>
+                      <Text style={[styles.symbolText, { color: colors.textMuted }]}>
+                        {row.symbol} • {row.priceBasis === "persisted" ? "live" : row.priceBasis === "estimated" ? "estimated" : "no baseline"}
                       </Text>
                     </View>
-                  );
-                })}
-
-                {holdingsRows.length === 0 && (
-                  <View style={styles.holdingsEmptyRow}>
-                    <Text style={{ color: colors.textMuted }}>No holdings to display.</Text>
                   </View>
-                )}
+                ))}
+
+                {holdingsRows.length === 0 && <View style={styles.holdingsEmptyRow} />}
               </View>
-            </ScrollView>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 700 }} style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ minWidth: 700 }}>
+                  <View style={[styles.holdingsHeadRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Quantity</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Cost / Price</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Prev. Close</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Last Price</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Change %</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numColWide, { color: colors.textSecondary }]}>Total Value Change</Text>
+                  </View>
+
+                  {holdingsRows.map((row, idx) => {
+                    const changeColor = row.changePct == null ? colors.textMuted : pnlColor(row.changePct, colors);
+                    const valueColor = row.totalValueChange == null ? colors.textMuted : pnlColor(row.totalValueChange, colors);
+
+                    return (
+                      <View
+                        key={row.symbol}
+                        style={[
+                          styles.holdingsDataRow,
+                          {
+                            borderBottomColor: colors.borderColor,
+                            backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.quantity.toLocaleString()}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.costPerPrice)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.prevClose == null ? "—" : formatCurrency(row.prevClose)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.lastPrice)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: changeColor, fontWeight: "700" }]}>
+                          {row.changePct == null ? "—" : `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%`}
+                        </Text>
+                        <Text style={[styles.holdingsDataCell, styles.numColWide, { color: valueColor, fontWeight: "700" }]}>
+                          {row.totalValueChange == null ? "—" : formatSignedCurrency(row.totalValueChange)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+
+                  {holdingsRows.length === 0 && (
+                    <View style={styles.holdingsEmptyRow}>
+                      <Text style={{ color: colors.textMuted }}>No holdings to display.</Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
           }
         />
       </View>
