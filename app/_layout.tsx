@@ -239,6 +239,35 @@ function RootLayoutNav() {
     });
   }, [token]);
 
+  // Keep backend token registration fresh if Expo rotates the push token
+  // while the app is running.
+  useEffect(() => {
+    if (!token || Platform.OS === "web") return;
+    let sub: { remove: () => void } | undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const Notifications = await import("expo-notifications");
+        if (cancelled) return;
+        sub = Notifications.addPushTokenListener(() => {
+          registerPushToken().catch((err) => {
+            analytics.logEvent("push_token_rollover_registration_failed", {
+              message: err instanceof Error ? err.message : String(err),
+            });
+          });
+        });
+      } catch {
+        // expo-notifications unavailable in this runtime
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [token]);
+
   // Ensure push notifications are visibly presented while the app is foregrounded.
   useEffect(() => {
     if (Platform.OS === "web") return;

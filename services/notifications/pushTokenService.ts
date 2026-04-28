@@ -45,22 +45,10 @@ export async function registerPushToken(): Promise<string | null> {
     return null;
   }
 
-  // Request permissions
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== "granted") {
-    if (__DEV__) console.info("[Push] Permission not granted");
-    return null;
-  }
-
   // Ensure an Android notification channel exists (required on Android 8+
-  // for notifications to be displayed at all).
+  // for notifications to be displayed at all). On Android 13, creating at
+  // least one channel before token/permission calls helps trigger the OS
+  // POST_NOTIFICATIONS prompt reliably.
   if (Platform.OS === "android") {
     try {
       await Notifications.setNotificationChannelAsync("default", {
@@ -72,6 +60,26 @@ export async function registerPushToken(): Promise<string | null> {
     } catch (e) {
       if (__DEV__) console.warn("[Push] setNotificationChannelAsync failed:", e);
     }
+  }
+
+  // Request permissions
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
+    finalStatus = status;
+  }
+
+  if (finalStatus !== "granted") {
+    if (__DEV__) console.info("[Push] Permission not granted");
+    return null;
   }
 
   // Get the Expo push token
@@ -119,7 +127,7 @@ export async function registerPushToken(): Promise<string | null> {
       }
     } else {
       const err = await resp.text();
-      console.warn("[Push] Backend registration failed:", resp.status, err);
+      console.warn("[Push] Backend registration failed:", resp.status, err, "API:", API_BASE_URL);
       return null;
     }
 
