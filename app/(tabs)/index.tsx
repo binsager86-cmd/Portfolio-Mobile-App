@@ -21,6 +21,7 @@ import { HistoricalPerformance } from "@/components/overview/HistoricalPerforman
 import { PortfolioHealthCard } from "@/components/overview/PortfolioHealthCard";
 import { RealizedTradesSection } from "@/components/overview/RealizedTradesSection";
 import { PortfolioCard } from "@/components/portfolio/PortfolioCard";
+import { HoldingCard } from "@/components/portfolio/HoldingCard";
 import { TradeSimulatorModal } from "@/components/trading/TradeSimulatorModal";
 import { ResponsiveDataTable, type DataColumn } from "@/components/ui/ResponsiveDataTable";
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -798,25 +799,39 @@ function OverviewScreen() {
         />
       </View>
 
-      {/* ── Holdings Snapshot Table ── */}
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
-        {t("overview.holdingsSnapshot", "Holdings Snapshot")}
-      </Text>
-      <View
-        style={[
-          styles.holdingsTableOuter,
-          {
-            borderColor: colors.borderColor,
-            backgroundColor: colors.bgCard,
-            marginBottom: spacing.sectionGap,
-          },
-        ]}
-      >
-        <ResponsiveDataTable<OverviewHoldingRow>
-          data={holdingsRows}
-          columns={holdingsMobileColumns}
-          keyExtractor={(r) => r.symbol}
-          desktopTable={
+      {/* ── Holdings Snapshot ── Professional Card-Based Mobile, Table on Desktop ── */}
+      <View style={{ marginBottom: spacing.sectionGap }}>
+        {/* Section Header with Accent Line */}
+        <View style={[styles.holdingsSectionHeader]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <View
+              style={[
+                styles.accentBar,
+                { backgroundColor: colors.accentPrimary },
+              ]}
+            />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), margin: 0 }]}>
+              {t("overview.holdingsSnapshot", "Holdings Snapshot")}
+            </Text>
+          </View>
+          {holdingsRows.length > 0 && (
+            <Text style={[styles.holdingCountBadge, { color: colors.textMuted, fontSize: 12 }]}>
+              {holdingsRows.length} holding{holdingsRows.length !== 1 ? "s" : ""}
+            </Text>
+          )}
+        </View>
+
+        {/* Mobile: Professional Card View | Desktop: Responsive Table */}
+        {!isPhone && !isTablet ? (
+          <View
+            style={[
+              styles.holdingsTableOuter,
+              {
+                borderColor: colors.borderColor,
+                backgroundColor: colors.bgCard,
+              },
+            ]}
+          >
             <View style={{ flexDirection: "row", minWidth: 0 }}>
               <View
                 style={{
@@ -902,8 +917,48 @@ function OverviewScreen() {
                 </View>
               </ScrollView>
             </View>
-          }
-        />
+          </View>
+        ) : (
+          /* Mobile: Professional card-based layout */
+          <View style={{ gap: 10, paddingHorizontal: spacing.pagePx }}>
+            {holdingsRows.length > 0 ? (
+              holdingsRows.map((row) => (
+                <HoldingCard
+                  key={row.symbol}
+                  holding={{
+                    symbol: row.symbol,
+                    company: row.company,
+                    quantity: row.quantity,
+                    costPerPrice: row.costPerPrice,
+                    lastPrice: row.lastPrice,
+                    changePct: row.changePct,
+                    totalValueChange: row.totalValueChange,
+                    allocation: undefined,
+                    totalValue: row.quantity * row.lastPrice,
+                  }}
+                />
+              ))
+            ) : (
+              <View
+                style={[
+                  styles.emptyHoldingsState,
+                  {
+                    backgroundColor: colors.bgCard,
+                    borderColor: colors.borderColor,
+                  },
+                ]}
+              >
+                <FontAwesome name="briefcase" size={40} color={colors.textMuted} />
+                <Text style={[styles.emptyHoldingsText, { color: colors.textMuted }]}>
+                  {t("overview.noHoldings", "No Holdings")}
+                </Text>
+                <Text style={[styles.emptyHoldingsSubtext, { color: colors.textMuted }]}>
+                  {t("overview.startTradingToAddHoldings", "Add stocks to see your portfolio")}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* ── Row 2: Profit Breakdown ── */}
@@ -1348,6 +1403,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 92,
+  },
+
+  // New professional holdings section styles
+  holdingsSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  accentBar: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    flexShrink: 0,
+  },
+  holdingCountBadge: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  emptyHoldingsState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    marginHorizontal: 12,
+  },
+  emptyHoldingsText: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 12,
+  },
+  emptyHoldingsSubtext: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 4,
+    textAlign: "center",
   },
 });
 
