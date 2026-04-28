@@ -7,7 +7,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -27,12 +27,15 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useApiKey, useMe } from "@/hooks/queries";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useScreenStyles } from "@/hooks/useScreenStyles";
+import { API_BASE_URL } from "@/constants/Config";
 import { showErrorAlert } from "@/lib/errorHandling";
 import i18n from "@/lib/i18n/config";
 import { requestNotificationPermissions } from "@/services/alerts/notificationService";
 import { changePassword, resetAccount, saveApiKey, updateName, updatePrices } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
 import { sendPriceUpdateNotification } from "@/services/notifications/priceUpdateNotification";
+import { registerPushToken } from "@/services/notifications/pushTokenService";
+import { getToken } from "@/services/tokenStorage";
 import { useThemeStore } from "@/services/themeStore";
 import { EXPERTISE_LEVELS, ExpertiseLevel, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { useTranslation } from "react-i18next";
@@ -50,6 +53,16 @@ type ApiError = {
       detail?: string;
     };
   };
+};
+
+type PushDiagnostics = {
+  permission: string;
+  iosStatus: string;
+  channels: string;
+  expoToken: string;
+  backendTokenCount: string;
+  lastChecked: string;
+  error: string;
 };
 
 export default function SettingsScreen() {
@@ -74,6 +87,93 @@ export default function SettingsScreen() {
     toggleNotification,
     resetToDefaults,
   } = useUserPrefsStore();
+
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diag, setDiag] = useState<PushDiagnostics>({
+    permission: "—",
+    iosStatus: "—",
+    channels: "—",
+    expoToken: "—",
+    backendTokenCount: "—",
+    lastChecked: "—",
+    error: "",
+  });
+
+  const refreshPushDiagnostics = useCallback(async () => {
+    setDiagLoading(true);
+    setDiag((prev) => ({ ...prev, error: "" }));
+
+    try {
+      if (Platform.OS === "web") {
+        setDiag({
+          permission: "web",
+          iosStatus: "n/a",
+          channels: "n/a",
+          expoToken: "n/a (web)",
+          backendTokenCount: "n/a (web)",
+          lastChecked: new Date().toLocaleString(),
+          error: "",
+        });
+        return;
+      }
+
+      const Notifications = await import("expo-notifications");
+      const perm = await Notifications.getPermissionsAsync();
+      const iosStatus =
+        Platform.OS === "ios" && perm.ios?.status != null
+          ? String(perm.ios.status)
+          : "n/a";
+
+      const channels =
+        Platform.OS === "android"
+          ? await Notifications.getNotificationChannelsAsync()
+          : null;
+      const channelText =
+        Platform.OS === "android"
+          ? channels && channels.length > 0
+            ? channels.map((c) => c.id).join(", ")
+            : "none"
+          : "n/a";
+
+      const expoToken = await registerPushToken();
+
+      let backendTokenCount = "unknown";
+      const jwt = await getToken();
+      if (jwt) {
+        const resp = await fetch(`${API_BASE_URL}/api/v1/notifications/status`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (resp.ok) {
+          const json = (await resp.json()) as { push_tokens_registered?: number };
+          backendTokenCount = String(json.push_tokens_registered ?? 0);
+        } else {
+          backendTokenCount = `http_${resp.status}`;
+        }
+      }
+
+      setDiag({
+        permission: `${perm.status}${perm.granted ? " (granted)" : ""}`,
+        iosStatus,
+        channels: channelText,
+        expoToken: expoToken ?? "not available",
+        backendTokenCount,
+        lastChecked: new Date().toLocaleString(),
+        error: "",
+      });
+    } catch (err) {
+      setDiag((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : String(err),
+        lastChecked: new Date().toLocaleString(),
+      }));
+    } finally {
+      setDiagLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPushDiagnostics().catch(() => {});
+  }, [refreshPushDiagnostics]);
 
   // Expertise level change confirmation modal
   const [pendingLevel, setPendingLevel] = useState<ExpertiseLevel | null>(null);
@@ -623,6 +723,42 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         )}
+
+        {/* Push Diagnostics */}
+        <View style={[s.diagPanel, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+              Push Diagnostics
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Refresh push diagnostics"
+              onPress={() => refreshPushDiagnostics()}
+              disabled={diagLoading}
+              style={{ opacity: diagLoading ? 0.5 : 1, paddingHorizontal: 8, paddingVertical: 4 }}
+            >
+              {diagLoading ? (
+                <ActivityIndicator size="small" color={colors.accentPrimary} />
+              ) : (
+                <Text style={{ color: colors.accentPrimary, fontSize: 12, fontWeight: "700" }}>Refresh</Text>
+              )}
+            </Pressable>
+          </View>
+
+          <Text style={[s.diagRow, { color: colors.textSecondary }]}>Permission: {diag.permission}</Text>
+          {Platform.OS === "ios" && (
+            <Text style={[s.diagRow, { color: colors.textSecondary }]}>iOS Status: {diag.iosStatus}</Text>
+          )}
+          <Text style={[s.diagRow, { color: colors.textSecondary }]}>Channels: {diag.channels}</Text>
+          <Text style={[s.diagRow, { color: colors.textSecondary }]}>Backend Tokens: {diag.backendTokenCount}</Text>
+          <Text style={[s.diagRow, { color: colors.textSecondary }]} numberOfLines={1}>
+            Expo Token: {diag.expoToken}
+          </Text>
+          <Text style={[s.diagRow, { color: colors.textMuted }]}>Last Checked: {diag.lastChecked}</Text>
+          {diag.error ? (
+            <Text style={[s.diagRow, { color: colors.danger }]}>Error: {diag.error}</Text>
+          ) : null}
+        </View>
       </View>
 
       {/* AI API Key */}
@@ -968,6 +1104,16 @@ const s = StyleSheet.create({
   levelCard: {
     padding: 10,
     borderRadius: 10,
+  },
+  diagPanel: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+  },
+  diagRow: {
+    fontSize: 12,
+    marginBottom: 3,
   },
   radioOuter: {
     width: 20,
