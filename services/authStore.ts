@@ -125,6 +125,20 @@ async function authRequest(
   return data as LoginResponse;
 }
 
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = 12_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Store ───────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -169,7 +183,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // (avoids circular dependency with api.ts)
         try {
           if (__DEV__) console.info("[hydrate] Validating token via", `${API_BASE_URL}/api/v1/auth/me`);
-          const resp = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+          const resp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${stored}` },
           });
           if (__DEV__) console.info("[hydrate] /me response status:", resp.status);
@@ -192,7 +206,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           // Access token expired — try silent refresh before logging out
           if (storedRefresh) {
             try {
-              const refreshResp = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+              const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ refresh_token: storedRefresh }),
@@ -207,7 +221,7 @@ export const useAuthStore = create<AuthState>((set) => ({
               if (newRefresh) await setRefreshToken(newRefresh);
 
               // Validate the new access token
-              const meResp = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+              const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
                 headers: { Authorization: `Bearer ${newAccess}` },
               });
               if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`, { cause: err });
@@ -246,7 +260,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (tokenExpired) {
           if (storedRefresh) {
             try {
-              const refreshResp = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+              const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ refresh_token: storedRefresh }),
@@ -257,7 +271,7 @@ export const useAuthStore = create<AuthState>((set) => ({
               const newRefresh: string | undefined = refreshJson.refresh_token;
               await setToken(newAccess);
               if (newRefresh) await setRefreshToken(newRefresh);
-              const meResp = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+              const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
                 headers: { Authorization: `Bearer ${newAccess}` },
               });
               if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`);

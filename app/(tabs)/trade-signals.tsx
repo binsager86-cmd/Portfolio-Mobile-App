@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useThemeStore } from "@/services/themeStore";
+import type { ThemePalette } from "@/constants/theme";
 import { FSignalsPanel } from "@/src/features/trade-signals/components/FSignalsPanel";
 
 type SubTabKey = "fsignals" | "technical";
@@ -125,7 +126,7 @@ interface PlaceholderPanelProps {
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   title: string;
   description: string;
-  colors: ReturnType<typeof useThemeStore>["colors"];
+  colors: ThemePalette;
 }
 
 function PlaceholderPanel({ icon, title, description, colors }: PlaceholderPanelProps) {

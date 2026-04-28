@@ -92,7 +92,9 @@ const persister = createSyncStoragePersister({
   storage: createStorage(),
   throttleTime: 500,
 });
-persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
+if (Platform.OS !== "web") {
+  persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
+}
 
 // ── Focus manager — auto-refetch stale queries on app focus ─────────
 // Web: React Query handles visibilitychange automatically.

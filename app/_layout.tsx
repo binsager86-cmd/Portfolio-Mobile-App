@@ -190,46 +190,59 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!token) return; // only after login
 
+    const prefetchIfStale = <T,>(opts: {
+      queryKey: readonly unknown[];
+      queryFn: () => Promise<T>;
+      staleTime: number;
+    }) => {
+      const state = queryClient.getQueryState(opts.queryKey);
+      const updatedAt = state?.dataUpdatedAt ?? 0;
+      if (updatedAt > 0 && Date.now() - updatedAt < opts.staleTime) return;
+      queryClient.prefetchQuery(opts).catch(() => {});
+    };
+
     // Pull the user's server-side preferences so expertise level / language
     // / feature flags follow the account across devices and re-installs.
     void pullRemoteUserPrefs();
 
     // Portfolio overview — the first thing the user sees
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["portfolio-overview", undefined],
       queryFn: getOverview,
       staleTime: 30_000,
     });
 
     // Stock reference lists (static data) so dropdowns load instantly
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["stock-list", "kuwait"],
       queryFn: () => getStockList({ market: "kuwait" }),
       staleTime: Infinity,
     });
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["stock-list", "us"],
       queryFn: () => getStockList({ market: "us" }),
       staleTime: Infinity,
     });
 
-    // Next-likely screens: prefetch holdings, news, and market
-    // so navigating feels instant instead of showing skeletons
-    queryClient.prefetchQuery({
+    // Next-likely screens. Keep web startup lean to avoid refresh jank.
+    prefetchIfStale({
       queryKey: ["holdings", undefined],
       queryFn: () => getHoldings(),
       staleTime: 30_000,
     });
-    queryClient.prefetchQuery({
-      queryKey: ["news", "feed", {}],
-      queryFn: () => newsApi.getFeed({ limit: 15 }),
-      staleTime: 5 * 60_000,
-    });
-    queryClient.prefetchQuery({
-      queryKey: ["market", "summary"],
-      queryFn: () => marketApi.getSummary(),
-      staleTime: 5 * 60_000,
-    });
+
+    if (Platform.OS !== "web") {
+      prefetchIfStale({
+        queryKey: ["news", "feed", {}],
+        queryFn: () => newsApi.getFeed({ limit: 15 }),
+        staleTime: 5 * 60_000,
+      });
+      prefetchIfStale({
+        queryKey: ["market", "summary"],
+        queryFn: () => marketApi.getSummary(),
+        staleTime: 5 * 60_000,
+      });
+    }
 
     // Register push token for real-time news notifications
     registerPushToken().catch((err) => {
