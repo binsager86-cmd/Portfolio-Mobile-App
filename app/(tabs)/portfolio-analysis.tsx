@@ -174,6 +174,45 @@ function PortfolioAnalysisScreen() {
     return slices;
   }, [holdingsResp?.holdings, _totalPortfolioValueKwd, cashBalanceKwd]);
 
+  const depositTotals = useMemo(() => {
+    const totalsByPortfolio: Record<string, number> = {};
+    const calc = (deps: typeof kfhDeposits, pf: string) => {
+      if (!deps?.deposits) return;
+      totalsByPortfolio[pf] = deps.deposits
+        .filter((d) => d.amount > 0 && !d.is_deleted)
+        .reduce((sum, d) => sum + d.amount, 0);
+    };
+    calc(kfhDeposits, "KFH");
+    calc(bbynDeposits, "BBYN");
+    calc(usaDeposits, "USA");
+    return totalsByPortfolio;
+  }, [kfhDeposits, bbynDeposits, usaDeposits]);
+
+  if (holdingsLoading) return <PortfolioAnalysisSkeleton />;
+  if (holdingsError) {
+    return (
+      <ErrorScreen
+        message={(holdingsErr as Error)?.message ?? t("portfolioAnalysis.failedToLoad")}
+        onRetry={() => refetchHoldings()}
+      />
+    );
+  }
+
+  const resp = holdingsResp;
+  const totalsData = resp?.totals;
+  const totalMarketValue = totalsData?.total_market_value_kwd ?? 0;
+  const totalCost = totalsData?.total_cost_kwd ?? 0;
+  const totalUnrealized = totalsData?.total_unrealized_pnl_kwd ?? 0;
+
+  return (
+    <View style={[s.container, { backgroundColor: colors.bgPrimary }]}>
+      <View style={s.filterRow}>
+        {PORTFOLIOS.map((pf) => (
+          <FilterChip
+            key={pf}
+            label={pf}
+            active={selectedPortfolio === pf}
+            onPress={() => setSelectedPortfolio(pf)}
             colors={colors}
           />
         ))}
