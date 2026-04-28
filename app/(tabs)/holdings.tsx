@@ -50,6 +50,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -192,43 +193,50 @@ export default function HoldingsScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Summary / Detailed view toggle */}
-          <View style={[s.viewToggleRow, { marginHorizontal: spacing.pagePx }]}>
-            {(["summary", "detailed"] as const).map((mode) => (
-              <Pressable
-                key={mode}
-                onPress={() => setViewMode(mode)}
-                accessibilityRole="button"
-                accessibilityLabel={mode === "summary" ? t("holdings.summary", "Summary") : t("holdings.detailed", "Detailed")}
-                accessibilityState={{ selected: viewMode === mode }}
-                style={[
-                  s.viewToggleBtn,
-                  {
-                    backgroundColor: viewMode === mode ? colors.accentPrimary : colors.bgCard,
-                    borderColor: viewMode === mode ? colors.accentPrimary : colors.borderColor,
-                  },
-                ]}
-              >
-                <FontAwesome
-                  name={mode === "summary" ? "list" : "table"}
-                  size={12}
-                  color={viewMode === mode ? "#fff" : colors.textMuted}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={{ color: viewMode === mode ? "#fff" : colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                  {mode === "summary"
-                    ? `${t("holdings.summary", "Summary")} (9)`
-                    : `${t("holdings.detailed", "Detailed")} (18)`}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={{ marginHorizontal: spacing.pagePx, marginBottom: 6 }}>
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
-              {viewMode === "summary"
-                ? "Summary table is active: company, quantity, avg cost, market price, market value, unrealized P/L, cash div, P&L, P&L%."
-                : "Detailed table is active: full holdings breakdown columns."}
-            </Text>
+          {/* Summary / Detailed true toggle */}
+          <View
+            style={[
+              s.viewToggleRow,
+              {
+                marginHorizontal: spacing.pagePx,
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                backgroundColor: colors.bgCard,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <FontAwesome
+                name={viewMode === "summary" ? "list" : "table"}
+                size={13}
+                color={colors.accentPrimary}
+              />
+              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+                {viewMode === "summary"
+                  ? `${t("holdings.summary", "Summary")} (9)`
+                  : `${t("holdings.detailed", "Detailed")} (18)`}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                {t("holdings.summary", "Summary")}
+              </Text>
+              <Switch
+                value={viewMode === "detailed"}
+                onValueChange={(isDetailed) => setViewMode(isDetailed ? "detailed" : "summary")}
+                thumbColor="#ffffff"
+                trackColor={{ false: colors.textMuted + "55", true: colors.accentPrimary }}
+                accessibilityLabel={t("holdings.viewMode", "Holdings table view mode")}
+              />
+              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "600" }}>
+                {t("holdings.detailed", "Detailed")}
+              </Text>
+            </View>
           </View>
 
           {/* Holdings table — ResponsiveDataTable auto-switches to cards on phone */}
