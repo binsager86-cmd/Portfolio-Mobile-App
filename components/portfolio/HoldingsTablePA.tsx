@@ -345,7 +345,7 @@ export const htStyles = StyleSheet.create({
   headerRow: { flexDirection: "row", borderBottomWidth: 2 },
   headerCell: { paddingHorizontal: 6, paddingVertical: 10, justifyContent: "center" },
   headerText: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
-  dataRow: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth },
+  dataRow: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 44 },
   totalRow: { borderTopWidth: 2 },
   dataCell: { paddingHorizontal: 6, paddingVertical: 8, justifyContent: "center" },
   cellText: { fontSize: 12 },

@@ -247,6 +247,7 @@ export const ts = StyleSheet.create({
   dataRow: {
     flexDirection: "row",
     borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 44,
   },
   totalRow: {
     borderTopWidth: 2,
