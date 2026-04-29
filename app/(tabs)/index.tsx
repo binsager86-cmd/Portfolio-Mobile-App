@@ -135,7 +135,7 @@ function OverviewScreen() {
   const { colors, toggle, mode } = useThemeStore();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { metricCols, isDesktop, isPhone, spacing, fonts, maxContentWidth, showSidebar } = useResponsive();
+  const { metricCols, isDesktop, isPhone, isTablet, spacing, fonts, maxContentWidth, showSidebar } = useResponsive();
   const { refresh: refreshPrices } = usePriceRefresh();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
