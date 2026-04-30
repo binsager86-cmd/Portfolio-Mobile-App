@@ -16,8 +16,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useThemeStore } from "@/services/themeStore";
 import type { ThemePalette } from "@/constants/theme";
 import { FSignalsPanel } from "@/src/features/trade-signals/components/FSignalsPanel";
+import { WhaleRadarPanel } from "@/src/features/trade-signals/components/WhaleRadarPanel";
 
-type SubTabKey = "fsignals" | "technical";
+type SubTabKey = "fsignals" | "technical" | "whaleRadar";
 
 interface SubTab {
   key: SubTabKey;
@@ -29,6 +30,7 @@ interface SubTab {
 const SUB_TABS: readonly SubTab[] = [
   { key: "fsignals", labelKey: "tradeSignals.fSignals", fallback: "F. Signals", icon: "flask" },
   { key: "technical", labelKey: "tradeSignals.technical", fallback: "Technical Analysis", icon: "line-chart" },
+  { key: "whaleRadar", labelKey: "tradeSignals.whaleRadar", fallback: "Whale Radar", icon: "bullseye" },
 ] as const;
 
 export default function TradeSignalsScreen() {
@@ -115,6 +117,11 @@ export default function TradeSignalsScreen() {
             colors={colors}
           />
         </ScrollView>
+      )}
+      {tab === "whaleRadar" && (
+        <View style={{ flex: 1 }}>
+          <WhaleRadarPanel colors={colors} />
+        </View>
       )}
     </View>
   );

@@ -44,14 +44,5 @@
         "track": "internal"
       }
     }
-  },
-  "updates": {
-    "enabled": true,
-    "checkAutomatically": "ON_LOAD",
-    "fallbackToCacheTimeout": 5000,
-    "rollbackConfiguration": {
-      "failureCountThreshold": 2,
-      "timeout": 30000
-    }
   }
 }
