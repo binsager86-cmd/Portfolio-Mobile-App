@@ -336,7 +336,7 @@ function TransactionsScreen() {
     try {
       const pf = "KFH";
       const [txnData, depData, cashData, holdingsData] = await Promise.all([
-        fetchAllTransactions({ portfolio: pf, per_page: 10000 }),
+        fetchAllTransactions({ portfolio: pf, page_size: 10000 }),
         getDeposits({ portfolio: pf, page_size: 10000 }),
         getCashBalances(true),
         getHoldings(pf),

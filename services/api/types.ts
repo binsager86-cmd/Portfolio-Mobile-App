@@ -187,7 +187,7 @@ export interface TransactionListResponse {
   count: number;
   pagination: {
     page: number;
-    per_page: number;
+    page_size: number;
     total_pages: number;
     total_items: number;
   };
