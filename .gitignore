@@ -44,3 +44,9 @@ yarn-error.*
 /android
 
 dist_test/
+
+# Android local machine config (contains SDK paths — never commit)
+android/local.properties
+
+# Test output artefacts
+test-results.json

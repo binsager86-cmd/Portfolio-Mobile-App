@@ -168,6 +168,20 @@ export function mapAuthError(
 
   // ── Generic JS error ──────────────────────────────────────────────
   if (err instanceof Error) {
+    const name = String((err as { name?: string }).name || "").toLowerCase();
+    const msg = String(err.message || "").toLowerCase();
+    if (
+      name.includes("abort") ||
+      msg.includes("aborted") ||
+      msg.includes("timeout")
+    ) {
+      return {
+        code: "auth/timeout",
+        message: "Login request timed out. Please check that the backend is running and try again.",
+        severity: "warning",
+        originalError: err,
+      };
+    }
     return {
       code: "auth/unknown",
       message: err.message || "An unexpected error occurred. Please try again.",

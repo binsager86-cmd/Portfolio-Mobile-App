@@ -13,15 +13,27 @@ export type IconName = React.ComponentProps<typeof FontAwesome>["name"];
 
 // ── API Error type (replaces `any` in catch blocks) ───────────────
 export interface ApiError {
-  response?: { data?: { detail?: string } };
+  response?: { status?: number; data?: { detail?: string } };
   message?: string;
 }
 
 export function getApiErrorMessage(err: unknown, fallback = "Something went wrong."): string {
   if (err && typeof err === "object") {
     const e = err as ApiError;
+    const status = e.response?.status;
+    if (status === 504) {
+      return "AI request timed out on the server. Please try again with a shorter prompt.";
+    }
+    if (status === 503) {
+      return "AI service is temporarily unavailable. Please try again in a moment.";
+    }
     if (e.response?.data?.detail) return e.response.data.detail;
-    if (e.message) return e.message;
+    if (e.message) {
+      if (e.message.toLowerCase().includes("timeout")) {
+        return "AI request timed out. Please try again.";
+      }
+      return e.message;
+    }
   }
   return fallback;
 }

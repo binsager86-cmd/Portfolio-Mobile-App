@@ -83,7 +83,7 @@ export function FormScreen({
 }: FormScreenProps) {
   const router = useRouter();
   const { colors } = useThemeStore();
-  const { isDesktop } = useResponsive();
+  const { isDesktop, isTablet } = useResponsive();
 
   // ── Animated error banner ─────────────────────────────────────
   const errorOpacity = useRef(new Animated.Value(0)).current;
@@ -201,7 +201,7 @@ export function FormScreen({
         <View
           style={[
             styles.scroll,
-            isDesktop && { maxWidth, alignSelf: "center" as const, width: "100%" },
+            (isDesktop || isTablet) && { maxWidth, alignSelf: "center" as const, width: "100%" },
             contentStyle,
           ]}
         >

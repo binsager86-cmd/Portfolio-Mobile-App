@@ -526,7 +526,14 @@ function OverviewScreen() {
     return <ErrorScreen message={errMsg} onRetry={() => refetch()} />;
   }
 
-  if (!data || !metrics) return null;
+  if (!data || !metrics) {
+    return (
+      <ErrorScreen
+        message={t("app.failedToLoad", "Failed to load dashboard data")}
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   // Width for each metric card based on responsive breakpoint
   const colW =

@@ -131,7 +131,7 @@ async function fetchWithTimeout(
   timeoutMs = 12_000,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(new Error("Request timed out")), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {
@@ -368,11 +368,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null, lastAuthError: null });
     try {
       if (__DEV__) console.info("[AuthStore] 🔵 Calling POST /api/v1/auth/google…");
-      const googleResp = await fetch(`${API_BASE_URL}/api/v1/auth/google`, {
+      const googleResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: idToken }),
-      });
+      }, 45_000);
       const googleJson = await googleResp.json().catch(() => ({} as Record<string, unknown>));
       if (!googleResp.ok) {
         const message =

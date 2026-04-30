@@ -60,12 +60,12 @@ export function HoldingCard({ holding }: { holding: HoldingCardData }) {
   const gradientColors = useMemo(() => {
     if (isGain) {
       return mode === "dark"
-        ? [colors.success + "15", colors.bgCard] // Green tint for dark mode
-        : [colors.success + "08", colors.bgCard]; // Subtle green for light mode
+        ? ([colors.success + "15", colors.bgCard] as const) // Green tint for dark mode
+        : ([colors.success + "08", colors.bgCard] as const); // Subtle green for light mode
     } else {
       return mode === "dark"
-        ? [colors.danger + "15", colors.bgCard]
-        : [colors.danger + "08", colors.bgCard];
+        ? ([colors.danger + "15", colors.bgCard] as const)
+        : ([colors.danger + "08", colors.bgCard] as const);
     }
   }, [isGain, mode, colors]);
 

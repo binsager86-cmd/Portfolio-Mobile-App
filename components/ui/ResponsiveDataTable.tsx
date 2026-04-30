@@ -43,40 +43,44 @@ export function ResponsiveDataTable<T>({
   }
 
   const visibleCols = columns;
-  const extraCount = 0;
+
+  // Memoised to avoid creating a new function reference on every parent render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const renderCardItem = React.useCallback(
+    ({ item }: { item: T }) => (
+      <PressableCard
+        onPress={onPressItem ? () => onPressItem(item) : undefined}
+        style={StyleSheet.flatten([styles.mobileCard, isPhone ? styles.mobileCardPhone : null])}
+        accessibilityLabel={itemA11yLabel?.(item)}
+      >
+        {visibleCols.map((col) => (
+          <View key={col.key} style={styles.row}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              {col.label}
+            </Text>
+            <View style={styles.valueWrap}>
+              <Text
+                style={[styles.value, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {col.render(item)}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </PressableCard>
+    ),
+    // visibleCols and callbacks are the real deps; colors from hook is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleCols, colors, onPressItem, itemA11yLabel, isPhone],
+  );
 
   return (
     <FlashList
       data={data}
       keyExtractor={keyExtractor ?? ((item, i) => String((item as { id?: string | number }).id ?? i))}
-      renderItem={({ item }) => (
-        <PressableCard
-          onPress={onPressItem ? () => onPressItem(item) : undefined}
-          style={StyleSheet.flatten([styles.mobileCard, isPhone ? styles.mobileCardPhone : null])}
-          accessibilityLabel={itemA11yLabel?.(item)}
-        >
-          {visibleCols.map((col) => (
-            <View key={col.key} style={styles.row}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                {col.label}
-              </Text>
-              <View style={styles.valueWrap}>
-                <Text
-                  style={[styles.value, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
-                  {col.render(item)}
-                </Text>
-              </View>
-            </View>
-          ))}
-          {extraCount > 0 && (
-            <Text style={[styles.expansion, { color: colors.accentPrimary }]}>
-              + {extraCount} fields
-            </Text>
-          )}
-        </PressableCard>
-      )}
+      estimatedItemSize={84}
+      renderItem={renderCardItem}
     />
   );
 }

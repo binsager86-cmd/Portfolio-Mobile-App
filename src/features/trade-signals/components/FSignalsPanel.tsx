@@ -24,6 +24,7 @@ import type { ThemePalette } from "@/constants/theme";
 import { useAnalysisStocks, useStockList } from "@/hooks/queries";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { showErrorAlert } from "@/lib/errorHandling";
+import { WhaleTrackerPanel } from "@/src/features/trade-signals/components/WhaleTrackerPanel";
 import {
   createAnalysisStock,
   getPEQuarterly,
@@ -35,7 +36,7 @@ import {
 
 const QUARTERS: readonly Quarter[] = ["q1", "q2", "q3", "q4"] as const;
 const Q_LABEL: Record<Quarter, string> = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4" };
-type SignalTabKey = "pe" | "dividendYield";
+type SignalTabKey = "pe" | "dividendYield" | "whaleTracker";
 
 const fmtPe = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? "-" : v.toFixed(2);
@@ -64,7 +65,9 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
     staleTime: 60_000,
   });
 
-  if (!selected) {
+  const needsSelectedStock = signalTab === "pe" || signalTab === "dividendYield";
+
+  if (!selected && needsSelectedStock) {
     return (
       <>
         <StockPicker
@@ -104,7 +107,9 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
         active={signalTab}
         onChange={setSignalTab}
       />
-      <SelectedHeader colors={colors} stock={selected} onChange={() => setSelected(null)} />
+      {selected && needsSelectedStock ? (
+        <SelectedHeader colors={colors} stock={selected} onChange={() => setSelected(null)} />
+      ) : null}
 
       {signalTab === "pe" && peQuery.isLoading && (
         <View style={styles.loadingBox}>
@@ -127,7 +132,8 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
       )}
 
       {signalTab === "pe" && peQuery.data && <PEContent colors={colors} data={peQuery.data} />}
-      {signalTab === "dividendYield" && <DividendYieldContent colors={colors} stock={selected} />}
+      {signalTab === "dividendYield" && selected && <DividendYieldContent colors={colors} stock={selected} />}
+      {signalTab === "whaleTracker" && <WhaleTrackerPanel colors={colors} selectedStock={selected} />}
     </ScrollView>
   );
 }
@@ -178,6 +184,27 @@ function SignalTabBar({
           }}
         >
           {t("tradeSignals.dividendYieldSignal", "Dividend Yield Signal")}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => onChange("whaleTracker")}
+        style={[
+          styles.signalTab,
+          {
+            backgroundColor: active === "whaleTracker" ? colors.accentPrimary + "16" : "transparent",
+          },
+        ]}
+      >
+        <FontAwesome name="eye" size={12} color={active === "whaleTracker" ? colors.accentPrimary : colors.textMuted} />
+        <Text
+          style={{
+            color: active === "whaleTracker" ? colors.accentPrimary : colors.textSecondary,
+            fontSize: 12,
+            fontWeight: "700",
+          }}
+        >
+          {t("tradeSignals.whaleTracker", "Whale Tracker")}
         </Text>
       </Pressable>
     </View>

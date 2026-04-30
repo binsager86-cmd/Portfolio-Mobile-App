@@ -47,7 +47,6 @@ export function useAllTransactions() {
   return useQuery<TransactionListResponse>({
     queryKey: transactionKeys.all(),
     queryFn: () => getTransactions({ page: 1, per_page: 10000 }),
-    staleTime: 5 * 60 * 1000,
   });
 }
 

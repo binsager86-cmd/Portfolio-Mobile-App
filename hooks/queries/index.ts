@@ -7,6 +7,7 @@
 
 export * from "./useAdminQueries";
 export * from "./useAnalysisQueries";
+export * from "./useDepositMutations";
 export * from "./useDepositQueries";
 export * from "./useDividendQueries";
 export * from "./useInsightsQueries";

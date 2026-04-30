@@ -8,8 +8,7 @@
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList } from "@shopify/flash-list";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Href } from "expo-router";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -30,14 +29,16 @@ import { FAB } from "react-native-paper";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { DepositsSkeleton } from "@/components/ui/PageSkeletons";
+import { SmoothFlashList } from "@/components/ui/SmoothFlashList";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { ThemePalette } from "@/constants/theme";
 import { useDeposits } from "@/hooks/queries";
+import { useDeleteDeposit } from "@/hooks/queries";
 import { useResponsive } from "@/hooks/useResponsive";
 import { formatCurrency } from "@/lib/currency";
 import { todayISO } from "@/lib/dateUtils";
 import { showErrorAlert } from "@/lib/errorHandling";
-import { CashDepositRecord, deleteDeposit, downloadDepositsTemplate, exportDepositsExcel, importDepositsExcel } from "@/services/api";
+import { CashDepositRecord, downloadDepositsTemplate, exportDepositsExcel, importDepositsExcel } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
 
 const PAGE_SIZE = 25;
@@ -161,21 +162,8 @@ export default function DepositsScreen() {
     isFetching,
   } = useDeposits({ page, pageSize: PAGE_SIZE, portfolio: portfolioFilter });
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteDeposit,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["portfolio-overview"] }),
-        queryClient.refetchQueries({ queryKey: ["cash-balances"] }),
-        queryClient.refetchQueries({ queryKey: ["deposits"] }),
-        queryClient.refetchQueries({ queryKey: ["deposits-total"] }),
-        queryClient.refetchQueries({ queryKey: ["holdings"] }),
-        queryClient.refetchQueries({ queryKey: ["snapshots"] }),
-        queryClient.refetchQueries({ queryKey: ["snapshots-chart"] }),
-        queryClient.refetchQueries({ queryKey: ["tracker-data"] }),
-      ]);
-    },
-  });
+  const deleteDep = useDeleteDeposit();
+  const { mutate: deleteDepositMutate } = deleteDep;
 
   const handleEdit = useCallback((item: CashDepositRecord) => {
     router.push({
@@ -197,14 +185,27 @@ export default function DepositsScreen() {
     const sourceLabel = (item.source ?? "deposit") === "deposit" ? t('depositsScreen.deposit') : t('depositsScreen.withdrawal');
     const msg = t('depositsScreen.deleteConfirmMsg', { source: sourceLabel, amount: formatCurrency(item.amount, item.currency ?? "KWD"), date: item.deposit_date });
     if (Platform.OS === "web") {
-      if (window.confirm(msg)) deleteMutation.mutate(item.id);
+      if (window.confirm(msg)) deleteDepositMutate(item.id);
     } else {
       Alert.alert(t('depositsScreen.deleteDeposit'), msg, [
         { text: t('app.cancel'), style: "cancel" },
-        { text: t('app.delete'), style: "destructive", onPress: () => deleteMutation.mutate(item.id) },
+        { text: t('app.delete'), style: "destructive", onPress: () => deleteDepositMutate(item.id) },
       ]);
     }
-  }, [deleteMutation]);
+  }, [deleteDepositMutate, t]);
+
+  // ── FlashList helpers —————————————————————————————————
+  const renderDepositItem = useCallback(
+    ({ item }: { item: CashDepositRecord }) => (
+      <DepositRow item={item} colors={colors} onEdit={handleEdit} onDelete={handleDelete} />
+    ),
+    [colors, handleEdit, handleDelete],
+  );
+
+  const getDepositItemType = useCallback(
+    (item: CashDepositRecord) => item.source ?? 'deposit',
+    [],
+  );
 
   // Export deposits as Excel
   const [exporting, setExporting] = useState(false);
@@ -649,11 +650,13 @@ export default function DepositsScreen() {
           isDesktop && { maxWidth: 800, alignSelf: "center", width: "100%" },
         ]}
       >
-        <FlashList
+        <SmoothFlashList
           data={deposits}
           keyExtractor={(item) => String(item.id)}
-          drawDistance={200}
-          renderItem={({ item }) => <DepositRow item={item} colors={colors} onEdit={handleEdit} onDelete={handleDelete} />}
+          isLoading={isLoading}
+          estimatedItemSize={84}
+          getItemType={getDepositItemType}
+          renderItem={renderDepositItem}
           ListHeaderComponent={
             <>
               <ListHeader />

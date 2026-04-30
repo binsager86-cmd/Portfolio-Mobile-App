@@ -61,6 +61,27 @@ export function useUpdateTransaction() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<TransactionCreate> }) =>
       updateTransaction(id, payload),
+    onMutate: async ({ id, payload }) => {
+      await qc.cancelQueries({ queryKey: ["transactions"] });
+      const lists = qc.getQueriesData<TransactionListResponse>({ queryKey: ["transactions"] });
+      for (const [key, data] of lists) {
+        if (!data?.transactions) continue;
+        qc.setQueryData<TransactionListResponse>(key, {
+          ...data,
+          transactions: data.transactions.map((t) =>
+            t.id === id ? { ...t, ...payload } : t,
+          ),
+        });
+      }
+      return { lists };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.lists) {
+        for (const [key, data] of ctx.lists) {
+          qc.setQueryData(key, data);
+        }
+      }
+    },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["portfolio-overview"] });

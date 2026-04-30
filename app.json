@@ -20,6 +20,10 @@
     "android": {
       "package": "com.portfoliotracker.app",
       "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#08070D"
@@ -47,7 +51,10 @@
           "color": "#8a2be2",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "@sentry/react-native",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "notification": {
       "icon": "./assets/images/icon.png",
