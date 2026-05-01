@@ -17,7 +17,7 @@ interface SegmentedControlProps {
   labels?: Record<string, string>;
 }
 
-export function SegmentedControl({
+export const SegmentedControl = React.memo(function SegmentedControl({
   options,
   value,
   onChange,
@@ -66,7 +66,7 @@ export function SegmentedControl({
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

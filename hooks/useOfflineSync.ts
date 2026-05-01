@@ -35,7 +35,7 @@ export const useOfflineSync = () => {
           // that the mutation affects. A broad invalidation is safe here
           // because we just came back online and a full refresh is expected.
           queryClient.invalidateQueries();
-        }).catch(console.error);
+        }).catch((e) => { if (__DEV__) console.error(e); });
 
         queryClient.invalidateQueries({ stale: true });
       }

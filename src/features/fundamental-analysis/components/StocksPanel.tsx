@@ -318,6 +318,8 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                       keyboardShouldPersistTaps="handled"
                       initialNumToRender={15}
                       maxToRenderPerBatch={10}
+                      windowSize={5}
+                      removeClippedSubviews={true}
                       renderItem={({ item, index }) => (
                         <Pressable
                           accessibilityRole="button"

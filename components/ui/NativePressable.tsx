@@ -38,7 +38,7 @@ export interface NativePressableProps extends PressableProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export const NativePressable: React.FC<NativePressableProps> = ({
+export const NativePressable: React.FC<NativePressableProps> = React.memo(({
   children,
   haptic = "light",
   hitSlopCustom = 12,
@@ -99,4 +99,4 @@ export const NativePressable: React.FC<NativePressableProps> = ({
       {children}
     </AnimatedPressable>
   );
-};
+});

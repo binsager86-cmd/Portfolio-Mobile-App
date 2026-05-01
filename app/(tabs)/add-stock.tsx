@@ -327,6 +327,10 @@ export default function AddStockScreen() {
                   keyExtractor={(item) => item.symbol}
                   style={{ maxHeight: 300 }}
                   keyboardShouldPersistTaps="handled"
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
+                  removeClippedSubviews={true}
                   renderItem={({ item }) => {
                     const dup = existingSymbols.has(item.symbol.toUpperCase());
                     return (
