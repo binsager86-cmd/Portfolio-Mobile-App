@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:8002",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
@@ -28,7 +30,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },

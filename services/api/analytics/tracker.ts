@@ -123,3 +123,17 @@ export async function getAIStatus(): Promise<{ configured: boolean; model: strin
   );
   return data.data;
 }
+
+/**
+ * Whale Radar deep-thinking chat turn.
+ * Routes through the dedicated /ai/whale-chat endpoint which uses
+ * gemini-2.5-pro with dynamic thinking budget.
+ */
+export async function whaleChat(prompt: string): Promise<AIAnalysisResult> {
+  const { data } = await api.post<{ status: string; data: AIAnalysisResult }>(
+    "/api/v1/ai/whale-chat",
+    { prompt },
+    { timeout: 120_000 }
+  );
+  return data.data;
+}

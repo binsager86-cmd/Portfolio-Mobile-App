@@ -547,7 +547,7 @@ export function resampleWeekly(candles: WhaleTrackerCandle[]): WhaleTrackerCandl
     .map(([key, group]) => {
       const sorted = [...group].sort((a, b) => a.date.localeCompare(b.date));
       return {
-        date: `${key}|${sorted[sorted.length - 1].date}`,
+        date: sorted[sorted.length - 1].date,
         open: sorted[0].open,
         high: Math.max(...sorted.map((c) => c.high)),
         low: Math.min(...sorted.map((c) => c.low)),

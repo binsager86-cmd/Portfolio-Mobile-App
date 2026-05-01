@@ -27,6 +27,8 @@ import {
   type AlertLevel,
   type EngineOutput,
 } from "@/src/features/trade-signals/whaleRadar";
+import { CandlestickChart } from "@/src/features/trade-signals/components/CandlestickChart";
+import { WhaleRadarAIChat } from "@/src/features/trade-signals/components/WhaleRadarAIChat";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -184,16 +186,107 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
             returnKeyType="search"
           />
           <Pressable
-            onPress={() => setSubmittedSymbol(symbolInput)}
+            onPress={handleScan}
             style={({ pressed }) => [
               styles.runBtn,
               { backgroundColor: colors.accentPrimary, opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <FontAwesome name="play" size={12} color="#fff" />
+            <FontAwesome name="play" size={14} color="#fff" />
             <Text style={styles.runBtnText}>{t("whaleRadar.scan", "Scan")}</Text>
           </Pressable>
         </View>
+
+        {/* Timeframe chips */}
+        <Text style={[styles.pickerLabel, { color: colors.textSecondary, marginTop: 4 }]}>
+          {t("whaleRadar.timeframeLabel", "Historical Range")}
+        </Text>
+        <View style={styles.tfRow}>
+          {(Object.keys(TIMEFRAME_DAYS) as Array<keyof typeof TIMEFRAME_DAYS>).map((tf) => {
+            const active = timeframe === tf;
+            return (
+              <Pressable
+                key={tf}
+                onPress={() => handleTimeframeChange(tf)}
+                style={[
+                  styles.tfChip,
+                  {
+                    backgroundColor: active ? colors.accentPrimary : colors.bgSecondary,
+                    borderColor: active ? colors.accentPrimary : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text style={[styles.tfChipText, { color: active ? "#fff" : colors.textSecondary }]}>
+                  {tf}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={() => handleTimeframeChange("CUSTOM")}
+            style={[
+              styles.tfChip,
+              {
+                backgroundColor: timeframe === "CUSTOM" ? colors.accentPrimary : colors.bgSecondary,
+                borderColor: timeframe === "CUSTOM" ? colors.accentPrimary : colors.borderColor,
+              },
+            ]}
+          >
+            <Text style={[styles.tfChipText, { color: timeframe === "CUSTOM" ? "#fff" : colors.textSecondary }]}>
+              {t("whaleRadar.custom", "Custom")}
+            </Text>
+          </Pressable>
+        </View>
+
+        {timeframe === "CUSTOM" && (
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
+                {t("whaleRadar.from", "From")}
+              </Text>
+              <TextInput
+                value={fromDate}
+                onChangeText={setFromDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+                style={[
+                  styles.dateInput,
+                  {
+                    backgroundColor: colors.bgSecondary,
+                    color: colors.textPrimary,
+                    borderColor: isIsoDate(fromDate) ? colors.borderColor : colors.danger,
+                  },
+                ]}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
+                {t("whaleRadar.to", "To")}
+              </Text>
+              <TextInput
+                value={toDate}
+                onChangeText={setToDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+                style={[
+                  styles.dateInput,
+                  {
+                    backgroundColor: colors.bgSecondary,
+                    color: colors.textPrimary,
+                    borderColor: isIsoDate(toDate) ? colors.borderColor : colors.danger,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        )}
+
+        <Text style={[styles.rangeNote, { color: colors.textMuted }]}>
+          {t("whaleRadar.rangeNote", "Range: {{from}} → {{to}}", {
+            from: submittedRange.from,
+            to: submittedRange.to,
+          })}
+        </Text>
       </View>
 
       {/* ── Loading / errors / insufficient ────────────────────── */}
@@ -224,8 +317,16 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
         </View>
       )}
 
+      {/* ── Candlestick chart ──────────────────────────────────── */}
+      {candlesQuery.data && candlesQuery.data.length > 0 && (
+        <CandlestickChart candles={candlesQuery.data} colors={colors} />
+      )}
+
       {/* ── Result ─────────────────────────────────────────────── */}
       {result && <RadarResult colors={colors} result={result} />}
+
+      {/* ── AI Chat ────────────────────────────────────────────── */}
+      {result && <WhaleRadarAIChat colors={colors} ticker={normalized} result={result} />}
     </ScrollView>
   );
 }
@@ -428,58 +529,60 @@ function LevelRow({
 
 // ── Styles ──────────────────────────────────────────────────────────
 
+// Web-friendly font sizes (standard web body 14-16px, headings 18-24px)
 const styles = StyleSheet.create({
-  content: { padding: 14, paddingBottom: 80, gap: 12 },
-  headerCard: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 6 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  headerTitle: { fontSize: 17, fontWeight: "800" },
-  headerSub: { fontSize: 12, lineHeight: 17 },
+  content: { padding: 16, paddingBottom: 80, gap: 16 },
+  headerCard: { borderRadius: 12, borderWidth: 1, padding: 18, gap: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerTitle: { fontSize: 22, fontWeight: "800" },
+  headerSub: { fontSize: 14, lineHeight: 20 },
 
-  pickerCard: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 8 },
-  pickerLabel: { fontSize: 12, fontWeight: "600" },
-  pickerRow: { flexDirection: "row", gap: 8 },
+  pickerCard: { borderRadius: 12, borderWidth: 1, padding: 18, gap: 12 },
+  pickerLabel: { fontSize: 14, fontWeight: "600" },
+  pickerRow: { flexDirection: "row", gap: 10 },
   input: {
     flex: 1,
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.5,
   },
   runBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 8,
-    gap: 6,
+    gap: 8,
   },
-  runBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  runBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
-  tfRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tfRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tfChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1,
   },
-  dateRow: { flexDirection: "row", gap: 8, marginTop: 4 },
-  dateLabel: { fontSize: 11, fontWeight: "600", marginBottom: 4 },
+  tfChipText: { fontSize: 14, fontWeight: "600" },
+  dateRow: { flexDirection: "row", gap: 10, marginTop: 6 },
+  dateLabel: { fontSize: 13, fontWeight: "600", marginBottom: 5 },
   dateInput: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
     fontFamily: "monospace",
   },
-  rangeNote: { fontSize: 11, fontStyle: "italic", marginTop: 4 },
+  rangeNote: { fontSize: 13, fontStyle: "italic", marginTop: 6 },
 
   statusCard: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 20,
+    padding: 22,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -487,51 +590,51 @@ const styles = StyleSheet.create({
   actionBanner: {
     borderRadius: 12,
     borderWidth: 1.5,
-    padding: 14,
+    padding: 18,
     flexDirection: "row",
     alignItems: "center",
   },
   actionPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     borderRadius: 8,
   },
-  actionPillText: { color: "#fff", fontSize: 14, fontWeight: "800", letterSpacing: 0.5 },
-  actionTitle: { fontSize: 16, fontWeight: "700" },
-  actionSub: { fontSize: 12, marginTop: 3, lineHeight: 17 },
+  actionPillText: { color: "#fff", fontSize: 16, fontWeight: "800", letterSpacing: 0.5 },
+  actionTitle: { fontSize: 20, fontWeight: "700" },
+  actionSub: { fontSize: 14, marginTop: 4, lineHeight: 20 },
 
-  scoreRow: { flexDirection: "row", gap: 10 },
+  scoreRow: { flexDirection: "row", gap: 12 },
   scoreCard: {
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
-    gap: 6,
+    padding: 18,
+    gap: 8,
   },
-  scoreLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
-  scoreValue: { fontSize: 28, fontWeight: "800", letterSpacing: -1 },
-  scoreTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
-  scoreFill: { height: 6, borderRadius: 3 },
+  scoreLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
+  scoreValue: { fontSize: 36, fontWeight: "800", letterSpacing: -1 },
+  scoreTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  scoreFill: { height: 8, borderRadius: 4 },
 
-  metaCard: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 8 },
+  metaCard: { borderRadius: 12, borderWidth: 1, padding: 18, gap: 12 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  metaLabel: { fontSize: 12, fontWeight: "500" },
-  metaValue: { fontSize: 13, fontWeight: "700" },
+  metaLabel: { fontSize: 14, fontWeight: "500" },
+  metaValue: { fontSize: 15, fontWeight: "700" },
 
-  factorCard: { borderRadius: 12, borderWidth: 1, padding: 14 },
-  cardHeading: { fontSize: 13, fontWeight: "700", marginBottom: 10 },
-  factorRow: { marginBottom: 10 },
-  factorLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  factorName: { fontSize: 12, fontWeight: "600" },
-  factorPoints: { fontSize: 12, fontWeight: "700" },
-  factorTrack: { height: 4, borderRadius: 2, overflow: "hidden" },
-  factorFill: { height: 4, borderRadius: 2 },
+  factorCard: { borderRadius: 12, borderWidth: 1, padding: 18 },
+  cardHeading: { fontSize: 16, fontWeight: "700", marginBottom: 14 },
+  factorRow: { marginBottom: 14 },
+  factorLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  factorName: { fontSize: 14, fontWeight: "600" },
+  factorPoints: { fontSize: 14, fontWeight: "700" },
+  factorTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
+  factorFill: { height: 6, borderRadius: 3 },
 
-  levelsCard: { borderRadius: 12, borderWidth: 1, padding: 14 },
-  levelRow: { flexDirection: "row", gap: 8, marginBottom: 6 },
-  levelText: { flex: 1, fontSize: 12, lineHeight: 17 },
-  confirmHeading: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", marginBottom: 4 },
-  confirmItem: { fontSize: 12, lineHeight: 18 },
+  levelsCard: { borderRadius: 12, borderWidth: 1, padding: 18 },
+  levelRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  levelText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  confirmHeading: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", marginBottom: 6 },
+  confirmItem: { fontSize: 14, lineHeight: 20 },
 
-  disclaimer: { fontSize: 11, fontStyle: "italic", lineHeight: 16, paddingHorizontal: 4 },
+  disclaimer: { fontSize: 13, fontStyle: "italic", lineHeight: 18, paddingHorizontal: 4 },
 });
