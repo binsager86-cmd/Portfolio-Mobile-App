@@ -95,8 +95,8 @@ function alertColor(level: AlertLevel, colors: ThemePalette): string {
 
 export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
   const { t } = useTranslation();
-  const [symbolInput, setSymbolInput] = useState("AAPL");
-  const [submittedSymbol, setSubmittedSymbol] = useState("AAPL");
+  const [symbolInput, setSymbolInput] = useState("");
+  const [submittedSymbol, setSubmittedSymbol] = useState("");
   const [timeframe, setTimeframe] = useState<TimeframeKey>("6M");
   const initialRange = useMemo(() => defaultRange("6M"), []);
   const [fromDate, setFromDate] = useState(initialRange.from);
