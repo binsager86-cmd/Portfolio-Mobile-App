@@ -2,10 +2,10 @@
  * Whale Flow Decision Engine
  * --------------------------
  * Pure TypeScript port of the institutional accumulation/distribution
- * scoring spec. Operates on EODHD OHLCV candles and outputs a calibrated,
- * auditable alert payload.
+ * scoring spec. Operates on OHLCV candles (from TickerChart Live via backend proxy)
+ * and outputs a calibrated, auditable alert payload.
  *
- * Data quality is "estimated" because EODHD EOD does not expose tick-level
+ * Data quality is "estimated" because EOD data does not expose tick-level
  * aggressor data. Signed flow is derived from the Accumulation/Distribution
  * multiplier (((C-L)-(H-C))/(H-L)), the same proxy used by Marc Chaikin's
  * A/D Line and Money Flow indicators.

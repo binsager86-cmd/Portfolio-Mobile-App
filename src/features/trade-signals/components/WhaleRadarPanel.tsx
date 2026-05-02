@@ -1,8 +1,8 @@
 /**
  * Whale Radar Panel — institutional flow detection UI.
  *
- * Renders the output of the Whale Flow Decision Engine for any ticker
- * fetched from EODHD. All scoring is done client-side from OHLCV data.
+ * Renders the output of the Whale Flow Decision Engine for any ticker.
+ * Data is fetched from TickerChart via backend proxy. Scoring is done client-side.
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";

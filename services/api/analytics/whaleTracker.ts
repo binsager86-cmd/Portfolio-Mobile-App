@@ -1,6 +1,6 @@
 import api from "../client";
 
-interface EodhdEodRow {
+interface OhlcvRow {
   date: string;
   open: number | string;
   high: number | string;
@@ -59,8 +59,8 @@ async function fetchRows(
   country?: string | null,
   from?: string,
   to?: string,
-): Promise<EodhdEodRow[]> {
-  const { data } = await api.get<{ status: string; data: EodhdEodRow[] }>(
+): Promise<OhlcvRow[]> {
+  const { data } = await api.get<{ status: string; data: OhlcvRow[] }>(
     "/api/v1/trade-signals/whale-candles",
     {
       params: {
@@ -86,7 +86,7 @@ export async function getWhaleTrackerCandles({
   const candidates = buildSymbolCandidates(symbol, exchange, country);
   if (candidates.length === 0) return [];
 
-  let rows: EodhdEodRow[] = [];
+  let rows: OhlcvRow[] = [];
   for (const candidate of candidates) {
     rows = await fetchRows(candidate, exchange, country, from, to);
     if (rows.length > 0) break;

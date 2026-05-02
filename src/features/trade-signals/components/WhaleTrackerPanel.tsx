@@ -61,7 +61,7 @@ function normalizeTickerInput(value: string): string {
 
 function getWhaleTrackerErrorMessage(error: unknown): string {
   const fallback =
-    "Unable to load EODHD data for this request. Check token, symbol format, and network settings.";
+    "Unable to load market data for this request. Check symbol format and backend connectivity.";
 
   if (!error || typeof error !== "object") return fallback;
 
@@ -74,23 +74,23 @@ function getWhaleTrackerErrorMessage(error: unknown): string {
       : "";
 
   if (status === 401) {
-    return "EODHD rejected the API token (401 Unauthenticated). Verify the active token value.";
+    return "Backend authentication failed (401). Please log in again.";
   }
 
   if (status === 404) {
-    return "Ticker not found on EODHD. For Kuwait use symbols like KFH.KW.";
+    return "Ticker not found. For Kuwait stocks use symbols like KFH.KW.";
   }
 
   if (maybeMessage.toLowerCase().includes("network error")) {
-    return "Browser network/CORS blocked the EODHD request. Use backend proxy routing for web, or run on native where direct request works.";
+    return "Network error connecting to backend. Check your connection and try again.";
   }
 
   if (responseDetail) {
-    return `EODHD request failed: ${responseDetail}`;
+    return `Market data request failed: ${responseDetail}`;
   }
 
   if (maybeMessage) {
-    return `EODHD request failed: ${maybeMessage}`;
+    return `Market data request failed: ${maybeMessage}`;
   }
 
   return fallback;
