@@ -62,6 +62,8 @@ const TIMEFRAME_DAYS: Record<Exclude<TimeframeKey, "CUSTOM">, number> = {
   "1Y": 365,
 };
 
+const QUICK_TICKERS = ["AAPL", "MSFT", "NVDA", "TSLA", "KFH.KW", "NBK.KW"];
+
 function defaultRange(tf: TimeframeKey): { from: string; to: string } {
   const today = new Date();
   const to = toIsoDate(today);
@@ -183,30 +185,90 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
           {t("whaleRadar.symbolLabel", "Ticker (e.g. AAPL, KFH.KW)")}
         </Text>
         <View style={styles.pickerRow}>
-          <TextInput
-            value={symbolInput}
-            onChangeText={setSymbolInput}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            placeholder="AAPL"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              styles.input,
-              { backgroundColor: colors.bgSecondary, color: colors.textPrimary, borderColor: colors.borderColor },
-            ]}
-            onSubmitEditing={() => setSubmittedSymbol(symbolInput)}
-            returnKeyType="search"
-          />
+          <View style={[styles.inputWrap, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
+            <FontAwesome name="search" size={14} color={colors.textMuted} />
+            <TextInput
+              value={symbolInput}
+              onChangeText={setSymbolInput}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="AAPL"
+              placeholderTextColor={colors.textMuted}
+              style={[styles.input, { color: colors.textPrimary }]}
+              onSubmitEditing={handleScan}
+              returnKeyType="search"
+            />
+            {symbolInput.length > 0 && (
+              <Pressable
+                onPress={() => setSymbolInput("")}
+                hitSlop={8}
+                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+              >
+                <FontAwesome name="times-circle" size={16} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
           <Pressable
             onPress={handleScan}
+            disabled={symbolInput.trim().length === 0 || candlesQuery.isFetching}
             style={({ pressed }) => [
               styles.runBtn,
-              { backgroundColor: colors.accentPrimary, opacity: pressed ? 0.7 : 1 },
+              {
+                backgroundColor: colors.accentPrimary,
+                opacity:
+                  symbolInput.trim().length === 0
+                    ? 0.4
+                    : candlesQuery.isFetching
+                      ? 0.7
+                      : pressed
+                        ? 0.7
+                        : 1,
+              },
             ]}
           >
-            <FontAwesome name="play" size={14} color="#fff" />
-            <Text style={styles.runBtnText}>{t("whaleRadar.scan", "Scan")}</Text>
+            {candlesQuery.isFetching && normalized.length > 0 ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <FontAwesome name="play" size={14} color="#fff" />
+            )}
+            <Text style={styles.runBtnText}>
+              {candlesQuery.isFetching && normalized.length > 0
+                ? t("whaleRadar.scanning", "Scanning…")
+                : t("whaleRadar.scan", "Scan")}
+            </Text>
           </Pressable>
+        </View>
+
+        {/* Quick ticker picks */}
+        <View style={styles.tfRow}>
+          {QUICK_TICKERS.map((tk) => {
+            const active = symbolInput.toUpperCase() === tk;
+            return (
+              <Pressable
+                key={tk}
+                onPress={() => {
+                  setSymbolInput(tk);
+                  setSubmittedSymbol(tk);
+                }}
+                style={[
+                  styles.quickChip,
+                  {
+                    backgroundColor: active ? colors.accentPrimary + "22" : colors.bgSecondary,
+                    borderColor: active ? colors.accentPrimary : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.quickChipText,
+                    { color: active ? colors.accentPrimary : colors.textSecondary },
+                  ]}
+                >
+                  {tk}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Timeframe chips */}
@@ -302,11 +364,26 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
       </View>
 
       {/* ── Loading / errors / insufficient ────────────────────── */}
+      {!normalized && !candlesQuery.isFetching && (
+        <View style={[styles.statusCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <FontAwesome name="search" size={22} color={colors.textMuted} />
+          <Text style={{ color: colors.textPrimary, marginTop: 10, fontSize: 14, fontWeight: "700", textAlign: "center" }}>
+            {t("whaleRadar.emptyTitle", "Enter a ticker to scan")}
+          </Text>
+          <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 12, textAlign: "center", lineHeight: 18 }}>
+            {t(
+              "whaleRadar.emptyHint",
+              "Pick a quick suggestion above or type any symbol (use exchange suffix for non-US, e.g. KFH.KW).",
+            )}
+          </Text>
+        </View>
+      )}
+
       {candlesQuery.isLoading && (
         <View style={[styles.statusCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           <ActivityIndicator color={colors.accentPrimary} />
           <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 13 }}>
-            {t("whaleRadar.fetching", "Fetching EODHD candles…")}
+            {t("whaleRadar.fetching", "Fetching market data…")}
           </Text>
         </View>
       )}
@@ -315,7 +392,10 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
         <View style={[styles.statusCard, { backgroundColor: colors.danger + "12", borderColor: colors.danger + "40" }]}>
           <FontAwesome name="exclamation-triangle" size={18} color={colors.danger} />
           <Text style={{ color: colors.danger, marginTop: 6, fontSize: 13, textAlign: "center" }}>
-            {t("whaleRadar.fetchError", "Could not fetch candles. Check symbol/exchange suffix and EODHD token.")}
+            {t(
+              "whaleRadar.fetchError",
+              "Could not fetch data. Check the ticker symbol (include exchange suffix like .KW for Kuwait) and try again.",
+            )}
           </Text>
         </View>
       )}
@@ -567,16 +647,29 @@ const styles = StyleSheet.create({
   pickerCard: { borderRadius: 12, borderWidth: 1, padding: 18, gap: 12 },
   pickerLabel: { fontSize: 14, fontWeight: "600" },
   pickerRow: { flexDirection: "row", gap: 10 },
-  input: {
+  inputWrap: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+  },
+  input: {
+    flex: 1,
     paddingVertical: 12,
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.5,
   },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  quickChipText: { fontSize: 12, fontWeight: "700", letterSpacing: 0.4 },
   runBtn: {
     flexDirection: "row",
     alignItems: "center",
