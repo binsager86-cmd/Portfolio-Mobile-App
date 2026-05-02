@@ -457,7 +457,7 @@ function RadarResult({ colors, result }: { colors: ThemePalette; result: EngineO
       <Text style={[styles.disclaimer, { color: colors.textMuted }]}>
         {t(
           "whaleRadar.disclaimer",
-          "Flow estimate uses A/D multiplier × volume × price as a proxy (data_quality: estimated). Direct aggressor data not available from EODHD EOD endpoint. Decisions are not investment advice.",
+          "Estimates are derived from end-of-day price and volume behavior. For informational purposes only — not investment advice.",
         )}
       </Text>
     </>
