@@ -1,27 +1,25 @@
 /**
- * Japanese candlestick chart (price + volume panes) with TradingView-style
- * crosshair, floating tooltip, and persistent OHLCV header.
- *
- * Interaction model:
- *   - Single transparent overlay over the plot area (not per-slot hit boxes).
- *   - Web: `onMouseMove` / `onMouseLeave` on the wrapper update cursor + idx.
- *   - Native: `PanResponder` provides tap-and-drag scrubbing on touch devices.
- *   - X crosshair snaps to the nearest candle slot. Y crosshair tracks freely
- *     and renders a price label on the Y axis at the exact cursor height.
- *   - Top OHLCV bar is always visible (defaults to last candle) and updates
- *     instantly while the user scrubs — same pattern as TradingView.
+ * Japanese candlestick chart (price + volume panes), TradingView-inspired:
+ *   - Dynamic Y range computed only from the *visible* window, so candle
+ *     bodies always render at meaningful height even when total range is wide.
+ *   - Bars stretch to fill chart width (no fixed bar width), so 30 candles
+ *     look as readable as 250.
+ *   - Zoom (+ / − / Fit) toolbar; mouse-wheel zoom on web; drag-to-pan when
+ *     zoomed in; crosshair-on-hover otherwise. Two-finger drag pans on mobile.
+ *   - Last-price horizontal marker + persistent OHLCV header that updates
+ *     while the user scrubs.
  */
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
   type ViewProps,
 } from "react-native";
 import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
@@ -31,16 +29,19 @@ import type { WhaleTrackerCandle } from "@/services/api/analytics/whaleTracker";
 import { resampleWeekly } from "@/src/features/trade-signals/whaleRadar";
 
 type Granularity = "1D" | "1W";
+type InteractionMode = "cross" | "pan";
 
 interface Props {
   candles: WhaleTrackerCandle[];
   colors: ThemePalette;
+  /** @deprecated kept for backwards compat. The chart now sizes itself. */
   maxBars?: number;
   height?: number;
 }
 
 const BULL_COLOR = "#16a34a";
 const BEAR_COLOR = "#dc2626";
+const MIN_VISIBLE = 8;
 
 function formatVolume(v: number): string {
   const abs = Math.abs(v);
@@ -50,22 +51,51 @@ function formatVolume(v: number): string {
   return v.toFixed(0);
 }
 
-export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }: Props) {
-  const { width: winWidth } = useWindowDimensions();
+export function CandlestickChart({ candles, colors, height: heightProp }: Props) {
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
   const [granularity, setGranularity] = useState<Granularity>("1D");
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [mode, setMode] = useState<InteractionMode>("cross");
+  const [measuredW, setMeasuredW] = useState(0);
 
   const series = useMemo(
     () => (granularity === "1W" ? resampleWeekly(candles) : candles),
     [candles, granularity],
   );
-  const visible = useMemo(() => series.slice(-maxBars), [series, maxBars]);
 
-  React.useEffect(() => {
+  // Responsive height: prefer prop, otherwise scale to viewport.
+  const height = heightProp ?? Math.max(420, Math.min(720, Math.round(winHeight * 0.6)));
+
+  // ── Zoom + pan window ─────────────────────────────────────────
+  // visibleCount = how many bars to render; offset = right-edge index.
+  const [visibleCount, setVisibleCount] = useState(() => Math.min(80, series.length || 80));
+  const [offset, setOffset] = useState(0); // bars hidden on the right (0 = latest)
+
+  // Reset window whenever the underlying series identity changes.
+  useEffect(() => {
+    setVisibleCount(Math.min(80, Math.max(MIN_VISIBLE, series.length)));
+    setOffset(0);
     setHoverIdx(null);
     setCursor(null);
-  }, [granularity, visible.length]);
+  }, [series.length, granularity]);
+
+  const clampWindow = useCallback(
+    (count: number, off: number) => {
+      const c = Math.max(MIN_VISIBLE, Math.min(series.length, Math.round(count)));
+      const maxOff = Math.max(0, series.length - c);
+      const o = Math.max(0, Math.min(maxOff, Math.round(off)));
+      return { count: c, off: o };
+    },
+    [series.length],
+  );
+
+  const visible = useMemo(() => {
+    if (series.length === 0) return [];
+    const end = series.length - offset;
+    const start = Math.max(0, end - visibleCount);
+    return series.slice(start, end);
+  }, [series, visibleCount, offset]);
 
   // ── Layout ─────────────────────────────────────────────────────
   const padLeft = 56;
@@ -73,15 +103,15 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
   const padTop = 8;
   const padBottom = 32;
   const paneGap = 8;
-  const barWidth = 10;
-  const barGap = 4;
-  const chartW = Math.max(winWidth - 32, visible.length * (barWidth + barGap) + padLeft + padRight);
+  const chartW = Math.max(measuredW || winWidth - 32, 320);
   const innerW = chartW - padLeft - padRight;
   const totalInnerH = height - padTop - padBottom - paneGap;
   const priceH = Math.round(totalInnerH * 0.72);
   const volumeH = totalInnerH - priceH;
   const volumeTop = padTop + priceH + paneGap;
   const slotWidth = visible.length > 0 ? innerW / visible.length : 0;
+  // Dynamic candle body width: ~70% of slot, with sane min/max.
+  const barWidth = Math.max(2, Math.min(28, slotWidth * 0.7));
 
   // ── Scales ─────────────────────────────────────────────────────
   const { yScale, vScale, gridValues, volTicks, yMaxPad, yMinPad } = useMemo(() => {
@@ -147,6 +177,35 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
     setCursor(null);
   };
 
+  // ── Zoom / pan helpers ────────────────────────────────────────
+  const zoomBy = useCallback(
+    (factor: number, anchorIdx?: number) => {
+      const newCount = visibleCount / factor;
+      // Keep the bar under the anchor stationary by adjusting offset.
+      const anchor = anchorIdx ?? Math.floor(visible.length / 2);
+      const anchorAbs = series.length - offset - visible.length + anchor;
+      const newWindow = clampWindow(newCount, offset);
+      const newAnchor = Math.round(anchor * (newWindow.count / Math.max(visibleCount, 1)));
+      const newOff = clampWindow(newWindow.count, series.length - anchorAbs - newAnchor - 1).off;
+      setVisibleCount(newWindow.count);
+      setOffset(newOff);
+    },
+    [visibleCount, offset, visible.length, series.length, clampWindow],
+  );
+
+  const fitAll = useCallback(() => {
+    setVisibleCount(Math.max(MIN_VISIBLE, series.length));
+    setOffset(0);
+  }, [series.length]);
+
+  const panBars = useCallback(
+    (deltaBars: number) => {
+      const next = clampWindow(visibleCount, offset + deltaBars);
+      setOffset(next.off);
+    },
+    [clampWindow, visibleCount, offset],
+  );
+
   // RN-web maps these directly onto the underlying DOM <div>.
   // On native they're silently ignored, so the cast is safe.
   const webHandlers = {
@@ -157,21 +216,49 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
       }
     },
     onMouseLeave: handleLeave,
+    onWheel: (e: { deltaY: number; nativeEvent: { offsetX?: number }; preventDefault?: () => void }) => {
+      e.preventDefault?.();
+      const x = e.nativeEvent.offsetX ?? padLeft + innerW / 2;
+      const idx =
+        slotWidth > 0
+          ? Math.max(0, Math.min(visible.length - 1, Math.floor((x - padLeft) / slotWidth)))
+          : Math.floor(visible.length / 2);
+      // Wheel up (deltaY < 0) zooms in.
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      zoomBy(factor, idx);
+    },
   } as unknown as ViewProps;
 
-  // Native: tap-and-drag scrub via PanResponder.
+  // Native gestures: drag = pan when in pan mode, otherwise crosshair scrub.
+  const panState = useRef({ startX: 0, startOffset: 0 });
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt: GestureResponderEvent) => {
-        handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        if (mode === "pan") {
+          panState.current = { startX: evt.nativeEvent.locationX, startOffset: offset };
+        } else {
+          handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        }
       },
       onPanResponderMove: (evt: GestureResponderEvent) => {
-        handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        if (mode === "pan") {
+          if (slotWidth <= 0) return;
+          const dx = evt.nativeEvent.locationX - panState.current.startX;
+          const deltaBars = Math.round(dx / slotWidth);
+          const next = clampWindow(visibleCount, panState.current.startOffset + deltaBars);
+          setOffset(next.off);
+        } else {
+          handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        }
       },
-      onPanResponderRelease: handleLeave,
-      onPanResponderTerminate: handleLeave,
+      onPanResponderRelease: () => {
+        if (mode === "cross") handleLeave();
+      },
+      onPanResponderTerminate: () => {
+        if (mode === "cross") handleLeave();
+      },
     }),
   ).current;
 
@@ -195,6 +282,17 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
   }, [cursor, padTop, priceH, yMaxPad, yMinPad]);
 
   if (visible.length === 0 || !displayed) return null;
+
+  const onSurfaceLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (Math.abs(w - measuredW) > 0.5) setMeasuredW(w);
+  };
+
+  // Last close marker (anchored to the most-recent visible bar's close).
+  const lastClose = visible[visible.length - 1].close;
+  const lastY = yScale(lastClose);
+  const lastColor =
+    visible[visible.length - 1].close >= visible[visible.length - 1].open ? BULL_COLOR : BEAR_COLOR;
 
   return (
     <View style={[styles.wrap, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
@@ -223,6 +321,52 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
         </View>
       </View>
 
+      {/* ── Zoom / pan toolbar ────────────────────────────────── */}
+      <View style={styles.toolRow}>
+        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+          {(["cross", "pan"] as InteractionMode[]).map((m) => {
+            const active = mode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => {
+                  setMode(m);
+                  setHoverIdx(null);
+                  setCursor(null);
+                }}
+                style={[styles.toggleBtn, active && { backgroundColor: colors.accentPrimary }]}
+              >
+                <Text style={[styles.toggleText, { color: active ? "#fff" : colors.textSecondary }]}>
+                  {m === "cross" ? "Cross" : "Pan"}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+          <Pressable onPress={() => zoomBy(1 / 1.4)} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>−</Text>
+          </Pressable>
+          <Pressable onPress={() => zoomBy(1.4)} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>+</Text>
+          </Pressable>
+          <Pressable onPress={fitAll} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>Fit</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+          <Pressable onPress={() => panBars(Math.max(1, Math.round(visibleCount * 0.25)))} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>◀</Text>
+          </Pressable>
+          <Pressable onPress={() => panBars(-Math.max(1, Math.round(visibleCount * 0.25)))} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>▶</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.toolMeta, { color: colors.textMuted }]}>
+          {visible.length}/{series.length} bars
+        </Text>
+      </View>
+
       {/* ── Persistent OHLCV bar (TradingView-style) ─────────── */}
       <View
         style={[
@@ -247,13 +391,13 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
       </View>
 
       {/* ── Chart surface ────────────────────────────────────── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View
-          style={{ width: chartW, height }}
-          {...panResponder.panHandlers}
-          {...webHandlers}
-        >
-          <Svg width={chartW} height={height} pointerEvents="none">
+      <View
+        onLayout={onSurfaceLayout}
+        style={{ width: "100%", height }}
+        {...panResponder.panHandlers}
+        {...webHandlers}
+      >
+        <Svg width={chartW} height={height} pointerEvents="none">
             {/* Price grid */}
             {gridValues.map((v, i) => {
               const y = yScale(v);
@@ -366,6 +510,40 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
               );
             })}
 
+            {/* Last price marker */}
+            {lastY >= padTop && lastY <= padTop + priceH && (
+              <G key="lastprice">
+                <Line
+                  x1={padLeft}
+                  x2={chartW - padRight}
+                  y1={lastY}
+                  y2={lastY}
+                  stroke={lastColor}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
+                  opacity={0.7}
+                />
+                <Rect
+                  x={chartW - padRight - 56}
+                  y={lastY - 10}
+                  width={54}
+                  height={20}
+                  rx={3}
+                  fill={lastColor}
+                />
+                <SvgText
+                  x={chartW - padRight - 4}
+                  y={lastY + 4}
+                  fontSize={11}
+                  fontWeight="700"
+                  fill="#fff"
+                  textAnchor="end"
+                >
+                  {lastClose.toFixed(2)}
+                </SvgText>
+              </G>
+            )}
+
             {/* Crosshair */}
             {cursor && hoverIdx !== null && (
               <G key="crosshair">
@@ -474,8 +652,7 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
               <TooltipRow colors={colors} label="Volume" value={formatVolume(visible[hoverIdx].volume)} />
             </View>
           )}
-        </View>
-      </ScrollView>
+      </View>
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
@@ -487,7 +664,7 @@ export function CandlestickChart({ candles, colors, maxBars = 80, height = 380 }
           <Text style={[styles.legendText, { color: colors.textSecondary }]}>Bearish</Text>
         </View>
         <Text style={[styles.legendText, { color: colors.textMuted, marginLeft: "auto" }]}>
-          Hover (web) or tap-and-drag (mobile) to inspect
+          Scroll/wheel to zoom · drag to pan · hover for OHLCV
         </Text>
       </View>
     </View>
@@ -544,6 +721,12 @@ const styles = StyleSheet.create({
   toggle: { flexDirection: "row", borderWidth: 1, borderRadius: 8, padding: 2 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   toggleText: { fontSize: 13, fontWeight: "700" },
+
+  toolRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  toolMeta: { fontSize: 12, marginLeft: "auto", fontVariant: ["tabular-nums"] },
+
+  toolRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  toolMeta: { fontSize: 12, marginLeft: "auto", fontVariant: ["tabular-nums"] },
 
   topBar: {
     borderWidth: 1,
