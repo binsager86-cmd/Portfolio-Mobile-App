@@ -165,6 +165,9 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
         </Text>
       </View>
 
+      {/* ── Summary (action + scores) shown above picker ─────── */}
+      {result && <RadarSummary colors={colors} result={result} />}
+
       {/* ── Symbol picker ──────────────────────────────────────── */}
       <View style={[styles.pickerCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>
@@ -326,8 +329,8 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
         />
       )}
 
-      {/* ── Result ─────────────────────────────────────────────── */}
-      {result && <RadarResult colors={colors} result={result} />}
+      {/* ── Result details (meta / factors / levels) ─────────── */}
+      {result && <RadarDetails colors={colors} result={result} />}
 
       {/* ── AI Chat ────────────────────────────────────────────── */}
       {result && <WhaleRadarAIChat colors={colors} ticker={normalized} result={result} />}
@@ -335,13 +338,12 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
   );
 }
 
-// ── Result card ─────────────────────────────────────────────────────
+// ── Summary (rendered above picker) ─────────────────────────────────
 
-function RadarResult({ colors, result }: { colors: ThemePalette; result: EngineOutput }) {
+function RadarSummary({ colors, result }: { colors: ThemePalette; result: EngineOutput }) {
   const { t } = useTranslation();
-  const { alert, factors } = result;
+  const { alert } = result;
   const acColor = actionColor(alert.action, colors);
-  const lvColor = alertColor(alert.alert_level, colors);
 
   return (
     <>
@@ -373,7 +375,19 @@ function RadarResult({ colors, result }: { colors: ThemePalette; result: EngineO
           color={colors.danger}
         />
       </View>
+    </>
+  );
+}
 
+// ── Result details card ─────────────────────────────────────────────
+
+function RadarDetails({ colors, result }: { colors: ThemePalette; result: EngineOutput }) {
+  const { t } = useTranslation();
+  const { alert, factors } = result;
+  const lvColor = alertColor(alert.alert_level, colors);
+
+  return (
+    <>
       {/* Meta row */}
       <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <MetaRow
