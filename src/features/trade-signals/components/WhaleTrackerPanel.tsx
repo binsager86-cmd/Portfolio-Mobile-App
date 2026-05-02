@@ -20,7 +20,7 @@ import {
 } from "react-native";
 
 import type { ThemePalette } from "@/constants/theme";
-import { tokens } from "@/constants/uiTokens";
+import { UITokens } from "@/constants/uiTokens";
 import type { AnalysisStock } from "@/services/api";
 import { getWhaleTrackerCandles } from "@/services/api/analytics/whaleTracker";
 import {
@@ -277,7 +277,7 @@ export function WhaleTrackerPanel({
         </View>
 
         {/* Timeframe chips */}
-        <Text style={[styles.pickerLabel, { color: colors.textSecondary, marginTop: tokens.spacing.xs }]}>
+        <Text style={[styles.pickerLabel, { color: colors.textSecondary, marginTop: UITokens.spacing.xs }]}>
           {t("whaleTracker.timeframeLabel", "Historical Range")}
         </Text>
         <View style={styles.tfRow}>
@@ -372,7 +372,7 @@ export function WhaleTrackerPanel({
       {!normalized && !trackerQuery.isFetching && (
         <View style={[styles.statusCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           <FontAwesome name="search" size={22} color={colors.textMuted} />
-          <Text style={{ color: colors.textPrimary, marginTop: tokens.spacing.sm, fontSize: 14, fontWeight: "700", textAlign: "center" }}>
+          <Text style={{ color: colors.textPrimary, marginTop: UITokens.spacing.sm, fontSize: 14, fontWeight: "700", textAlign: "center" }}>
             {t("whaleTracker.emptyTitle", "Enter a ticker to scan")}
           </Text>
           <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 12, textAlign: "center", lineHeight: 18 }}>
@@ -491,8 +491,8 @@ function VolumeCalculationTable({
   summary: ReturnType<typeof calculateWhaleTracker>;
 }) {
   const { t } = useTranslation();
-  const recentRows = useMemo(
-    () => [...summary.rows].slice(-20).reverse(),
+  const allRows = useMemo(
+    () => [...summary.rows].reverse(),
     [summary.rows],
   );
 
@@ -502,7 +502,7 @@ function VolumeCalculationTable({
         {t("whaleTracker.volumeCalculation", "Volume Calculation Stream")}
       </Text>
       <Text style={[styles.tableSub, { color: colors.textMuted }]}>
-        {t("whaleTracker.volumeCalculationDesc", "Latest 20 rows showing candle classification and how raw volume is split into accumulation and distribution.")}
+        {t("whaleTracker.volumeCalculationDesc", "All rows for the selected period showing candle classification and how raw volume is split into accumulation and distribution.")}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.tableWrap}>
@@ -513,7 +513,7 @@ function VolumeCalculationTable({
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 120 }]}>ACCUM.</Text>
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 120 }]}>DIST.</Text>
           </View>
-          {recentRows.map((row, index) => (
+          {allRows.map((row, index) => (
             <View
               key={row.date}
               style={[

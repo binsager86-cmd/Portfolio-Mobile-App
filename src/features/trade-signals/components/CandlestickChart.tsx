@@ -65,16 +65,16 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
   );
 
   // Responsive height: prefer prop, otherwise scale to viewport.
-  const height = heightProp ?? Math.max(420, Math.min(720, Math.round(winHeight * 0.6)));
+  const height = heightProp ?? Math.max(500, Math.min(720, Math.round(winHeight * 0.6)));
 
   // ── Zoom + pan window ─────────────────────────────────────────
   // visibleCount = how many bars to render; offset = right-edge index.
-  const [visibleCount, setVisibleCount] = useState(() => Math.min(80, series.length || 80));
+  const [visibleCount, setVisibleCount] = useState(() => Math.min(50, series.length || 50));
   const [offset, setOffset] = useState(0); // bars hidden on the right (0 = latest)
 
   // Reset window whenever the underlying series identity changes.
   useEffect(() => {
-    setVisibleCount(Math.min(80, Math.max(MIN_VISIBLE, series.length)));
+    setVisibleCount(Math.min(50, Math.max(MIN_VISIBLE, series.length)));
     setOffset(0);
     setHoverIdx(null);
     setCursor(null);
@@ -110,8 +110,8 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
   const volumeH = totalInnerH - priceH;
   const volumeTop = padTop + priceH + paneGap;
   const slotWidth = visible.length > 0 ? innerW / visible.length : 0;
-  // Dynamic candle body width: ~70% of slot, with sane min/max.
-  const barWidth = Math.max(2, Math.min(28, slotWidth * 0.7));
+  // Dynamic candle body width: ~85% of slot for maximum visibility
+  const barWidth = Math.max(3, Math.min(32, slotWidth * 0.85));
 
   // ── Scales ─────────────────────────────────────────────────────
   const { yScale, vScale, gridValues, volTicks, yMaxPad, yMinPad } = useMemo(() => {
@@ -129,8 +129,10 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
     const lows = visible.map((c) => c.low);
     const yMax = Math.max(...highs);
     const yMin = Math.min(...lows);
-    const yRange = yMax - yMin || 1;
-    const padPct = 0.05;
+    const yRange = yMax - yMin || Math.abs(yMax * 0.01); // Minimum 1% of price
+    
+    // Minimal 3% padding to keep scale tight to actual data
+    const padPct = 0.03;
     const yMaxP = yMax + yRange * padPct;
     const yMinP = yMin - yRange * padPct;
     const yRangeP = yMaxP - yMinP;
@@ -430,10 +432,13 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
               const yOpen = yScale(c.open);
               const yClose = yScale(c.close);
               const bodyTop = Math.min(yOpen, yClose);
-              const bodyH = Math.max(Math.abs(yClose - yOpen), 1);
+              // Minimum body height of 2 pixels for better visibility
+              const bodyH = Math.max(Math.abs(yClose - yOpen), 2);
               return (
                 <G key={`candle-${c.date}-${i}`}>
-                  <Line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={1.2} />
+                  {/* Wick (high-low line) */}
+                  <Line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={2} />
+                  {/* Body */}
                   <Rect
                     x={cx - barWidth / 2}
                     y={bodyTop}
@@ -441,7 +446,7 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
                     height={bodyH}
                     fill={color}
                     stroke={color}
-                    strokeWidth={1}
+                    strokeWidth={1.5}
                   />
                 </G>
               );
