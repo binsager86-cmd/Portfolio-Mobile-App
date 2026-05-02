@@ -319,7 +319,11 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
 
       {/* ── Candlestick chart ──────────────────────────────────── */}
       {candlesQuery.data && candlesQuery.data.length > 0 && (
-        <CandlestickChart candles={candlesQuery.data} colors={colors} />
+        <CandlestickChart
+          candles={candlesQuery.data}
+          colors={colors}
+          maxBars={candlesQuery.data.length}
+        />
       )}
 
       {/* ── Result ─────────────────────────────────────────────── */}
