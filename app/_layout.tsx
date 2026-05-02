@@ -338,11 +338,18 @@ function SyncEngineProvider() {
   const { sync } = useOfflineSyncEngine();
 
   useEffect(() => {
-    prewarmCriticalQueries(queryClient).catch(() => {});
-    sync().catch(() => {});
+    // Defer startup prewarm + offline sync so they don't compete with the
+    // first paint on Android. Without this they kick off network requests
+    // and React Query writes during initial mount, which makes the first
+    // screen feel sluggish.
+    const handle = setTimeout(() => {
+      prewarmCriticalQueries(queryClient).catch(() => {});
+      sync().catch(() => {});
+    }, 600);
 
     const stopPrewarm = startBackgroundPrewarm(queryClient, sync);
     return () => {
+      clearTimeout(handle);
       stopPrewarm();
     };
   }, [queryClient, sync]);

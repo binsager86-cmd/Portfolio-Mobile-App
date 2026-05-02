@@ -21,6 +21,29 @@ const CLOCK_SKEW_MS = 60_000; // 60s buffer for network/device clock drift
 const hasSessionStorage = typeof sessionStorage !== "undefined";
 const hasLocalStorage = typeof localStorage !== "undefined";
 
+// ── In-memory token cache ───────────────────────────────────────────
+// Reading from expo-secure-store on Android is a JNI call into the
+// Keystore that costs ~10-30 ms each time. Without caching, every API
+// request adds that latency, which adds up fast on screens that fire
+// half a dozen queries in parallel. We keep the access + refresh tokens
+// in memory once loaded; the cache is invalidated whenever the tokens
+// change or are cleared. `undefined` means "never read yet", `null`
+// means "confirmed empty".
+
+let cachedAccessToken: string | null | undefined = undefined;
+let cachedRefreshToken: string | null | undefined = undefined;
+let cachedExpiresAt: string | null | undefined = undefined;
+
+function primeCache(
+  access: string | null,
+  refresh: string | null,
+  expiresAt: string | null,
+) {
+  cachedAccessToken = access;
+  cachedRefreshToken = refresh;
+  cachedExpiresAt = expiresAt;
+}
+
 // ── New API ─────────────────────────────────────────────────────────
 
 export const setTokens = async (
@@ -28,24 +51,18 @@ export const setTokens = async (
   refresh: string,
   expiresIn?: number,
 ): Promise<void> => {
+  const expiresAt = expiresIn ? String(Date.now() + expiresIn * 1000) : null;
+  primeCache(access, refresh, expiresAt);
   if (Platform.OS === "web") {
     if (hasSessionStorage) sessionStorage.setItem("access_token", access);
     if (hasLocalStorage) {
       localStorage.setItem("refresh_token", refresh);
-      if (expiresIn)
-        localStorage.setItem(
-          "token_expires_at",
-          String(Date.now() + expiresIn * 1000),
-        );
+      if (expiresAt) localStorage.setItem("token_expires_at", expiresAt);
     }
   } else {
     await SecureStore.setItemAsync("access_token", access);
     await SecureStore.setItemAsync("refresh_token", refresh);
-    if (expiresIn)
-      await SecureStore.setItemAsync(
-        "token_expires_at",
-        String(Date.now() + expiresIn * 1000),
-      );
+    if (expiresAt) await SecureStore.setItemAsync("token_expires_at", expiresAt);
   }
 };
 
@@ -63,14 +80,28 @@ export const getTokens = async () => {
         : null,
     };
   }
-  return {
-    access: await SecureStore.getItemAsync("access_token"),
-    refresh: await SecureStore.getItemAsync("refresh_token"),
-    expiresAt: await SecureStore.getItemAsync("token_expires_at"),
-  };
+  if (
+    cachedAccessToken !== undefined &&
+    cachedRefreshToken !== undefined &&
+    cachedExpiresAt !== undefined
+  ) {
+    return {
+      access: cachedAccessToken,
+      refresh: cachedRefreshToken,
+      expiresAt: cachedExpiresAt,
+    };
+  }
+  const [access, refresh, expiresAt] = await Promise.all([
+    SecureStore.getItemAsync("access_token"),
+    SecureStore.getItemAsync("refresh_token"),
+    SecureStore.getItemAsync("token_expires_at"),
+  ]);
+  primeCache(access, refresh, expiresAt);
+  return { access, refresh, expiresAt };
 };
 
 export const clearTokens = async (): Promise<void> => {
+  primeCache(null, null, null);
   if (Platform.OS === "web") {
     if (hasSessionStorage) sessionStorage.removeItem("access_token");
     if (hasLocalStorage) {
@@ -90,7 +121,10 @@ export const getStoredAccessToken = async (): Promise<string | null> => {
       ? sessionStorage.getItem("access_token")
       : null;
   }
-  return SecureStore.getItemAsync("access_token");
+  if (cachedAccessToken !== undefined) return cachedAccessToken;
+  const value = await SecureStore.getItemAsync("access_token");
+  cachedAccessToken = value;
+  return value;
 };
 
 // ── Expiry checking ─────────────────────────────────────────────────
@@ -162,6 +196,7 @@ export async function getToken(): Promise<string | null> {
 }
 
 export async function setToken(token: string): Promise<void> {
+  cachedAccessToken = token;
   if (Platform.OS === "web") {
     if (hasSessionStorage) sessionStorage.setItem("access_token", token);
   } else {
@@ -170,6 +205,7 @@ export async function setToken(token: string): Promise<void> {
 }
 
 export async function removeToken(): Promise<void> {
+  cachedAccessToken = null;
   if (Platform.OS === "web") {
     if (hasSessionStorage) sessionStorage.removeItem("access_token");
   } else {
@@ -181,10 +217,14 @@ export async function getRefreshToken(): Promise<string | null> {
   if (Platform.OS === "web") {
     return hasLocalStorage ? localStorage.getItem("refresh_token") : null;
   }
-  return SecureStore.getItemAsync("refresh_token");
+  if (cachedRefreshToken !== undefined) return cachedRefreshToken;
+  const value = await SecureStore.getItemAsync("refresh_token");
+  cachedRefreshToken = value;
+  return value;
 }
 
 export async function setRefreshToken(token: string): Promise<void> {
+  cachedRefreshToken = token;
   if (Platform.OS === "web") {
     if (hasLocalStorage) localStorage.setItem("refresh_token", token);
   } else {
@@ -193,6 +233,8 @@ export async function setRefreshToken(token: string): Promise<void> {
 }
 
 export async function removeRefreshToken(): Promise<void> {
+  cachedRefreshToken = null;
+  cachedExpiresAt = null;
   if (Platform.OS === "web") {
     if (hasLocalStorage) {
       localStorage.removeItem("refresh_token");

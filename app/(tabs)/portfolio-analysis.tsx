@@ -26,7 +26,6 @@ import {
 
 import { AllocationDonut, AllocationSlice } from "@/components/charts/AllocationDonut";
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { ListContainer } from "@/components/ui/ListContainer";
 import { LastUpdated } from "@/components/ui/LastUpdated";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import { PortfolioAnalysisSkeleton } from "@/components/ui/PageSkeletons";
@@ -131,38 +130,6 @@ function PortfolioAnalysisScreen() {
   const firstColumn = TABLE_COLUMNS[0];
   const trailingColumns = TABLE_COLUMNS.slice(1);
   const trailingTableWidth = Math.max(0, TOTAL_TABLE_WIDTH - firstColumn.width);
-
-  const renderMobileHolding = useCallback(
-    ({ item }: { item: (typeof sortedHoldings)[number] }) => (
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-          borderRadius: 12,
-          backgroundColor: colors.bgCard,
-          padding: 12,
-          gap: 8,
-        }}
-      >
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 15 }}>{item.symbol}</Text>
-          <Text style={{ color: item.unrealized_pnl_kwd >= 0 ? colors.success : colors.danger, fontWeight: "700", fontSize: 13 }}>
-            {item.unrealized_pnl_kwd >= 0 ? "+" : ""}{formatCurrency(item.unrealized_pnl_kwd, "KWD")}
-          </Text>
-        </View>
-        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{item.company}</Text>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-            {t("portfolioAnalysis.marketValue")}: {formatCurrency(item.market_value_kwd, "KWD")}
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-            P&L %: {item.pnl_pct >= 0 ? "+" : ""}{item.pnl_pct.toFixed(2)}%
-          </Text>
-        </View>
-      </View>
-    ),
-    [colors, t],
-  );
 
   // Keep module-level refs in sync so getCellValue can compute allocation
   // Set module-level context for getCellValue allocation calculations
@@ -318,7 +285,6 @@ function PortfolioAnalysisScreen() {
             <Text style={{ color: "#34d399", fontSize: 13, fontWeight: "700" }}>{t('portfolioAnalysis.exportExcel')}</Text>
           </Pressable>
         </View>
-        {isDesktop ? (
         <View
           style={[htStyles.tableOuter, { borderColor: colors.borderColor, backgroundColor: colors.bgCard, marginHorizontal: spacing.pagePx, marginBottom: 24 }]}
         >
@@ -400,22 +366,6 @@ function PortfolioAnalysisScreen() {
             </ScrollView>
           </View>
         </View>
-        ) : (
-          <View style={{ marginHorizontal: spacing.pagePx, marginBottom: 24 }}>
-            <ListContainer
-              data={sortedHoldings}
-              renderItem={renderMobileHolding}
-              keyExtractor={(item, index) => `${item.symbol}-${index}`}
-              isLoading={holdingsLoading}
-              isEmpty={sortedHoldings.length === 0}
-              estimatedItemSize={96}
-              emptyTitle={t("portfolioAnalysis.noActiveHoldings")}
-              emptyDesc={t("portfolioAnalysis.holdingsSection")}
-              emptyIcon="briefcase-outline"
-              contentContainerStyle={{ padding: 0 }}
-            />
-          </View>
-        )}
 
         {/* ── 4. Allocation Donut ──────────────────────────────── */}
 

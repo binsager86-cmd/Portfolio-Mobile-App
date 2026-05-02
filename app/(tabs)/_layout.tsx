@@ -160,8 +160,11 @@ export default function TabLayout() {
             freezeOnBlur: true,
             tabBarActiveTintColor: colors.accentPrimary,
             tabBarInactiveTintColor: colors.textMuted,
-            // Screen transition animation
-            animation: "shift",
+            // Screen transition animation — `none` keeps tab switches instant
+            // on Android. The `shift` animation runs on the JS thread and
+            // makes navigation feel sluggish, especially while the new
+            // screen is mounting and fetching data.
+            animation: "none",
             headerStyle: {
               backgroundColor: colors.headerBg,
               ...(Platform.OS === "web"

@@ -18,6 +18,10 @@ export function useMarketSummary(enabled = true) {
     gcTime: 30 * 60_000,
     retry: 2,
     enabled,
+    // Keep last successful payload visible while refetching so the
+    // Market screen never flashes a skeleton when the user navigates
+    // back to it within gcTime.
+    placeholderData: (prev) => prev,
   });
 }
 
