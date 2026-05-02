@@ -119,8 +119,17 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
 
   const handleScan = () => {
     setSubmittedSymbol(symbolInput);
-    if (timeframe === "CUSTOM" && validRange) {
-      setSubmittedRange({ from: fromDate, to: toDate });
+    if (timeframe === "CUSTOM") {
+      if (validRange) {
+        setSubmittedRange({ from: fromDate, to: toDate });
+      }
+    } else {
+      // Always anchor preset ranges to today so the user gets fresh data
+      // regardless of how long the screen has been open.
+      const r = defaultRange(timeframe);
+      setFromDate(r.from);
+      setToDate(r.to);
+      setSubmittedRange(r);
     }
   };
 
