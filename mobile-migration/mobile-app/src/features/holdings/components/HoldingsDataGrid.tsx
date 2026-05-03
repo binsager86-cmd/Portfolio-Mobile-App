@@ -15,6 +15,7 @@ import {
   type ColDef,
   type SortDir,
   TABLE_COLUMNS,
+  cleanCompanyName,
   fmtCell,
   getCellValue,
   getUsdOriginal,
@@ -85,6 +86,7 @@ export function DataCell({
   const val = getCellValue(holding, col.key);
   const { text, color, bold } = fmtCell(val, col.fmt, colors);
   const usdVal = getUsdOriginal(holding, col.key);
+  const displayText = usdVal != null && usdVal !== 0 ? `${text} (${fmtNum(usdVal, 2)} USD)` : text;
 
   return (
     <View style={[ts.dataCell, { width: col.width }]}>
@@ -99,19 +101,8 @@ export function DataCell({
         ]}
         numberOfLines={1}
       >
-        {text}
+        {displayText}
       </Text>
-      {usdVal != null && usdVal !== 0 && (
-        <Text
-          style={[
-            ts.cellSubText,
-            { color: colors.textMuted, textAlign: col.align },
-          ]}
-          numberOfLines={1}
-        >
-          ({fmtNum(usdVal, 2)} USD)
-        </Text>
-      )}
     </View>
   );
 }
@@ -209,7 +200,7 @@ export const HoldingRow = React.memo(function HoldingRow({
               ]}
               numberOfLines={1}
             >
-              {holding.company}
+              {cleanCompanyName(holding.company)}
             </Text>
           </Pressable>
         ) : (
@@ -231,6 +222,7 @@ export const ts = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     borderBottomWidth: 2,
+    minHeight: 44,
   },
   headerCell: {
     paddingHorizontal: 6,
@@ -246,21 +238,19 @@ export const ts = StyleSheet.create({
   dataRow: {
     flexDirection: "row",
     borderBottomWidth: StyleSheet.hairlineWidth,
+    height: 46,
   },
   totalRow: {
     borderTopWidth: 2,
+    height: 48,
   },
   dataCell: {
     paddingHorizontal: 6,
-    paddingVertical: 8,
+    paddingVertical: 0,
     justifyContent: "center",
   },
   cellText: {
     fontSize: 12,
-  },
-  cellSubText: {
-    fontSize: 9,
-    marginTop: 1,
   },
   emptyRow: {
     padding: 32,

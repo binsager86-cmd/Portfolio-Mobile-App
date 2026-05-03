@@ -24,7 +24,10 @@ Environment variables prefixed with `EXPO_PUBLIC_` are embedded at **build time*
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `EXPO_PUBLIC_API_URL` | No | Backend API URL. Falls back to `localhost:8002` (dev) or production URL |
+| `EXPO_PUBLIC_API_URL` | No | Global backend API URL override for all platforms |
+| `EXPO_PUBLIC_API_URL_WEB` | No | Web-only backend API URL override (e.g. `http://127.0.0.1:8004`) |
+| `EXPO_PUBLIC_API_URL_ANDROID` | No | Android-only backend API URL override (e.g. emulator `http://10.0.2.2:8004`) |
+| `EXPO_PUBLIC_API_URL_IOS` | No | iOS-only backend API URL override |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Yes | Google OAuth Web Client ID |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Native | Google OAuth iOS Client ID |
 | `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Native | Google OAuth Android Client ID |

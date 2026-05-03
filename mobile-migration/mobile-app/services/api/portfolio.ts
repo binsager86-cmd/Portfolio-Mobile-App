@@ -34,14 +34,26 @@ export type {
   StockListEntry,
 } from "./types";
 
+function unwrapApiData<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    (payload as { data?: unknown }).data !== undefined
+  ) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+}
+
 // ── Overview & Holdings ─────────────────────────────────────────────
 
 /** Get complete portfolio overview (all KWD). */
 export async function getOverview(): Promise<OverviewData> {
-  const { data } = await api.get<{ status: string; data: OverviewData }>(
+  const { data } = await api.get<{ status?: string; data?: OverviewData } | OverviewData>(
     "/api/portfolio/overview"
   );
-  return data.data;
+  return unwrapApiData<OverviewData>(data);
 }
 
 /** Get all holdings (with KWD conversions). Optional portfolio filter. */
@@ -49,11 +61,11 @@ export async function getHoldings(
   portfolio?: string
 ): Promise<HoldingsResponse> {
   const params = portfolio ? { portfolio } : {};
-  const { data } = await api.get<{ status: string; data: HoldingsResponse }>(
+  const { data } = await api.get<{ status?: string; data?: HoldingsResponse } | HoldingsResponse>(
     "/api/portfolio/holdings",
     { params }
   );
-  return data.data;
+  return unwrapApiData<HoldingsResponse>(data);
 }
 
 /** Get holdings for a specific portfolio table. */

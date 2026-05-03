@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "expo-notifications": "^55.0.20",
     "react-native-gifted-charts": "^1.4.76"
   }
 }

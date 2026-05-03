@@ -10,3 +10,16 @@ code-audit.txt
 
 # Backup / old files
 *.old.ts
+
+# Reverse-engineering / mitm work (contains credentials, raw traffic, CA certs)
+.mitm-venv/
+.mitmproxy/
+mitm-captures/
+mitm-setup.ps1
+mitm-teardown.ps1
+.tools/
+
+# Local Python virtualenvs
+venv/
+.venv/
+

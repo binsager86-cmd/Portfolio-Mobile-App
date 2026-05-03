@@ -277,16 +277,12 @@ const DataCell = React.memo(function DataCell({ col, holding, colors }: { col: C
   const val = getCellValue(holding, col.key);
   const { text, color, bold } = fmtCell(val, col.fmt, colors);
   const usdText = getUsdBracketText(holding, col.key);
+  const displayText = usdText ? `${text} ${usdText}` : text;
   return (
     <View style={[htStyles.dataCell, { width: col.width }]}>
       <Text style={[htStyles.cellText, { color, fontWeight: bold ? "700" : "400", textAlign: col.align }]} numberOfLines={1}>
-        {text}
+        {displayText}
       </Text>
-      {usdText ? (
-        <Text style={{ fontSize: 9, color: colors.textMuted, textAlign: col.align, marginTop: 1 }} numberOfLines={1}>
-          {usdText}
-        </Text>
-      ) : null}
     </View>
   );
 });
@@ -316,11 +312,22 @@ export const TotalCell = React.memo(function TotalCell({ col, totals, colors }: 
 });
 
 /** Single holding data row with zebra-striped background and USD bracket text. */
-export const HoldingRow = React.memo(function HoldingRow({ holding, colors, isEven }: { holding: Holding; colors: ThemePalette; isEven: boolean }) {
+export const HoldingRow = React.memo(function HoldingRow({
+  holding,
+  colors,
+  isEven,
+  columns,
+}: {
+  holding: Holding;
+  colors: ThemePalette;
+  isEven: boolean;
+  columns?: ColDef[];
+}) {
   const rowBg = isEven ? "transparent" : colors.bgCardHover + "30";
+  const cols = columns ?? TABLE_COLUMNS;
   return (
     <View style={[htStyles.dataRow, { backgroundColor: rowBg, borderBottomColor: colors.borderColor }]}>
-      {TABLE_COLUMNS.map((col) => (
+      {cols.map((col) => (
         <DataCell key={col.key} col={col} holding={holding} colors={colors} />
       ))}
     </View>
@@ -331,12 +338,12 @@ export const HoldingRow = React.memo(function HoldingRow({ holding, colors, isEv
 
 export const htStyles = StyleSheet.create({
   tableOuter: { borderRadius: 10, borderWidth: 1, marginBottom: 12 },
-  headerRow: { flexDirection: "row", borderBottomWidth: 2 },
+  headerRow: { flexDirection: "row", borderBottomWidth: 2, minHeight: 44 },
   headerCell: { paddingHorizontal: 6, paddingVertical: 10, justifyContent: "center" },
   headerText: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3 },
-  dataRow: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth },
-  totalRow: { borderTopWidth: 2 },
-  dataCell: { paddingHorizontal: 6, paddingVertical: 8, justifyContent: "center" },
+  dataRow: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth, height: 46 },
+  totalRow: { borderTopWidth: 2, height: 48 },
+  dataCell: { paddingHorizontal: 6, paddingVertical: 0, justifyContent: "center" },
   cellText: { fontSize: 12 },
   emptyRow: { padding: 32, alignItems: "center" as const },
 });

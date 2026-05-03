@@ -4,7 +4,8 @@
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useCallback, useState } from "react";
+import { useNavigation } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
@@ -35,6 +36,16 @@ export default function FundamentalAnalysisScreen() {
   const [tab, setTab] = useState<SubTab>("stocks");
   const [selectedStockId, setSelectedStockId] = useState<number | null>(null);
   const [selectedStockSymbol, setSelectedStockSymbol] = useState<string>("");
+
+  // Sync the tab navigator header title with the selected stock so the symbol
+  // is visible on mobile (where the navigator header is shown). On web/desktop
+  // the navigator header is hidden and the in-screen header renders the symbol.
+  const navigation = useNavigation();
+  useEffect(() => {
+    navigation.setOptions({
+      title: selectedStockSymbol || t("tabs.analysis"),
+    });
+  }, [navigation, selectedStockSymbol, t]);
 
   // Filter sub-tabs by expertise level
   const levelOrder: ExpertiseLevel[] = ["normal", "intermediate", "advanced"];

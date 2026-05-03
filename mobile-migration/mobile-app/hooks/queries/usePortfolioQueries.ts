@@ -49,9 +49,16 @@ export function usePortfolioOverview(userId?: number) {
     staleTime: DASHBOARD_STALE_TIME_MS,
     gcTime: DASHBOARD_GC_TIME_MS,
     refetchOnMount: true,
+    // Dashboard data must be fresh when the user switches back to the app.
     refetchOnWindowFocus: true,
-    retry: 2,
+    // Longer back-off cap (30 s) than the 10 s global default — the
+    // overview endpoint is expensive so we give the server more breathing
+    // room before each retry.
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
+    // Keep showing the last successful payload while the background
+    // refetch runs so navigating back to the dashboard never flashes a
+    // blank skeleton.
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -64,7 +71,6 @@ export function useHoldings(portfolio?: string) {
     gcTime: DASHBOARD_GC_TIME_MS,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
-    retry: 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
     placeholderData: (prev) => prev,
   });
@@ -75,6 +81,9 @@ export function useCashBalances() {
   return useQuery<Record<string, PortfolioCashBalance>>({
     queryKey: portfolioKeys.cashBalances(),
     queryFn: () => getCashBalances(),
+    staleTime: DASHBOARD_STALE_TIME_MS,
+    gcTime: DASHBOARD_GC_TIME_MS,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -83,6 +92,9 @@ export function useAccounts() {
   return useQuery({
     queryKey: portfolioKeys.accounts(),
     queryFn: () => getAccounts(),
+    staleTime: DASHBOARD_STALE_TIME_MS,
+    gcTime: DASHBOARD_GC_TIME_MS,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -155,5 +167,8 @@ export function useRealizedProfit() {
   return useQuery<RealizedProfitData>({
     queryKey: portfolioKeys.realizedProfit(),
     queryFn: () => getRealizedProfit(),
+    staleTime: DASHBOARD_STALE_TIME_MS,
+    gcTime: DASHBOARD_GC_TIME_MS,
+    placeholderData: (prev) => prev,
   });
 }

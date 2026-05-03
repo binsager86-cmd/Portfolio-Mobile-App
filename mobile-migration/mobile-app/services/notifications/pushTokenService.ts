@@ -6,6 +6,7 @@
  */
 
 import Constants from "expo-constants";
+import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
@@ -24,6 +25,84 @@ function resolveProjectId(): string | undefined {
   );
 }
 
+function isPermissionGranted(status: Notifications.NotificationPermissionsStatus): boolean {
+  if (Platform.OS === "ios") {
+    const iosStatus = status.ios?.status;
+    return (
+      status.granted ||
+      iosStatus === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+      iosStatus === Notifications.IosAuthorizationStatus.PROVISIONAL ||
+      iosStatus === Notifications.IosAuthorizationStatus.EPHEMERAL
+    );
+  }
+  return status.granted || status.status === "granted";
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getExpoPushTokenWithRetry(projectId: string, attempts = 3): Promise<string | null> {
+  let lastError: unknown = null;
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+      return tokenData.data;
+    } catch (err) {
+      lastError = err;
+      // Retry transient HTTPS/network failures with small backoff.
+      if (i < attempts - 1) {
+        await wait(1200 * (i + 1));
+      }
+    }
+  }
+
+  console.warn("[Push] Failed to fetch Expo push token after retries:", lastError);
+  return null;
+}
+
+async function registerTokenWithBackend(
+  pushToken: string,
+  jwt: string,
+  platform: "ios" | "android" | "web",
+  attempts = 3,
+): Promise<boolean> {
+  let lastStatus = 0;
+  let lastBody = "";
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/api/v1/notifications/register-token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ token: pushToken, platform }),
+      });
+
+      if (resp.ok) return true;
+
+      lastStatus = resp.status;
+      lastBody = await resp.text();
+
+      if (resp.status < 500) {
+        break;
+      }
+    } catch {
+      // keep retrying below
+    }
+
+    if (i < attempts - 1) {
+      await wait(1200 * (i + 1));
+    }
+  }
+
+  console.warn("[Push] Backend registration failed:", lastStatus, lastBody, "API:", API_BASE_URL);
+  return false;
+}
+
 /**
  * Register for push notifications and send the token to the backend.
  *
@@ -38,22 +117,22 @@ export async function registerPushToken(): Promise<string | null> {
     return null;
   }
 
-  // Request permissions
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  // Remote Expo push notifications are not supported in Expo Go.
+  // Use a development build / production build to receive backend pushes.
+  if ((Constants as { appOwnership?: string }).appOwnership === "expo") {
+    console.warn("[Push] Expo Go detected — remote push notifications are disabled. Use a dev build.");
+    return null;
   }
 
-  if (finalStatus !== "granted") {
-    if (__DEV__) console.info("[Push] Permission not granted");
+  if (!Device.isDevice) {
+    if (__DEV__) console.warn("[Push] Physical device required for remote push notifications");
     return null;
   }
 
   // Ensure an Android notification channel exists (required on Android 8+
-  // for notifications to be displayed at all).
+  // for notifications to be displayed at all). On Android 13, creating at
+  // least one channel before token/permission calls helps trigger the OS
+  // POST_NOTIFICATIONS prompt reliably.
   if (Platform.OS === "android") {
     try {
       await Notifications.setNotificationChannelAsync("default", {
@@ -67,6 +146,26 @@ export async function registerPushToken(): Promise<string | null> {
     }
   }
 
+  // Request permissions
+  const existing = await Notifications.getPermissionsAsync();
+  let granted = isPermissionGranted(existing);
+
+  if (!granted) {
+    const requested = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
+    granted = isPermissionGranted(requested);
+  }
+
+  if (!granted) {
+    if (__DEV__) console.info("[Push] Permission not granted");
+    return null;
+  }
+
   // Get the Expo push token
   try {
     const projectId = resolveProjectId();
@@ -74,8 +173,8 @@ export async function registerPushToken(): Promise<string | null> {
       console.warn("[Push] Missing EAS projectId — cannot fetch push token in production build");
       return null;
     }
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-    const pushToken = tokenData.data;
+    const pushToken = await getExpoPushTokenWithRetry(projectId);
+    if (!pushToken) return null;
 
     if (__DEV__) console.info("[Push] Token:", pushToken);
 
@@ -89,16 +188,9 @@ export async function registerPushToken(): Promise<string | null> {
     const platform =
       Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
 
-    const resp = await fetch(`${API_BASE_URL}/api/v1/notifications/register-token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify({ token: pushToken, platform }),
-    });
+    const ok = await registerTokenWithBackend(pushToken, jwt, platform);
 
-    if (resp.ok) {
+    if (ok) {
       if (__DEV__) console.info("[Push] Token registered with backend");
       // After the device is known to the backend, sync the user's current
       // notification preferences so the dispatcher can honor disabled toggles.
@@ -111,8 +203,7 @@ export async function registerPushToken(): Promise<string | null> {
         if (__DEV__) console.warn("[Push] prefs sync after register failed:", err);
       }
     } else {
-      const err = await resp.text();
-      console.warn("[Push] Backend registration failed:", resp.status, err);
+      return null;
     }
 
     return pushToken;

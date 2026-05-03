@@ -4,15 +4,14 @@ import {
     DefaultTheme as NavLight,
     ThemeProvider,
 } from "@react-navigation/native";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
-import { router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { I18nManager, Platform, View } from "react-native";
-import { MD3DarkTheme, MD3LightTheme, PaperProvider } from "react-native-paper";
+import { PaperProvider } from "react-native-paper";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -21,18 +20,23 @@ import { NetworkBanner } from "@/components/ui/NetworkBanner";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { useAuthCacheSync } from "@/hooks/useAuthCacheSync";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { useOfflineSyncEngine } from "@/hooks/useOfflineSyncEngine";
 import { usePageViewTracking } from "@/hooks/usePageViewTracking";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { analytics } from "@/lib/analytics";
 import i18n from "@/lib/i18n/config";
 import { queryClient } from "@/lib/queryClient";
+import { initSentry } from "@/lib/sentry";
+import { prewarmCriticalQueries, startBackgroundPrewarm } from "@/services/preloadManager";
 import { getHoldings, getOverview, getStockList } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
 import { marketApi } from "@/services/market/marketApi";
 import { newsApi } from "@/services/news/newsApi";
-import { registerPushToken } from "@/services/notifications/pushTokenService";
+import { registerForPushNotificationsAsync } from "@/services/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { useAppTheme } from "@/theme";
 
 export {
     ErrorBoundary
@@ -46,18 +50,18 @@ SplashScreen.preventAutoHideAsync();
 
 // ── Navigation themes derived from our palette ──────────────────────
 
-function buildNavTheme(mode: "light" | "dark") {
-  const base = mode === "dark" ? NavDark : NavLight;
-  if (mode === "dark") {
+function buildNavTheme(theme: ReturnType<typeof useAppTheme>) {
+  const base = theme.isDark ? NavDark : NavLight;
+  if (theme.isDark) {
     return {
       ...base,
       colors: {
         ...base.colors,
-        background: "#0a0a15",
-        card: "#121220",
-        text: "#e6e6f0",
-        border: "rgba(255,255,255,0.08)",
-        primary: "#8a2be2",
+        background: theme.colors.background,
+        card: theme.colors.surface,
+        text: theme.colors.onSurface,
+        border: theme.colors.outline,
+        primary: theme.colors.primary,
       },
     };
   }
@@ -65,11 +69,11 @@ function buildNavTheme(mode: "light" | "dark") {
     ...base,
     colors: {
       ...base.colors,
-      background: "#f8fafc",
-      card: "#ffffff",
-      text: "#1e293b",
-      border: "rgba(203,213,225,0.6)",
-      primary: "#6366f1",
+      background: theme.colors.background,
+      card: theme.colors.surface,
+      text: theme.colors.onSurface,
+      border: theme.colors.outline,
+      primary: theme.colors.primary,
     },
   };
 }
@@ -103,13 +107,14 @@ function RootLayoutNav() {
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const googleSignIn = useAuthStore((s) => s.googleSignIn);
   const hydrateTheme = useThemeStore((s) => s.hydrate);
-  const themeMode = useThemeStore((s) => s.mode);
   const hydrateUserPrefs = useUserPrefsStore((s) => s.hydrate);
   const pullRemoteUserPrefs = useUserPrefsStore((s) => s.pullRemote);
   const language = useUserPrefsStore((s) => s.preferences.language);
+  const theme = useAppTheme();
 
   // ── Session guard: periodic heartbeat + focus re-validation ────
   useSessionGuard();
+  usePushNotifications();
 
   // ── Google Analytics: track page views on route changes (web) ──
   usePageViewTracking();
@@ -119,6 +124,7 @@ function RootLayoutNav() {
   // before auth state is fully resolved.
   useEffect(() => {
     async function init() {
+      initSentry();
       hydrateTheme();
       hydrateUserPrefs();
       analytics.init();
@@ -156,8 +162,12 @@ function RootLayoutNav() {
             expectedState === returnedState
           ) {
             // Await the full sign-in flow — this sets token + loading:false
-            await googleSignIn(accessToken);
-            return; // skip hydration — googleSignIn already set session
+            const ok = await googleSignIn(accessToken);
+            if (ok) {
+              return; // skip hydration — googleSignIn already set session
+            }
+            // If OAuth exchange fails, continue with normal hydration so
+            // the app never stays on a blank waiting state.
           }
           if (__DEV__ && accessToken) {
             console.warn("[OAuth] Discarded callback: state mismatch or no pending request.");
@@ -190,170 +200,107 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!token) return; // only after login
 
+    const prefetchIfStale = <T,>(opts: {
+      queryKey: readonly unknown[];
+      queryFn: () => Promise<T>;
+      staleTime: number;
+    }) => {
+      const state = queryClient.getQueryState(opts.queryKey);
+      const updatedAt = state?.dataUpdatedAt ?? 0;
+      if (updatedAt > 0 && Date.now() - updatedAt < opts.staleTime) return;
+      queryClient.prefetchQuery(opts).catch(() => {});
+    };
+
     // Pull the user's server-side preferences so expertise level / language
     // / feature flags follow the account across devices and re-installs.
     void pullRemoteUserPrefs();
 
     // Portfolio overview — the first thing the user sees
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["portfolio-overview", undefined],
       queryFn: getOverview,
       staleTime: 30_000,
     });
 
     // Stock reference lists (static data) so dropdowns load instantly
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["stock-list", "kuwait"],
       queryFn: () => getStockList({ market: "kuwait" }),
       staleTime: Infinity,
     });
-    queryClient.prefetchQuery({
+    prefetchIfStale({
       queryKey: ["stock-list", "us"],
       queryFn: () => getStockList({ market: "us" }),
       staleTime: Infinity,
     });
 
-    // Next-likely screens: prefetch holdings, news, and market
-    // so navigating feels instant instead of showing skeletons
-    queryClient.prefetchQuery({
+    // Next-likely screens. Keep web startup lean to avoid refresh jank.
+    prefetchIfStale({
       queryKey: ["holdings", undefined],
       queryFn: () => getHoldings(),
       staleTime: 30_000,
     });
-    queryClient.prefetchQuery({
-      queryKey: ["news", "feed", {}],
-      queryFn: () => newsApi.getFeed({ limit: 15 }),
-      staleTime: 5 * 60_000,
-    });
-    queryClient.prefetchQuery({
-      queryKey: ["market", "summary"],
-      queryFn: () => marketApi.getSummary(),
-      staleTime: 5 * 60_000,
-    });
+
+    if (Platform.OS !== "web") {
+      prefetchIfStale({
+        queryKey: ["news", "feed", {}],
+        queryFn: () => newsApi.getFeed({ limit: 15 }),
+        staleTime: 5 * 60_000,
+      });
+      prefetchIfStale({
+        queryKey: ["market", "summary"],
+        queryFn: () => marketApi.getSummary(),
+        staleTime: 5 * 60_000,
+      });
+    }
 
     // Register push token for real-time news notifications
-    registerPushToken().catch((err) => {
+    registerForPushNotificationsAsync().catch((err) => {
       analytics.logEvent("push_registration_failed", {
         message: err instanceof Error ? err.message : String(err),
       });
     });
   }, [token]);
 
-  // Foreground push handler: when a news push arrives while the app is open,
-  // invalidate the news feed query so the new article appears immediately
-  // instead of waiting for the next stale refetch.
+  // Keep backend token registration fresh if Expo rotates the push token
+  // while the app is running.
   useEffect(() => {
-    if (Platform.OS === "web") return;
-    let receivedSub: { remove: () => void } | undefined;
-    let responseSub: { remove: () => void } | undefined;
+    if (!token || Platform.OS === "web") return;
+    let sub: { remove: () => void } | undefined;
     let cancelled = false;
-
-    const routeFromData = (data: Record<string, unknown> | undefined) => {
-      if (!data) return;
-      const deepLink = typeof data.deepLink === "string" ? data.deepLink : null;
-      if (deepLink) {
-        try { router.push(deepLink as never); } catch { /* invalid path — ignore */ }
-        return;
-      }
-      const type = typeof data.type === "string" ? data.type : null;
-      if (type === "news") {
-        try { router.push("/(tabs)/news" as never); } catch { /* noop */ }
-        return;
-      }
-      if (type === "price_alert" || type === "portfolio_update") {
-        try { router.push("/(tabs)" as never); } catch { /* noop */ }
-      }
-    };
 
     (async () => {
       try {
         const Notifications = await import("expo-notifications");
         if (cancelled) return;
-
-        // Foreground: refresh news feed so the new article shows up.
-        receivedSub = Notifications.addNotificationReceivedListener(() => {
-          queryClient.invalidateQueries({ queryKey: ["news"] });
+        sub = Notifications.addPushTokenListener(() => {
+          registerForPushNotificationsAsync().catch((err) => {
+            analytics.logEvent("push_token_rollover_registration_failed", {
+              message: err instanceof Error ? err.message : String(err),
+            });
+          });
         });
-
-        // Tap (background / killed → foreground): navigate to the relevant screen.
-        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-          const data = response?.notification?.request?.content?.data as
-            | Record<string, unknown>
-            | undefined;
-          // Always refresh news on tap as well — covers the case where the app
-          // was killed and missed the foreground listener.
-          queryClient.invalidateQueries({ queryKey: ["news"] });
-          routeFromData(data);
-        });
-
-        // Cold-start: if the app was launched by tapping a notification,
-        // expo-notifications buffers the last response here.
-        try {
-          const initial = await Notifications.getLastNotificationResponseAsync();
-          if (initial && !cancelled) {
-            const data = initial.notification?.request?.content?.data as
-              | Record<string, unknown>
-              | undefined;
-            // Defer slightly so the navigator is mounted before we push.
-            setTimeout(() => routeFromData(data), 250);
-          }
-        } catch {
-          /* noop */
-        }
       } catch {
-        // expo-notifications not available (e.g. Expo Go limitation) — ignore.
+        // expo-notifications unavailable in this runtime
       }
     })();
+
     return () => {
       cancelled = true;
-      receivedSub?.remove();
-      responseSub?.remove();
+      sub?.remove();
     };
-  }, []);
-
-  // Paper theme
-  const paperTheme =
-    themeMode === "dark"
-      ? {
-          ...MD3DarkTheme,
-          colors: {
-            ...MD3DarkTheme.colors,
-            primary: "#8a2be2",
-            secondary: "#4cc9f0",
-            background: "#0a0a15",
-            surface: "#1a1a2e",
-            surfaceVariant: "#121220",
-            onSurface: "#e6e6f0",
-            onSurfaceVariant: "#a0a0b0",
-            outline: "rgba(255,255,255,0.08)",
-            error: "#ff4757",
-          },
-        }
-      : {
-          ...MD3LightTheme,
-          colors: {
-            ...MD3LightTheme.colors,
-            primary: "#6366f1",
-            secondary: "#3b82f6",
-            background: "#f8fafc",
-            surface: "#ffffff",
-            surfaceVariant: "#f1f5f9",
-            onSurface: "#1e293b",
-            onSurfaceVariant: "#64748b",
-            outline: "rgba(203,213,225,0.6)",
-            error: "#ef4444",
-          },
-        };
+  }, [token]);
 
   return (
     <SafeAreaProvider>
     <View style={{ flex: 1, direction: language === "ar" ? "rtl" : "ltr" }}>
-    <StatusBar style={themeMode === "dark" ? "light" : "dark"} />
+    <StatusBar style={theme.isDark ? "light" : "dark"} />
     <QueryClientProvider client={queryClient}>
       <OfflineSyncProvider />
+      <SyncEngineProvider />
       <AuthCacheSyncProvider />
-      <PaperProvider theme={paperTheme}>
-        <ThemeProvider value={buildNavTheme(themeMode)}>
+      <PaperProvider theme={theme}>
+        <ThemeProvider value={buildNavTheme(theme)}>
           <AppErrorBoundary>
             <ToastProvider>
               <Stack>
@@ -383,4 +330,29 @@ function AuthCacheSyncProvider() {
 function OfflineSyncProvider() {
   const isOffline = useOfflineSync();
   return <NetworkBanner isOffline={isOffline} />;
+}
+
+/** Runs offline sync engine + startup prewarm inside QueryClientProvider. */
+function SyncEngineProvider() {
+  const queryClient = useQueryClient();
+  const { sync } = useOfflineSyncEngine();
+
+  useEffect(() => {
+    // Defer startup prewarm + offline sync so they don't compete with the
+    // first paint on Android. Without this they kick off network requests
+    // and React Query writes during initial mount, which makes the first
+    // screen feel sluggish.
+    const handle = setTimeout(() => {
+      prewarmCriticalQueries(queryClient).catch(() => {});
+      sync().catch(() => {});
+    }, 600);
+
+    const stopPrewarm = startBackgroundPrewarm(queryClient, sync);
+    return () => {
+      clearTimeout(handle);
+      stopPrewarm();
+    };
+  }, [queryClient, sync]);
+
+  return null;
 }

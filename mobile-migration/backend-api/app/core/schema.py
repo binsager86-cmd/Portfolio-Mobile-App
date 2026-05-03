@@ -534,6 +534,20 @@ def ensure_all_tables() -> None:
     except Exception as e:
         logger.warning("⚠️  push_tokens table creation skipped: %s", e)
 
+    # ── 15b. Portfolio news dispatches (idempotency log) ─────────────
+    try:
+        exec_sql("""
+            CREATE TABLE IF NOT EXISTS portfolio_news_dispatches (
+                user_id         INTEGER NOT NULL,
+                news_id         TEXT NOT NULL,
+                dispatched_at   TIMESTAMP NOT NULL,
+                PRIMARY KEY (user_id, news_id)
+            )
+        """)
+        logger.info("✅  portfolio_news_dispatches table ensured")
+    except Exception as e:
+        logger.warning("⚠️  portfolio_news_dispatches table creation skipped: %s", e)
+
     # ── 16. Additive column migrations ───────────────────────────────
     try:
         # -- users --
@@ -572,6 +586,9 @@ def ensure_all_tables() -> None:
         # -- portfolio_cash --
         add_column_if_missing("portfolio_cash", "manual_override", "INTEGER DEFAULT 0")
         add_column_if_missing("portfolio_cash", "last_updated", "INTEGER")
+
+        # -- portfolio_snapshots (legacy DBs may miss this nullable column) --
+        add_column_if_missing("portfolio_snapshots", "portfolio", "TEXT")
 
         logger.info("✅  Additive column migrations applied")
     except Exception as e:
@@ -692,6 +709,8 @@ def _ensure_indexes() -> None:
         ("idx_news_category",        "news_articles",          "category"),
         # Push tokens
         ("idx_pushtok_user",         "push_tokens",            "user_id"),
+        # Portfolio news dispatch log
+        ("idx_pndispatch_dispatched", "portfolio_news_dispatches", "dispatched_at"),
         # External accounts & portfolio transactions
         ("idx_extacc_user",          "external_accounts",      "user_id"),
         ("idx_ptxn_user",            "portfolio_transactions", "user_id"),

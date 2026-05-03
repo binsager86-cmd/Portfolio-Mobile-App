@@ -1,0 +1,801 @@
+/**
+ * Japanese candlestick chart (price + volume panes), TradingView-inspired:
+ *   - Dynamic Y range computed only from the *visible* window, so candle
+ *     bodies always render at meaningful height even when total range is wide.
+ *   - Bars stretch to fill chart width (no fixed bar width), so 30 candles
+ *     look as readable as 250.
+ *   - Zoom (+ / − / Fit) toolbar; mouse-wheel zoom on web; drag-to-pan when
+ *     zoomed in; crosshair-on-hover otherwise. Two-finger drag pans on mobile.
+ *   - Last-price horizontal marker + persistent OHLCV header that updates
+ *     while the user scrubs.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type ViewProps,
+} from "react-native";
+import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
+
+import type { ThemePalette } from "@/constants/theme";
+import type { WhaleTrackerCandle } from "@/services/api/analytics/whaleTracker";
+import { resampleWeekly } from "@/src/features/trade-signals/whaleRadar";
+
+type Granularity = "1D" | "1W";
+type InteractionMode = "cross" | "pan";
+
+interface Props {
+  candles: WhaleTrackerCandle[];
+  colors: ThemePalette;
+  /** @deprecated kept for backwards compat. The chart now sizes itself. */
+  maxBars?: number;
+  height?: number;
+}
+
+const BULL_COLOR = "#16a34a";
+const BEAR_COLOR = "#dc2626";
+const MIN_VISIBLE = 8;
+
+function formatVolume(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
+}
+
+export function CandlestickChart({ candles, colors, height: heightProp }: Props) {
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const [granularity, setGranularity] = useState<Granularity>("1D");
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [mode, setMode] = useState<InteractionMode>("pan");
+  const [measuredW, setMeasuredW] = useState(0);
+
+  const series = useMemo(() => {
+    const base = granularity === "1W" ? resampleWeekly(candles) : candles;
+    // Drop any phantom candles where any OHLC value is zero or missing —
+    // these are ex-dividend placeholder rows that corrupt the Y-axis scale.
+    return base.filter(
+      (c) => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0,
+    );
+  }, [candles, granularity]);
+
+  // Responsive height: prefer prop, otherwise scale to viewport.
+  const height = heightProp ?? Math.max(500, Math.min(720, Math.round(winHeight * 0.6)));
+
+  // ── Zoom + pan window ─────────────────────────────────────────
+  // visibleCount = how many bars to render; offset = right-edge index.
+  const [visibleCount, setVisibleCount] = useState(() => Math.min(50, series.length || 50));
+  const [offset, setOffset] = useState(0); // bars hidden on the right (0 = latest)
+
+  // Reset window whenever the underlying series identity changes.
+  useEffect(() => {
+    setVisibleCount(Math.min(50, Math.max(MIN_VISIBLE, series.length)));
+    setOffset(0);
+    setHoverIdx(null);
+    setCursor(null);
+  }, [series.length, granularity]);
+
+  const clampWindow = useCallback(
+    (count: number, off: number) => {
+      const c = Math.max(MIN_VISIBLE, Math.min(series.length, Math.round(count)));
+      const maxOff = Math.max(0, series.length - c);
+      const o = Math.max(0, Math.min(maxOff, Math.round(off)));
+      return { count: c, off: o };
+    },
+    [series.length],
+  );
+
+  const visible = useMemo(() => {
+    if (series.length === 0) return [];
+    const end = series.length - offset;
+    const start = Math.max(0, end - visibleCount);
+    return series.slice(start, end);
+  }, [series, visibleCount, offset]);
+
+  // ── Layout ─────────────────────────────────────────────────────
+  const padLeft = 56;
+  const padRight = 16;
+  const padTop = 8;
+  const padBottom = 32;
+  const paneGap = 8;
+  const chartW = Math.max(measuredW || winWidth - 32, 320);
+  const innerW = chartW - padLeft - padRight;
+  const totalInnerH = height - padTop - padBottom - paneGap;
+  const priceH = Math.round(totalInnerH * 0.72);
+  const volumeH = totalInnerH - priceH;
+  const volumeTop = padTop + priceH + paneGap;
+  const slotWidth = visible.length > 0 ? innerW / visible.length : 0;
+  // Dynamic candle body width: ~85% of slot for maximum visibility
+  const barWidth = Math.max(3, Math.min(32, slotWidth * 0.85));
+
+  // ── Scales ─────────────────────────────────────────────────────
+  const { yScale, vScale, gridValues, volTicks, yMaxPad, yMinPad } = useMemo(() => {
+    if (visible.length === 0) {
+      return {
+        yScale: () => 0,
+        vScale: () => 0,
+        gridValues: [] as number[],
+        volTicks: [] as number[],
+        yMaxPad: 0,
+        yMinPad: 0,
+      };
+    }
+    const highs = visible.map((c) => c.high);
+    const lows = visible.map((c) => c.low);
+    const yMax = Math.max(...highs);
+    const yMin = Math.min(...lows);
+    const yRange = yMax - yMin || Math.abs(yMax * 0.01); // Minimum 1% of price
+    
+    // Minimal 3% padding to keep scale tight to actual data
+    const padPct = 0.03;
+    const yMaxP = yMax + yRange * padPct;
+    const yMinP = yMin - yRange * padPct;
+    const yRangeP = yMaxP - yMinP;
+    const ys = (v: number) => padTop + ((yMaxP - v) / yRangeP) * priceH;
+    const vMax = Math.max(...visible.map((c) => c.volume), 1);
+    const vs = (v: number) => volumeTop + (1 - v / vMax) * volumeH;
+    const gridLevels = 5;
+    const gv = Array.from({ length: gridLevels }, (_, i) => yMaxP - (yRangeP * i) / (gridLevels - 1));
+    return {
+      yScale: ys,
+      vScale: vs,
+      gridValues: gv,
+      volTicks: [vMax, vMax / 2, 0],
+      yMaxPad: yMaxP,
+      yMinPad: yMinP,
+    };
+  }, [visible, priceH, volumeH, padTop, volumeTop]);
+
+  const labelIndices = useMemo(() => {
+    if (visible.length === 0) return [];
+    const labelCount = Math.min(6, visible.length);
+    return Array.from({ length: labelCount }, (_, i) =>
+      Math.floor((i * (visible.length - 1)) / Math.max(labelCount - 1, 1)),
+    );
+  }, [visible.length]);
+
+  // ── Pointer handling (continuous, snapped X) ──────────────────
+  const handleMove = (x: number, y: number) => {
+    if (slotWidth <= 0) return;
+    if (x < padLeft || x > chartW - padRight) {
+      setHoverIdx(null);
+      setCursor(null);
+      return;
+    }
+    const i = Math.floor((x - padLeft) / slotWidth);
+    const idx = Math.max(0, Math.min(visible.length - 1, i));
+    const snappedX = padLeft + slotWidth * idx + slotWidth / 2;
+    setHoverIdx(idx);
+    setCursor({ x: snappedX, y });
+  };
+
+  const handleLeave = () => {
+    setHoverIdx(null);
+    setCursor(null);
+  };
+
+  // ── Zoom / pan helpers ────────────────────────────────────────
+  const zoomBy = useCallback(
+    (factor: number, anchorIdx?: number) => {
+      const newCount = visibleCount / factor;
+      // Keep the bar under the anchor stationary by adjusting offset.
+      const anchor = anchorIdx ?? Math.floor(visible.length / 2);
+      const anchorAbs = series.length - offset - visible.length + anchor;
+      const newWindow = clampWindow(newCount, offset);
+      const newAnchor = Math.round(anchor * (newWindow.count / Math.max(visibleCount, 1)));
+      const newOff = clampWindow(newWindow.count, series.length - anchorAbs - newAnchor - 1).off;
+      setVisibleCount(newWindow.count);
+      setOffset(newOff);
+    },
+    [visibleCount, offset, visible.length, series.length, clampWindow],
+  );
+
+  const fitAll = useCallback(() => {
+    setVisibleCount(Math.max(MIN_VISIBLE, series.length));
+    setOffset(0);
+  }, [series.length]);
+
+  const panBars = useCallback(
+    (deltaBars: number) => {
+      const next = clampWindow(visibleCount, offset + deltaBars);
+      setOffset(next.off);
+    },
+    [clampWindow, visibleCount, offset],
+  );
+
+  // RN-web maps these directly onto the underlying DOM <div>.
+  // On native they're silently ignored, so the cast is safe.
+  const webHandlers = {
+    onMouseMove: (e: { nativeEvent: { offsetX?: number; offsetY?: number } }) => {
+      const ne = e.nativeEvent;
+      if (typeof ne.offsetX === "number" && typeof ne.offsetY === "number") {
+        handleMove(ne.offsetX, ne.offsetY);
+      }
+    },
+    onMouseLeave: handleLeave,
+    onWheel: (e: { deltaY: number; ctrlKey?: boolean; nativeEvent: { offsetX?: number }; preventDefault?: () => void }) => {
+      // Only zoom when Ctrl is held — otherwise let the page scroll normally.
+      if (!e.ctrlKey) return;
+      e.preventDefault?.();
+      const x = e.nativeEvent.offsetX ?? padLeft + innerW / 2;
+      const idx =
+        slotWidth > 0
+          ? Math.max(0, Math.min(visible.length - 1, Math.floor((x - padLeft) / slotWidth)))
+          : Math.floor(visible.length / 2);
+      // Wheel up (deltaY < 0) zooms in.
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      zoomBy(factor, idx);
+    },
+  } as unknown as ViewProps;
+
+  // Native gestures: drag = pan when in pan mode, otherwise crosshair scrub.
+  const panState = useRef({ startX: 0, startOffset: 0 });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt: GestureResponderEvent) => {
+        if (mode === "pan") {
+          panState.current = { startX: evt.nativeEvent.locationX, startOffset: offset };
+        } else {
+          handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        }
+      },
+      onPanResponderMove: (evt: GestureResponderEvent) => {
+        if (mode === "pan") {
+          if (slotWidth <= 0) return;
+          const dx = evt.nativeEvent.locationX - panState.current.startX;
+          const deltaBars = Math.round(dx / slotWidth);
+          const next = clampWindow(visibleCount, panState.current.startOffset + deltaBars);
+          setOffset(next.off);
+        } else {
+          handleMove(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+        }
+      },
+      onPanResponderRelease: () => {
+        if (mode === "cross") handleLeave();
+      },
+      onPanResponderTerminate: () => {
+        if (mode === "cross") handleLeave();
+      },
+    }),
+  ).current;
+
+  // ── Display values for the persistent top bar ─────────────────
+  const displayed = hoverIdx !== null ? visible[hoverIdx] : visible[visible.length - 1];
+  const prevForChange =
+    hoverIdx !== null && hoverIdx > 0
+      ? visible[hoverIdx - 1].close
+      : visible.length > 1
+        ? visible[visible.length - 2].close
+        : displayed?.open ?? 0;
+  const change = displayed ? displayed.close - prevForChange : 0;
+  const changePct = displayed && prevForChange ? (change / prevForChange) * 100 : 0;
+  const dispColor = displayed && displayed.close >= displayed.open ? BULL_COLOR : BEAR_COLOR;
+
+  // Free-cursor price (for the Y-axis label pill)
+  const cursorPrice = useMemo(() => {
+    if (!cursor) return null;
+    if (cursor.y < padTop || cursor.y > padTop + priceH) return null;
+    return yMaxPad - ((cursor.y - padTop) / priceH) * (yMaxPad - yMinPad);
+  }, [cursor, padTop, priceH, yMaxPad, yMinPad]);
+
+  if (visible.length === 0 || !displayed) return null;
+
+  const onSurfaceLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (Math.abs(w - measuredW) > 0.5) setMeasuredW(w);
+  };
+
+  // Last close marker (anchored to the most-recent visible bar's close).
+  const lastClose = visible[visible.length - 1].close;
+  const lastY = yScale(lastClose);
+  const lastColor =
+    visible[visible.length - 1].close >= visible[visible.length - 1].open ? BULL_COLOR : BEAR_COLOR;
+
+  return (
+    <View style={[styles.wrap, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
+      {/* ── Header row ───────────────────────────────────────── */}
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Price Action — Candlesticks</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+            {visible.length} {granularity === "1W" ? "weeks" : "sessions"} ·{" "}
+            {visible[0].date.slice(0, 10)} → {visible[visible.length - 1].date.slice(0, 10)}
+          </Text>
+        </View>
+        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+          {((["1D", "1W"] as Granularity[])).map((g) => {
+            const active = granularity === g;
+            return (
+              <Pressable
+                key={g}
+                onPress={() => setGranularity(g)}
+                style={[styles.toggleBtn, active && { backgroundColor: colors.accentPrimary }]}
+              >
+                <Text style={[styles.toggleText, { color: active ? "#fff" : colors.textSecondary }]}>{g}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* ── Zoom / pan toolbar ────────────────────────────────── */}
+      <View style={styles.toolRow}>
+        {/* Zoom out */}
+        <Pressable
+          onPress={() => zoomBy(1 / 1.4)}
+          style={({ pressed }) => [
+            styles.zoomBtn,
+            { borderColor: colors.borderColor, backgroundColor: pressed ? colors.accentPrimary + "33" : colors.bgSecondary },
+          ]}
+        >
+          <Text style={[styles.zoomBtnIcon, { color: colors.textPrimary }]}>−</Text>
+          <Text style={[styles.zoomBtnLabel, { color: colors.textMuted }]}>Zoom Out</Text>
+        </Pressable>
+        {/* Zoom in */}
+        <Pressable
+          onPress={() => zoomBy(1.4)}
+          style={({ pressed }) => [
+            styles.zoomBtn,
+            { borderColor: colors.borderColor, backgroundColor: pressed ? colors.accentPrimary + "33" : colors.bgSecondary },
+          ]}
+        >
+          <Text style={[styles.zoomBtnIcon, { color: colors.textPrimary }]}>+</Text>
+          <Text style={[styles.zoomBtnLabel, { color: colors.textMuted }]}>Zoom In</Text>
+        </Pressable>
+        {/* Fit all */}
+        <Pressable
+          onPress={fitAll}
+          style={({ pressed }) => [
+            styles.fitBtn,
+            { backgroundColor: pressed ? colors.accentPrimary + "cc" : colors.accentPrimary, borderColor: colors.accentPrimary },
+          ]}
+        >
+          <Text style={styles.fitBtnText}>⊡ Fit All</Text>
+        </Pressable>
+        {/* Pan arrows */}
+        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+          <Pressable onPress={() => panBars(Math.max(1, Math.round(visibleCount * 0.25)))} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>◀</Text>
+          </Pressable>
+          <Pressable onPress={() => panBars(-Math.max(1, Math.round(visibleCount * 0.25)))} style={styles.toggleBtn}>
+            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>▶</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.toolMeta, { color: colors.textMuted }]}>
+          {visible.length}/{series.length} bars
+        </Text>
+      </View>
+
+      {/* ── Persistent OHLCV bar (TradingView-style) ─────────── */}
+      <View
+        style={[
+          styles.topBar,
+          { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary },
+          hoverIdx !== null && { borderColor: colors.accentPrimary },
+        ]}
+      >
+        <Text style={[styles.topBarDate, { color: colors.textPrimary }]}>{displayed.date.slice(0, 10)}</Text>
+        <View style={styles.topBarCells}>
+          <TopBarCell colors={colors} label="O" value={displayed.open.toFixed(2)} />
+          <TopBarCell colors={colors} label="H" value={displayed.high.toFixed(2)} valueColor={BULL_COLOR} />
+          <TopBarCell colors={colors} label="L" value={displayed.low.toFixed(2)} valueColor={BEAR_COLOR} />
+          <TopBarCell colors={colors} label="C" value={displayed.close.toFixed(2)} valueColor={dispColor} />
+          <TopBarCell colors={colors} label="VOL" value={formatVolume(displayed.volume)} />
+        </View>
+        <Text style={[styles.topBarChange, { color: dispColor }]}>
+          {change >= 0 ? "+" : ""}
+          {change.toFixed(2)} ({changePct >= 0 ? "+" : ""}
+          {changePct.toFixed(2)}%)
+        </Text>
+      </View>
+
+      {/* ── Chart surface ────────────────────────────────────── */}
+      <View
+        onLayout={onSurfaceLayout}
+        style={{ width: "100%", height }}
+        {...panResponder.panHandlers}
+        {...webHandlers}
+      >
+        <Svg width={chartW} height={height} pointerEvents="none">
+            {/* Price grid */}
+            {gridValues.map((v, i) => {
+              const y = yScale(v);
+              return (
+                <G key={`grid-${i}`}>
+                  <Line
+                    x1={padLeft}
+                    x2={chartW - padRight}
+                    y1={y}
+                    y2={y}
+                    stroke={colors.borderColor}
+                    strokeWidth={1}
+                    strokeDasharray="2,4"
+                    opacity={0.5}
+                  />
+                  <SvgText x={padLeft - 6} y={y + 4} fontSize={11} fill={colors.textMuted} textAnchor="end">
+                    {v.toFixed(2)}
+                  </SvgText>
+                </G>
+              );
+            })}
+
+            {/* Candles */}
+            {visible.map((c, i) => {
+              const cx = padLeft + slotWidth * i + slotWidth / 2;
+              const isBull = c.close >= c.open;
+              const color = isBull ? BULL_COLOR : BEAR_COLOR;
+              const yHigh = yScale(c.high);
+              const yLow = yScale(c.low);
+              const yOpen = yScale(c.open);
+              const yClose = yScale(c.close);
+              const bodyTop = Math.min(yOpen, yClose);
+              // Minimum body height of 2 pixels for better visibility
+              const bodyH = Math.max(Math.abs(yClose - yOpen), 2);
+              return (
+                <G key={`candle-${c.date}-${i}`}>
+                  {/* Wick (high-low line) */}
+                  <Line x1={cx} x2={cx} y1={yHigh} y2={yLow} stroke={color} strokeWidth={2} />
+                  {/* Body */}
+                  <Rect
+                    x={cx - barWidth / 2}
+                    y={bodyTop}
+                    width={barWidth}
+                    height={bodyH}
+                    fill={color}
+                    stroke={color}
+                    strokeWidth={1.5}
+                  />
+                </G>
+              );
+            })}
+
+            {/* Volume pane separator */}
+            <Line
+              x1={padLeft}
+              x2={chartW - padRight}
+              y1={volumeTop}
+              y2={volumeTop}
+              stroke={colors.borderColor}
+              strokeWidth={1}
+              opacity={0.6}
+            />
+
+            {/* Volume axis ticks */}
+            {volTicks.map((v, i) => (
+              <SvgText
+                key={`vtick-${i}`}
+                x={padLeft - 6}
+                y={vScale(v) + 4}
+                fontSize={10}
+                fill={colors.textMuted}
+                textAnchor="end"
+              >
+                {formatVolume(v)}
+              </SvgText>
+            ))}
+
+            {/* Volume bars */}
+            {visible.map((c, i) => {
+              const cx = padLeft + slotWidth * i + slotWidth / 2;
+              const isBull = c.close >= c.open;
+              const color = isBull ? BULL_COLOR : BEAR_COLOR;
+              const y = vScale(c.volume);
+              const h = Math.max(volumeTop + volumeH - y, 1);
+              return (
+                <Rect
+                  key={`vol-${c.date}-${i}`}
+                  x={cx - barWidth / 2}
+                  y={y}
+                  width={barWidth}
+                  height={h}
+                  fill={color}
+                  opacity={0.65}
+                />
+              );
+            })}
+
+            {/* X-axis date labels */}
+            {labelIndices.map((idx) => {
+              const cx = padLeft + slotWidth * idx + slotWidth / 2;
+              const dateStr = visible[idx]?.date.slice(0, 10) ?? "";
+              return (
+                <SvgText
+                  key={`xlabel-${idx}`}
+                  x={cx}
+                  y={height - 10}
+                  fontSize={10}
+                  fill={colors.textMuted}
+                  textAnchor="middle"
+                >
+                  {dateStr.slice(5)}
+                </SvgText>
+              );
+            })}
+
+            {/* Last price marker */}
+            {lastY >= padTop && lastY <= padTop + priceH && (
+              <G key="lastprice">
+                <Line
+                  x1={padLeft}
+                  x2={chartW - padRight}
+                  y1={lastY}
+                  y2={lastY}
+                  stroke={lastColor}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
+                  opacity={0.7}
+                />
+                <Rect
+                  x={chartW - padRight - 56}
+                  y={lastY - 10}
+                  width={54}
+                  height={20}
+                  rx={3}
+                  fill={lastColor}
+                />
+                <SvgText
+                  x={chartW - padRight - 4}
+                  y={lastY + 4}
+                  fontSize={11}
+                  fontWeight="700"
+                  fill="#fff"
+                  textAnchor="end"
+                >
+                  {lastClose.toFixed(2)}
+                </SvgText>
+              </G>
+            )}
+
+            {/* Crosshair */}
+            {cursor && hoverIdx !== null && (
+              <G key="crosshair">
+                {/* Vertical (snapped) */}
+                <Line
+                  x1={cursor.x}
+                  x2={cursor.x}
+                  y1={padTop}
+                  y2={volumeTop + volumeH}
+                  stroke={colors.textSecondary}
+                  strokeWidth={1}
+                  strokeDasharray="3,3"
+                  opacity={0.85}
+                />
+                {/* Horizontal (free, only inside price pane) */}
+                {cursor.y >= padTop && cursor.y <= padTop + priceH && (
+                  <>
+                    <Line
+                      x1={padLeft}
+                      x2={chartW - padRight}
+                      y1={cursor.y}
+                      y2={cursor.y}
+                      stroke={colors.textSecondary}
+                      strokeWidth={1}
+                      strokeDasharray="3,3"
+                      opacity={0.85}
+                    />
+                    {cursorPrice !== null && (
+                      <G>
+                        <Rect
+                          x={2}
+                          y={cursor.y - 10}
+                          width={padLeft - 6}
+                          height={20}
+                          rx={3}
+                          fill={colors.accentPrimary}
+                        />
+                        <SvgText
+                          x={padLeft - 6}
+                          y={cursor.y + 4}
+                          fontSize={11}
+                          fontWeight="700"
+                          fill="#fff"
+                          textAnchor="end"
+                        >
+                          {cursorPrice.toFixed(2)}
+                        </SvgText>
+                      </G>
+                    )}
+                  </>
+                )}
+                {/* X-axis date label pill */}
+                <G>
+                  <Rect
+                    x={cursor.x - 38}
+                    y={height - padBottom + 4}
+                    width={76}
+                    height={20}
+                    rx={3}
+                    fill={colors.accentPrimary}
+                  />
+                  <SvgText
+                    x={cursor.x}
+                    y={height - padBottom + 18}
+                    fontSize={11}
+                    fontWeight="700"
+                    fill="#fff"
+                    textAnchor="middle"
+                  >
+                    {visible[hoverIdx].date.slice(0, 10)}
+                  </SvgText>
+                </G>
+              </G>
+            )}
+          </Svg>
+
+          {/* Floating tooltip near cursor */}
+          {cursor && hoverIdx !== null && (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.tooltip,
+                {
+                  borderColor: colors.borderColor,
+                  backgroundColor: colors.bgCard,
+                  left:
+                    cursor.x + 200 > chartW - padRight
+                      ? Math.max(padLeft, cursor.x - 210)
+                      : cursor.x + 12,
+                  top: Math.max(padTop, Math.min(cursor.y - 10, height - 150)),
+                },
+              ]}
+            >
+              <Text style={[styles.tooltipDate, { color: colors.textPrimary }]}>
+                {visible[hoverIdx].date.slice(0, 10)}
+              </Text>
+              <TooltipRow colors={colors} label="Open" value={visible[hoverIdx].open.toFixed(2)} />
+              <TooltipRow colors={colors} label="High" value={visible[hoverIdx].high.toFixed(2)} valueColor={BULL_COLOR} />
+              <TooltipRow colors={colors} label="Low" value={visible[hoverIdx].low.toFixed(2)} valueColor={BEAR_COLOR} />
+              <TooltipRow
+                colors={colors}
+                label="Close"
+                value={visible[hoverIdx].close.toFixed(2)}
+                valueColor={visible[hoverIdx].close >= visible[hoverIdx].open ? BULL_COLOR : BEAR_COLOR}
+              />
+              <TooltipRow colors={colors} label="Volume" value={formatVolume(visible[hoverIdx].volume)} />
+            </View>
+          )}
+      </View>
+
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.swatch, { backgroundColor: BULL_COLOR }]} />
+          <Text style={[styles.legendText, { color: colors.textSecondary }]}>Bullish</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.swatch, { backgroundColor: BEAR_COLOR }]} />
+          <Text style={[styles.legendText, { color: colors.textSecondary }]}>Bearish</Text>
+        </View>
+        <Text style={[styles.legendText, { color: colors.textMuted, marginLeft: "auto" }]}>
+          Ctrl + scroll to zoom · drag to pan · hover for OHLCV
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────
+
+function TopBarCell({
+  colors,
+  label,
+  value,
+  valueColor,
+}: {
+  colors: ThemePalette;
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  return (
+    <View style={styles.topBarCell}>
+      <Text style={[styles.topBarLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.topBarValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+function TooltipRow({
+  colors,
+  label,
+  value,
+  valueColor,
+}: {
+  colors: ThemePalette;
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  return (
+    <View style={styles.tooltipRow}>
+      <Text style={[styles.tooltipLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.tooltipValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  wrap: { borderRadius: 12, borderWidth: 1, padding: 14 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },
+  title: { fontSize: 16, fontWeight: "700", marginBottom: 2 },
+  subtitle: { fontSize: 13 },
+  toggle: { flexDirection: "row", borderWidth: 1, borderRadius: 8, padding: 2 },
+  toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  toggleText: { fontSize: 13, fontWeight: "700" },
+
+  toolRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  toolMeta: { fontSize: 12, marginLeft: "auto", fontVariant: ["tabular-nums"] },
+
+  zoomBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  zoomBtnIcon: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
+  zoomBtnLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
+
+  fitBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fitBtnText: { fontSize: 13, fontWeight: "800", color: "#fff", letterSpacing: 0.4 },
+
+  topBar: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+  topBarDate: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  topBarCells: { flexDirection: "row", flexWrap: "wrap", gap: 14, alignItems: "baseline", flex: 1 },
+  topBarCell: { flexDirection: "row", alignItems: "baseline", gap: 4 },
+  topBarLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
+  topBarValue: { fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  topBarChange: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+
+  tooltip: {
+    position: "absolute",
+    minWidth: 180,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    gap: 4,
+  },
+  tooltipDate: { fontSize: 13, fontWeight: "700", marginBottom: 4 },
+  tooltipRow: { flexDirection: "row", justifyContent: "space-between", gap: 16 },
+  tooltipLabel: { fontSize: 12 },
+  tooltipValue: { fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
+
+  legend: { flexDirection: "row", gap: 16, marginTop: 8, flexWrap: "wrap", alignItems: "center" },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  swatch: { width: 12, height: 12, borderRadius: 2 },
+  legendText: { fontSize: 12 },
+});

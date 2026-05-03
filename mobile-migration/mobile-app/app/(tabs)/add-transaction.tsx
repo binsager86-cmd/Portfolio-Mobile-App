@@ -4,8 +4,6 @@
  * Step 1 → Portfolio + Transaction Type
  * Step 2 → Stock, Date, Amounts, Dividends, Advanced, Notes
  * Step 3 → Review summary with edit-back buttons
- *
- * Import / Danger-zone UI shown in footer on step 1.
  */
 
 import { FormScreen } from "@/components/screens";
@@ -20,7 +18,6 @@ import { useThemeStore } from "@/services/themeStore";
 import { Step1Type } from "@/src/features/transactions/components/Step1Type";
 import { Step2Details } from "@/src/features/transactions/components/Step2Details";
 import { Step3Review } from "@/src/features/transactions/components/Step3Review";
-import { TransactionImport } from "@/src/features/transactions/components/TransactionImport";
 import {
   PORTFOLIOS,
   STEP1_FIELDS,
@@ -38,7 +35,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { ProgressBar } from "react-native-paper";
+
 
 const TOTAL_STEPS = 3;
 
@@ -215,7 +212,8 @@ export default function AddTransactionScreen() {
 
   const onFormSubmit = step < TOTAL_STEPS ? handleNext : handleSubmit(onSubmit);
 
-  const footerContent = !isEditMode && step === 1 ? <TransactionImport /> : undefined;
+  // Import/danger-zone is intentionally hidden on this screen.
+  const footerContent = undefined;
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -229,11 +227,14 @@ export default function AddTransactionScreen() {
         footer={footerContent}
       >
         {/* ── Progress bar ── */}
-        <ProgressBar
-          progress={step / TOTAL_STEPS}
-          color={colors.accentPrimary}
-          style={styles.progressBar}
-        />
+        <View style={[styles.progressTrack, { backgroundColor: colors.bgSecondary }]}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${(step / TOTAL_STEPS) * 100}%` as `${number}%`, backgroundColor: colors.accentPrimary },
+            ]}
+          />
+        </View>
 
         {/* ── Step indicator with labels ── */}
         <View style={styles.stepRow}>
@@ -309,25 +310,44 @@ export default function AddTransactionScreen() {
 // ── Styles ──────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  progressBar: {
-    height: 6,
-    borderRadius: 3,
-    marginBottom: UITokens.spacing.md,
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: UITokens.spacing.sm,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 4,
+    borderRadius: 2,
   },
   stepRow: {
-    flexDirection: "row", alignItems: "flex-start", justifyContent: "center",
-    gap: 32, marginBottom: 20, position: "relative",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: UITokens.spacing.xl,
+    marginBottom: UITokens.spacing.lg,
+    position: "relative",
   },
   stepItem: {
-    alignItems: "center", zIndex: 1, gap: 4,
+    alignItems: "center",
+    zIndex: 1,
+    gap: UITokens.spacing.xs,
   },
   stepDot: {
-    width: 32, height: 32, borderRadius: 16,
-    alignItems: "center", justifyContent: "center",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepNum: { fontSize: 14, fontWeight: "700" },
   stepLabel: { fontSize: 11, fontWeight: "600" },
   stepLine: { position: "absolute", height: 2, left: "20%", right: "20%", top: 16 },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: UITokens.spacing.xs + 2,
+    marginBottom: UITokens.spacing.sm,
+  },
   backText: { fontSize: 14, fontWeight: "600" },
 });

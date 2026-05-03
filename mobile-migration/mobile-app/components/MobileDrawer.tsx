@@ -16,6 +16,7 @@ import { usePathname, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+    InteractionManager,
     Platform,
     Pressable,
     ScrollView,
@@ -27,7 +28,6 @@ import {
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
-    withDelay,
     withSpring,
     withTiming,
 } from "react-native-reanimated";
@@ -42,53 +42,30 @@ interface MobileDrawerProps {
   onClose: () => void;
 }
 
-/** Individual nav item with staggered entrance */
-function DrawerNavItem({
+/**
+ * Individual nav item.
+ *
+ * Performance note: this used to spin up three reanimated shared values
+ * per item plus a staggered spring entrance. With ~17 items that meant
+ * ~50 shared values + 17 setTimeouts on every drawer open, which made
+ * the drawer feel sluggish on Android. Plain `Pressable` keeps the
+ * tap-to-navigate path on the UI thread.
+ */
+const DrawerNavItem = React.memo(function DrawerNavItem({
   item,
-  index,
   active,
   colors,
   onPress,
   t,
-  visible,
 }: {
   item: (typeof NAV_ITEMS)[number];
-  index: number;
   active: boolean;
   colors: ThemePalette;
   onPress: () => void;
   t: (key: string) => string;
-  visible: boolean;
 }) {
-  const translateX = useSharedValue(-40);
-  const opacity = useSharedValue(0);
-  const pressScale = useSharedValue(1);
-
-  useEffect(() => {
-    if (visible) {
-      const delay = 60 + index * 35;
-      translateX.value = withDelay(delay, withSpring(0, Motion.spring.gentle));
-      opacity.value = withDelay(delay, withTiming(1, { duration: Motion.duration.normal }));
-    } else {
-      translateX.value = -40;
-      opacity.value = 0;
-    }
-  }, [visible]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }, { scale: pressScale.value }],
-    opacity: opacity.value,
-  }));
-
-  const handlePressIn = useCallback(() => {
-    pressScale.value = withSpring(0.97, Motion.spring.snappy);
-  }, []);
-  const handlePressOut = useCallback(() => {
-    pressScale.value = withSpring(1, Motion.spring.gentle);
-  }, []);
-
   return (
-    <Animated.View style={animStyle}>
+    <View>
       {item.section && (
         <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
           {t('nav.' + item.section)}
@@ -96,16 +73,17 @@ function DrawerNavItem({
       )}
       <Pressable
         onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
         accessibilityRole="menuitem"
         accessibilityLabel={t('nav.' + item.label)}
         accessibilityState={{ selected: active }}
-        style={[
+        android_ripple={{ color: colors.bgCardHover }}
+        style={({ pressed }) => [
           s.navItem,
           {
             backgroundColor: active
               ? colors.accentPrimary + "18"
+              : pressed
+              ? colors.bgCardHover
               : "transparent",
             borderLeftColor: active ? colors.accentPrimary : "transparent",
             borderLeftWidth: 3,
@@ -130,9 +108,9 @@ function DrawerNavItem({
           {t('nav.' + item.label)}
         </Text>
       </Pressable>
-    </Animated.View>
+    </View>
   );
-}
+});
 
 export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
   const router = useRouter();
@@ -185,10 +163,15 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
     return pathname === clean || pathname === navPath;
   };
 
-  const handleNav = (path: string) => {
-    router.push(path as never);
+  const handleNav = useCallback((path: string) => {
+    // Close the drawer first so its slide-out animation starts paint
+    // immediately, then defer the (potentially heavy) screen mount until
+    // after that frame. This keeps tapping a nav item feeling instant.
     onClose();
-  };
+    InteractionManager.runAfterInteractions(() => {
+      router.push(path as never);
+    });
+  }, [onClose, router]);
 
   const handleLogout = async () => {
     await logout();
@@ -200,8 +183,8 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
 
   return (
     <View
-      style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ pointerEvents: "none" } as ViewStyle) : null]}
-      pointerEvents={Platform.OS === "web" ? undefined : "box-none"}
+      style={[StyleSheet.absoluteFill, { pointerEvents: "box-none" } as ViewStyle]}
+      pointerEvents="box-none"
     >
       {/* Backdrop */}
       <Animated.View style={[s.backdrop, backdropStyle]}>
@@ -235,18 +218,20 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
           </Pressable>
         </View>
 
-        {/* Nav Links — staggered entrance */}
-        <ScrollView style={s.navScroll} showsVerticalScrollIndicator={false}>
-          {navItems.map((item, idx) => (
+        {/* Nav Links */}
+        <ScrollView
+          style={s.navScroll}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews={Platform.OS === "android"}
+        >
+          {navItems.map((item) => (
             <DrawerNavItem
               key={item.path}
               item={item}
-              index={idx}
               active={isActive(item.path)}
               colors={colors}
               onPress={() => handleNav(item.path)}
               t={t}
-              visible={visible}
             />
           ))}
         </ScrollView>

@@ -160,8 +160,11 @@ export default function TabLayout() {
             freezeOnBlur: true,
             tabBarActiveTintColor: colors.accentPrimary,
             tabBarInactiveTintColor: colors.textMuted,
-            // Screen transition animation
-            animation: "shift",
+            // Screen transition animation — `none` keeps tab switches instant
+            // on Android. The `shift` animation runs on the JS thread and
+            // makes navigation feel sluggish, especially while the new
+            // screen is mounting and fetching data.
+            animation: "none",
             headerStyle: {
               backgroundColor: colors.headerBg,
               ...(Platform.OS === "web"
@@ -288,6 +291,16 @@ export default function TabLayout() {
               href: isAdmin || !showSidebar ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="flask" color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="trade-signals"
+            options={{
+              title: t("nav.tradeSignals"),
+              href: isAdmin || !showSidebar ? null : undefined,
+              tabBarIcon: ({ color }) => (
+                <TabBarIcon name="signal" color={color} />
               ),
             }}
           />

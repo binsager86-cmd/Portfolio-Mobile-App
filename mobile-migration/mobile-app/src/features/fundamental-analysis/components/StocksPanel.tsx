@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 import {
     Alert,
     FlatList,
+  KeyboardAvoidingView,
     Modal,
     Platform,
     Pressable,
@@ -265,6 +266,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: "center" }} behavior={Platform.OS === "web" ? undefined : "padding"}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close stock form" style={st.modalOverlay} onPress={onClose}>
         <Pressable accessibilityRole="none" style={[st.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, maxHeight: "85%" }]} onPress={() => {}}>
           <View style={[st.rowBetween, { marginBottom: 16 }]}>
@@ -430,6 +432,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
           </ScrollView>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

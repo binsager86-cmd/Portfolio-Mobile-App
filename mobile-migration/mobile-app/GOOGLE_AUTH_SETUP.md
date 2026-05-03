@@ -1,5 +1,12 @@
 # Google OAuth Setup Guide — Portfolio Mobile App
 
+> **Security note — `google-services.json`:**
+> The `google-services.json` file in this repo contains only **client-side** configuration:
+> a Firebase Android SDK App ID, project metadata, and an Android-restricted API key
+> (key is restricted to `com.portfoliotracker.app` package; useless without the APK signature).
+> It does **not** contain service-account credentials, server keys, or private keys.
+> If you ever regenerate credentials, verify the new file contains only these fields before committing.
+
 ## 1. Create OAuth Client ID
 
 1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)

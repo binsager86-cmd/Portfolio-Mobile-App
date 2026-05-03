@@ -25,17 +25,18 @@ import type { TFunction } from "i18next";
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    ActivityIndicator,
-    Modal,
-    Platform,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    type ViewStyle
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewStyle
 } from "react-native";
 
 type AppColors = ThemePalette;
@@ -979,6 +980,7 @@ function AdminDashboardScreen() {
 
       {/* ══════════════════ Add User Modal ══════════════════ */}
       <Modal visible={showAddModal} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === "web" ? undefined : "padding"} style={{ flex: 1, justifyContent: "center" }}>
         <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={st.modalOverlay} onPress={() => setShowAddModal(false)}>
           <Pressable accessibilityRole="none" style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
             <Text style={[st.modalTitle, { color: colors.textPrimary, fontSize: fonts.title }]}>
@@ -1060,10 +1062,12 @@ function AdminDashboardScreen() {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ══════════════════ Edit Username / Password Modal ══════════════════ */}
       <Modal visible={editField !== null && editUser !== null} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === "web" ? undefined : "padding"} style={{ flex: 1, justifyContent: "center" }}>
         <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={st.modalOverlay} onPress={() => { setEditField(null); setEditUser(null); }}>
           <Pressable accessibilityRole="none" style={[st.modalCard, { backgroundColor: colors.bgSecondary }]} onPress={() => {}}>
             <Text style={[st.modalTitle, { color: colors.textPrimary, fontSize: fonts.title }]}>
@@ -1129,6 +1133,7 @@ function AdminDashboardScreen() {
             </View>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ══════════════════ Delete Confirmation Modal ══════════════════ */}

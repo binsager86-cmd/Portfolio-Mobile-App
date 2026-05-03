@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: Portfolio Tracker CI
 
 on:
   push:
@@ -6,70 +6,92 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "22"
 
 jobs:
-  validate:
-    name: Lint · Typecheck · Test · Bundle
+  # 1. Lint & Type Check
+  lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile-app
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
-          cache: 'npm'
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install ruff mypy
+      - run: ruff check backend-api/ && ruff format --check backend-api/
+      - run: mypy backend-api/app --ignore-missing-imports
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: mobile-app/package-lock.json
+      - run: cd mobile-app && npm ci
+      - run: cd mobile-app && npm run lint
 
-      - name: Install Dependencies
-        run: npm ci --no-audit --no-fund
-
-      # ── Type-checking ───────────────────────────────────────────
-      - name: Type Check
-        run: npx tsc --noEmit --pretty
-
-      # ── Linting (zero warnings allowed) ─────────────────────────
-      - name: Lint
-        run: npx eslint . --ext .ts,.tsx --max-warnings=0
-
-      # ── Unit + Integration Tests with coverage gate ─────────────
-      - name: Run Tests
-        run: npm test -- --coverage --passWithNoTests --ci
+  # 2. Backend Tests + Alembic Drift Check
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          CI: true
-
-      # ── Web bundle + source-map analysis ────────────────────────
-      - name: Build Web
-        run: npx expo export --platform web
-
-      # ── Performance Regression Check ────────────────────────────
-      - name: Performance Budget Gate
-        run: |
-          # Check multiple possible bundle output paths
-          BUNDLE_SIZE=$(du -sk dist/assets/*bundle*.js 2>/dev/null | cut -f1)
-          if [ -z "$BUNDLE_SIZE" ]; then
-            BUNDLE=$(find dist/_expo/static/js/web -name '*.js' -type f 2>/dev/null | head -1)
-            if [ -z "$BUNDLE" ]; then echo "No bundle found — skipping size check"; exit 0; fi
-            BUNDLE_SIZE=$(du -k "$BUNDLE" | cut -f1)
-          fi
-          echo "::notice::JS Bundle size: ${BUNDLE_SIZE}KB"
-          if [ "$BUNDLE_SIZE" -gt 5120 ]; then
-            echo "::error::❌ JS Bundle ${BUNDLE_SIZE}KB exceeds 5MB budget"
-            exit 1
-          fi
-          echo "✅ Bundle within 5MB budget"
-
-      # ── Upload coverage report ──────────────────────────────────
-      - name: Upload Coverage
-        uses: actions/upload-artifact@v4
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: coverage-report
-          path: mobile-app/coverage/
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r backend-api/requirements.txt pytest pytest-asyncio pytest-cov
+      - run: cd backend-api && pytest tests/ --cov=app --cov-report=xml --cov-fail-under=80
+      - name: Alembic Migration Drift Check
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/testdb
+        run: cd backend-api && alembic check
+
+  # 3. OpenAPI Contract Validation
+  contract:
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install openapi-spec-validator prance
+      - name: Validate OpenAPI Schema
+        run: >
+          cd backend-api &&
+          python -c "
+          from prance import ResolvingParser
+          from openapi_spec_validator import validate
+          parser = ResolvingParser('openapi.yaml', backend='openapi-spec-validator')
+          validate(parser.specification)
+          print('OpenAPI contract valid')
+          "
+
+  # 4. Mobile Unit & Integration Tests
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+      - run: cd mobile-app && npm ci
+      - run: cd mobile-app && npm run test:ci

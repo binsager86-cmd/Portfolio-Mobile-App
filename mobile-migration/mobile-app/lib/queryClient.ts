@@ -2,10 +2,11 @@
  * React Query client — shared singleton with MMKV offline persistence.
  *
  * Default options:
- *  - staleTime: 60s (data stays "fresh" for 60s before background refetch)
- *  - gcTime: 24h  (keep unused cache entries for offline resilience)
- *  - retry: skip 401/403s, max 2 attempts for transient errors
- *  - refetchOnWindowFocus: "always" (refetch stale data when app gains focus)
+ *  - staleTime: 5 min (data stays fresh before background refetch)
+ *  - gcTime: 30 min  (keep unused query data in memory for a shorter window)
+ *  - retry: 1 retry with a fixed 1s delay
+ *  - refetchOnWindowFocus: false (stop aggressive foreground refetches)
+ *  - refetchOnReconnect: true
  *
  * Stale-while-revalidate: screens render cached data instantly from MMKV,
  * then silently refresh in the background. Combined with placeholderData
@@ -19,7 +20,6 @@ import { QueryClient } from "@tanstack/react-query";
 import { focusManager } from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
-import { AxiosError } from "axios";
 import { AppState, Platform } from "react-native";
 
 // ── MMKV storage (native) or localStorage (web) ─────────────────────
@@ -62,26 +62,19 @@ function createStorage() {
 
 // ── Query client ────────────────────────────────────────────────────
 
+const THIRTY_MINUTES_MS = 30 * 60_000;
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60_000,
-      gcTime: ONE_DAY_MS,
-      retry: (failureCount, error) => {
-        const status = (error as AxiosError)?.response?.status;
-        // Never retry auth errors — interceptor handles refresh/logout
-        if (status === 401 || status === 403) return false;
-        return failureCount < 2;
-      },
-      // Refetch only stale queries when the user returns to the app/tab.
-      // "always" was previously used but caused a network thundering-herd
-      // every tab switch on web. "true" defers to per-query staleTime so
-      // fresh queries are not re-fetched needlessly. Per-query overrides
-      // can opt back into "always" where freshness is critical (e.g., live
-      // prices).
-      refetchOnWindowFocus: true,
+      staleTime: 5 * 60_000,
+      gcTime: THIRTY_MINUTES_MS,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      retry: 1,
+      retryDelay: 1_000,
+      structuralSharing: true,
     },
   },
 });
@@ -92,7 +85,9 @@ const persister = createSyncStoragePersister({
   storage: createStorage(),
   throttleTime: 500,
 });
-persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
+if (Platform.OS !== "web") {
+  persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
+}
 
 // ── Focus manager — auto-refetch stale queries on app focus ─────────
 // Web: React Query handles visibilitychange automatically.

@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useRef, useState } from "react";
 import {
     Alert,
+  KeyboardAvoidingView,
     Platform,
     Pressable,
     RefreshControl,
@@ -244,6 +245,7 @@ export default function DividendsScreen() {
   });
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "web" ? undefined : "padding"}>
     <ScrollView
       style={ss.container}
       contentContainerStyle={{
@@ -924,6 +926,7 @@ export default function DividendsScreen() {
 
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

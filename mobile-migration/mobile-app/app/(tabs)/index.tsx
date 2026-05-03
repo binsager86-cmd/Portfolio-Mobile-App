@@ -21,6 +21,7 @@ import { HistoricalPerformance } from "@/components/overview/HistoricalPerforman
 import { PortfolioHealthCard } from "@/components/overview/PortfolioHealthCard";
 import { RealizedTradesSection } from "@/components/overview/RealizedTradesSection";
 import { PortfolioCard } from "@/components/portfolio/PortfolioCard";
+import { HoldingCard } from "@/components/portfolio/HoldingCard";
 import { TradeSimulatorModal } from "@/components/trading/TradeSimulatorModal";
 import { ResponsiveDataTable, type DataColumn } from "@/components/ui/ResponsiveDataTable";
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -134,7 +135,7 @@ function OverviewScreen() {
   const { colors, toggle, mode } = useThemeStore();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { metricCols, isDesktop, isPhone, spacing, fonts, maxContentWidth, showSidebar } = useResponsive();
+  const { metricCols, isDesktop, isPhone, isTablet, spacing, fonts, maxContentWidth, showSidebar } = useResponsive();
   const { refresh: refreshPrices } = usePriceRefresh();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -286,13 +287,32 @@ function OverviewScreen() {
       }
     }
 
+    // FX rate from API (e.g. 0.307 USD/KWD).  Fallback to 1 so pure-KWD
+    // portfolios are never affected even if the field is absent.
+    const fxRate = Number(holdingsResp?.usd_kwd_rate ?? 1) || 1;
+
     return items
       .map((h) => {
         const symbol = (h.symbol ?? "").trim().toUpperCase();
-        const last = Number(h.market_price ?? 0);
         const qty = Number(h.shares_qty ?? 0);
-        const costPerPrice = Number(h.avg_cost ?? 0);
-        const persistedPrevClose = Number(h.previous_close ?? 0);
+        const isUsd = (h.currency ?? "KWD").toUpperCase() === "USD";
+
+        // ── Per-share prices — always in KWD for display ──────────
+        // For USD holdings the API returns raw USD prices in market_price /
+        // avg_cost / previous_close.  We convert them to KWD using the
+        // authoritative KWD totals (market_value_kwd, total_cost_kwd) when
+        // available, falling back to × fxRate when not.
+        const last = isUsd
+          ? (qty > 0 ? Number(h.market_value_kwd ?? 0) / qty : Number(h.market_price ?? 0) * fxRate)
+          : Number(h.market_price ?? 0);
+
+        const costPerPrice = isUsd
+          ? (qty > 0 ? Number(h.total_cost_kwd ?? 0) / qty : Number(h.avg_cost ?? 0) * fxRate)
+          : Number(h.avg_cost ?? 0);
+
+        // previous_close is always in the stock's native currency — multiply by fxRate for USD
+        const rawPrevClose = Number(h.previous_close ?? 0);
+        const persistedPrevClose = isUsd ? rawPrevClose * fxRate : rawPrevClose;
         const hasPersistedPrevClose = Number.isFinite(persistedPrevClose) && persistedPrevClose > 0;
         const fallbackChangePct = moverMap.get(symbol) ?? null;
 
@@ -331,7 +351,7 @@ function OverviewScreen() {
         };
       })
       .sort((a, b) => b.quantity * b.lastPrice - a.quantity * a.lastPrice);
-  }, [holdingsResp?.holdings, marketSummary?.top_gainers, marketSummary?.top_losers, marketSummary?.top_value]);
+  }, [holdingsResp?.holdings, holdingsResp?.usd_kwd_rate, marketSummary?.top_gainers, marketSummary?.top_losers, marketSummary?.top_value]);
 
   const holdingsMobileColumns = useMemo<DataColumn<OverviewHoldingRow>[]>(() => [
     {
@@ -525,7 +545,14 @@ function OverviewScreen() {
     return <ErrorScreen message={errMsg} onRetry={() => refetch()} />;
   }
 
-  if (!data || !metrics) return null;
+  if (!data || !metrics) {
+    return (
+      <ErrorScreen
+        message={t("app.failedToLoad", "Failed to load dashboard data")}
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   // Width for each metric card based on responsive breakpoint
   const colW =
@@ -798,81 +825,166 @@ function OverviewScreen() {
         />
       </View>
 
-      {/* ── Holdings Snapshot Table ── */}
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
-        {t("overview.holdingsSnapshot", "Holdings Snapshot")}
-      </Text>
-      <View
-        style={[
-          styles.holdingsTableOuter,
-          {
-            borderColor: colors.borderColor,
-            backgroundColor: colors.bgCard,
-            marginBottom: spacing.sectionGap,
-          },
-        ]}
-      >
-        <ResponsiveDataTable<OverviewHoldingRow>
-          data={holdingsRows}
-          columns={holdingsMobileColumns}
-          keyExtractor={(r) => r.symbol}
-          desktopTable={
-            <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 980 }}>
-              <View style={{ minWidth: 980 }}>
+      {/* ── Holdings Snapshot ── Professional Card-Based Mobile, Table on Desktop ── */}
+      <View style={{ marginBottom: spacing.sectionGap }}>
+        {/* Section Header with Accent Line */}
+        <View style={[styles.holdingsSectionHeader]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <View
+              style={[
+                styles.accentBar,
+                { backgroundColor: colors.accentPrimary },
+              ]}
+            />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), margin: 0 }]}>
+              {t("overview.holdingsSnapshot", "Holdings Snapshot")}
+            </Text>
+          </View>
+          {holdingsRows.length > 0 && (
+            <Text style={[styles.holdingCountBadge, { color: colors.textMuted, fontSize: 12 }]}>
+              {holdingsRows.length} holding{holdingsRows.length !== 1 ? "s" : ""}
+            </Text>
+          )}
+        </View>
+
+        {/* Mobile: Professional Card View | Desktop: Responsive Table */}
+        {!isPhone && !isTablet ? (
+          <View
+            style={[
+              styles.holdingsTableOuter,
+              {
+                borderColor: colors.borderColor,
+                backgroundColor: colors.bgCard,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: "row", minWidth: 0 }}>
+              <View
+                style={{
+                  width: 280,
+                  borderRightWidth: 1,
+                  borderRightColor: colors.borderColor,
+                  backgroundColor: colors.bgCard,
+                  flexShrink: 0,
+                }}
+              >
                 <View style={[styles.holdingsHeadRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
                   <Text style={[styles.holdingsHeadCell, styles.companyCol, { color: colors.textSecondary }]}>Company Name</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Quantity</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Cost / Price</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Prev. Close</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Last Price</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Change %</Text>
-                  <Text style={[styles.holdingsHeadCell, styles.numColWide, { color: colors.textSecondary }]}>Total Value Change</Text>
                 </View>
 
-                {holdingsRows.map((row, idx) => {
-                  const changeColor = row.changePct == null ? colors.textMuted : pnlColor(row.changePct, colors);
-                  const valueColor = row.totalValueChange == null ? colors.textMuted : pnlColor(row.totalValueChange, colors);
-
-                  return (
-                    <View
-                      key={row.symbol}
-                      style={[
-                        styles.holdingsDataRow,
-                        {
-                          borderBottomColor: colors.borderColor,
-                          backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
-                        },
-                      ]}
-                    >
-                      <View style={[styles.companyCol, { paddingRight: 10 }]}> 
-                        <Text style={[styles.companyText, { color: colors.textPrimary }]} numberOfLines={1}>{row.company}</Text>
-                        <Text style={[styles.symbolText, { color: colors.textMuted }]}>
-                          {row.symbol} • {row.priceBasis === "persisted" ? "live" : row.priceBasis === "estimated" ? "estimated" : "no baseline"}
-                        </Text>
-                      </View>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.quantity.toLocaleString()}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.costPerPrice)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.prevClose == null ? "—" : formatCurrency(row.prevClose)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.lastPrice)}</Text>
-                      <Text style={[styles.holdingsDataCell, styles.numCol, { color: changeColor, fontWeight: "700" }]}>
-                        {row.changePct == null ? "—" : `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%`}
-                      </Text>
-                      <Text style={[styles.holdingsDataCell, styles.numColWide, { color: valueColor, fontWeight: "700" }]}>
-                        {row.totalValueChange == null ? "—" : formatSignedCurrency(row.totalValueChange)}
+                {holdingsRows.map((row, idx) => (
+                  <View
+                    key={row.symbol}
+                    style={[
+                      styles.holdingsDataRow,
+                      {
+                        borderBottomColor: colors.borderColor,
+                        backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
+                      },
+                    ]}
+                  >
+                    <View style={[styles.companyCol, { paddingRight: 10 }]}> 
+                      <Text style={[styles.companyText, { color: colors.textPrimary }]} numberOfLines={1}>{row.company}</Text>
+                      <Text style={[styles.symbolText, { color: colors.textMuted }]}>
+                        {row.symbol} • {row.priceBasis === "persisted" ? "live" : row.priceBasis === "estimated" ? "estimated" : "no baseline"}
                       </Text>
                     </View>
-                  );
-                })}
-
-                {holdingsRows.length === 0 && (
-                  <View style={styles.holdingsEmptyRow}>
-                    <Text style={{ color: colors.textMuted }}>No holdings to display.</Text>
                   </View>
-                )}
+                ))}
+
+                {holdingsRows.length === 0 && <View style={styles.holdingsEmptyRow} />}
               </View>
-            </ScrollView>
-          }
-        />
+
+              <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 700 }} style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ minWidth: 700 }}>
+                  <View style={[styles.holdingsHeadRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Quantity</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Cost / Price</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Prev. Close</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Last Price</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numCol, { color: colors.textSecondary }]}>Change %</Text>
+                    <Text style={[styles.holdingsHeadCell, styles.numColWide, { color: colors.textSecondary }]}>Total Value Change</Text>
+                  </View>
+
+                  {holdingsRows.map((row, idx) => {
+                    const changeColor = row.changePct == null ? colors.textMuted : pnlColor(row.changePct, colors);
+                    const valueColor = row.totalValueChange == null ? colors.textMuted : pnlColor(row.totalValueChange, colors);
+
+                    return (
+                      <View
+                        key={row.symbol}
+                        style={[
+                          styles.holdingsDataRow,
+                          {
+                            borderBottomColor: colors.borderColor,
+                            backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgCardHover + "22",
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.quantity.toLocaleString()}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.costPerPrice)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{row.prevClose == null ? "—" : formatCurrency(row.prevClose)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: colors.textPrimary }]}>{formatCurrency(row.lastPrice)}</Text>
+                        <Text style={[styles.holdingsDataCell, styles.numCol, { color: changeColor, fontWeight: "700" }]}>
+                          {row.changePct == null ? "—" : `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%`}
+                        </Text>
+                        <Text style={[styles.holdingsDataCell, styles.numColWide, { color: valueColor, fontWeight: "700" }]}>
+                          {row.totalValueChange == null ? "—" : formatSignedCurrency(row.totalValueChange)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+
+                  {holdingsRows.length === 0 && (
+                    <View style={styles.holdingsEmptyRow}>
+                      <Text style={{ color: colors.textMuted }}>No holdings to display.</Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        ) : (
+          /* Mobile: Professional card-based layout */
+          <View style={{ gap: 10, paddingHorizontal: spacing.pagePx }}>
+            {holdingsRows.length > 0 ? (
+              holdingsRows.map((row) => (
+                <HoldingCard
+                  key={row.symbol}
+                  holding={{
+                    symbol: row.symbol,
+                    company: row.company,
+                    quantity: row.quantity,
+                    costPerPrice: row.costPerPrice,
+                    lastPrice: row.lastPrice,
+                    changePct: row.changePct,
+                    totalValueChange: row.totalValueChange,
+                    allocation: undefined,
+                    totalValue: row.quantity * row.lastPrice,
+                  }}
+                />
+              ))
+            ) : (
+              <View
+                style={[
+                  styles.emptyHoldingsState,
+                  {
+                    backgroundColor: colors.bgCard,
+                    borderColor: colors.borderColor,
+                  },
+                ]}
+              >
+                <FontAwesome name="briefcase" size={40} color={colors.textMuted} />
+                <Text style={[styles.emptyHoldingsText, { color: colors.textMuted }]}>
+                  {t("overview.noHoldings", "No Holdings")}
+                </Text>
+                <Text style={[styles.emptyHoldingsSubtext, { color: colors.textMuted }]}>
+                  {t("overview.startTradingToAddHoldings", "Add stocks to see your portfolio")}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* ── Row 2: Profit Breakdown ── */}
@@ -1317,6 +1429,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 92,
+  },
+
+  // New professional holdings section styles
+  holdingsSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  accentBar: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    flexShrink: 0,
+  },
+  holdingCountBadge: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  emptyHoldingsState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    marginHorizontal: 12,
+  },
+  emptyHoldingsText: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 12,
+  },
+  emptyHoldingsSubtext: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 4,
+    textAlign: "center",
   },
 });
 

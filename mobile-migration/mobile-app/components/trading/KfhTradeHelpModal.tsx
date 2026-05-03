@@ -6,7 +6,7 @@ import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 interface Props {
   visible: boolean;
@@ -41,6 +41,7 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: "center" }} behavior={Platform.OS === "web" ? undefined : "padding"}>
       <Pressable accessibilityRole="none" accessibilityLabel="Close dialog" style={s.backdrop} onPress={handleClose}>
         <Pressable accessibilityRole="none" style={[s.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]} onPress={(e) => e.stopPropagation()}>
           <View style={s.header}>
@@ -170,6 +171,7 @@ export default function KfhTradeHelpModal({ visible, onClose, onUpload }: Props)
           )}
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

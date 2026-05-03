@@ -20,12 +20,19 @@
     "android": {
       "package": "com.portfoliotracker.app",
       "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#08070D"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
+    },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +43,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-localization",
+      "./plugins/withGoogleSignIn.js",
       [
         "expo-notifications",
         {
@@ -43,7 +51,10 @@
           "color": "#8a2be2",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "@sentry/react-native",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "notification": {
       "icon": "./assets/images/icon.png",

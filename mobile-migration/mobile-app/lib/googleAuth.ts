@@ -147,76 +147,116 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
   }
 }
 
-// ── Native: expo-auth-session (Expo Go compatible) ──────────────────
+// ── Native: @react-native-google-signin/google-signin ──────────────
+//
+// Why not expo-auth-session here?
+//   On Android the only redirect URI it can produce is a custom scheme
+//   like `portfolio-tracker://`, which Google's OAuth Web client rejects
+//   ("redirect_uri is not allowed for the given client"). The native SDK
+//   sidesteps redirect URIs entirely — Google authorizes the call by
+//   matching the app's package name + SHA-1 fingerprint to an Android
+//   OAuth client registered in the same Google Cloud project.
+//
+// Returns a real Google **id_token** (JWT) which the backend verifies
+// with Google's token-info endpoint. The audience of that JWT is the
+// Web client ID we pass as `webClientId` below.
+//
+// Requirements (one-time, in Google Cloud Console):
+//   1. An **Android** OAuth client must exist with:
+//        - package name: com.portfoliotracker.app
+//        - SHA-1 fingerprint of the keystore signing the build
+//          (run `eas credentials -p android` to view).
+//   2. The **Web** OAuth client ID below must be in the SAME project.
+//
+// This flow does NOT work in Expo Go — requires a dev or production
+// build (which the user is already shipping via EAS).
+
+let nativeSdkConfigured = false;
 
 export async function performNativeGoogleSignIn(): Promise<GoogleAuthResult> {
   try {
-    const AuthSession = await import("expo-auth-session");
-    const WebBrowser = await import("expo-web-browser");
+    const mod = await import("@react-native-google-signin/google-signin");
+    const { GoogleSignin } = mod;
 
-    WebBrowser.maybeCompleteAuthSession();
-
-    const discovery: import("expo-auth-session").DiscoveryDocument = {
-      authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-      tokenEndpoint: "https://oauth2.googleapis.com/token",
-    };
-
-    const redirectUri = AuthSession.makeRedirectUri({
-      scheme: "portfolio-tracker",
-    });
-
-    if (__DEV__) console.info("[GoogleAuth Native] Redirect URI:", redirectUri);
-
-    const request = new AuthSession.AuthRequest({
-      clientId: GOOGLE_WEB_CLIENT_ID,
-      scopes: ["openid", "profile", "email"],
-      responseType: AuthSession.ResponseType.Token,
-      redirectUri,
-      usePKCE: false,
-    });
-
-    const result = await request.promptAsync(discovery);
-
-    if (__DEV__) console.info("[GoogleAuth Native] Result type:", result.type);
-
-    if (result.type === "cancel" || result.type === "dismiss") {
-      return { success: false, cancelled: true };
+    if (!nativeSdkConfigured) {
+      GoogleSignin.configure({
+        // `webClientId` is what makes the returned id_token's audience
+        // equal to our Web client — which is what the backend validates.
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        scopes: ["openid", "profile", "email"],
+        offlineAccess: false,
+      });
+      nativeSdkConfigured = true;
     }
 
-    if (result.type === "success") {
-      const accessToken = result.params?.access_token;
-      if (!accessToken) {
-        return {
-          success: false,
-          cancelled: false,
-          error: "Google did not return an access token.",
-        };
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+    if (__DEV__) console.info("[GoogleAuth Native] Opening native sign-in…");
+    const response = await GoogleSignin.signIn();
+
+    // SDK v13+ returns { type: "success" | "cancelled", data? }; older
+    // versions returned the user object directly. Normalise both shapes.
+    type SignInUserData = { idToken?: string | null };
+    type SignInResponse =
+      | { type: "success"; data: SignInUserData }
+      | { type: "cancelled" }
+      | SignInUserData;
+    const r = response as SignInResponse;
+
+    let idToken: string | null | undefined;
+    if (typeof r === "object" && r !== null && "type" in r) {
+      if (r.type === "cancelled") {
+        if (__DEV__) console.info("[GoogleAuth Native] User cancelled");
+        return { success: false, cancelled: true };
       }
-      if (__DEV__) console.info("[GoogleAuth Native] ✅ Got access_token");
-      return { success: true, idToken: accessToken };
+      if (r.type === "success") {
+        idToken = r.data?.idToken;
+      }
+    } else {
+      idToken = (r as SignInUserData)?.idToken;
     }
 
-    if (result.type === "error") {
-      const errorCode = result.params?.error || "unknown_error";
-      const errorDesc = result.params?.error_description || "Google Sign-In returned an error.";
+    if (!idToken) {
       return {
         success: false,
         cancelled: false,
-        error: `${errorCode}: ${errorDesc}`,
+        error: "Google did not return an id_token. Check that an Android OAuth client with this app's SHA-1 exists in Google Cloud Console.",
       };
+    }
+
+    if (__DEV__) console.info("[GoogleAuth Native] ✅ Got id_token (length:", idToken.length, ")");
+    return { success: true, idToken };
+  } catch (err: unknown) {
+    if (__DEV__) console.error("[GoogleAuth Native] ❌ Error:", err);
+
+    // Map @react-native-google-signin status codes to friendlier messages.
+    const e = err as { code?: string; message?: string };
+    try {
+      const { statusCodes } = await import("@react-native-google-signin/google-signin");
+      if (e?.code === statusCodes.SIGN_IN_CANCELLED) {
+        return { success: false, cancelled: true };
+      }
+      if (e?.code === statusCodes.IN_PROGRESS) {
+        return { success: false, cancelled: false, error: "Sign-in already in progress." };
+      }
+      if (e?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        return { success: false, cancelled: false, error: "Google Play Services is required." };
+      }
+      if (e?.code === statusCodes.SIGN_IN_REQUIRED || e?.code === "DEVELOPER_ERROR") {
+        return {
+          success: false,
+          cancelled: false,
+          error: "Google rejected this app. The Android OAuth client (package + SHA-1) is missing or the Web client ID is from a different Google Cloud project.",
+        };
+      }
+    } catch {
+      /* statusCodes import failed — fall through */
     }
 
     return {
       success: false,
       cancelled: false,
-      error: `Google Sign-In returned unexpected result: ${result.type}`,
-    };
-  } catch (err: unknown) {
-    if (__DEV__) console.error("[GoogleAuth Native] ❌ Error:", err);
-    return {
-      success: false,
-      cancelled: false,
-      error: err instanceof Error ? err.message : "Google Sign-In failed on this device.",
+      error: e?.message || "Google Sign-In failed on this device.",
     };
   }
 }

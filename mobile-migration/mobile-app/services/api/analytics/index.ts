@@ -60,3 +60,4 @@ export * from "./pfm";
 export * from "./fundamental";
 export * from "./extraction";
 export * from "./metrics";
+export * from "./tradeSignals";

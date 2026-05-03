@@ -322,7 +322,7 @@ export default function IntegrityScreen() {
     setReconLoading(true);
     try {
       const [txnResp, depositResp, cashData] = await Promise.all([
-        getTransactions({ portfolio: pf, per_page: 9999 }),
+        getTransactions({ portfolio: pf, page_size: 9999 }),
         getDeposits({ portfolio: pf, page_size: 9999 }),
         getCashBalances(true),
       ]);

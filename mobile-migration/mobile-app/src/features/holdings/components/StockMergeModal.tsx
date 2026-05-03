@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -115,6 +116,7 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: "center" }} behavior={Platform.OS === "web" ? undefined : "padding"}>
       <Pressable style={ms.overlay} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("holdingsScreen.closeDialog")}>
         <Pressable
           style={[ms.box, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
@@ -243,6 +245,7 @@ export function StockMergeModal({ holding, colors, onClose, onMerged }: StockMer
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

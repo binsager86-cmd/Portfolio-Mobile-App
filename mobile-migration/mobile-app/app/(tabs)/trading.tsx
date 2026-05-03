@@ -38,6 +38,7 @@ import { useTranslation } from "react-i18next";
 import {
     ActivityIndicator,
     Alert,
+  KeyboardAvoidingView,
     Platform,
     Pressable,
     RefreshControl,
@@ -435,9 +436,9 @@ function TradingScreen() {
             <FontAwesome name="shield" size={16} color={colors.accentPrimary} /> {t('portfolioAnalysis.riskMetrics')}
           </Text>
           <View style={s.kpiGrid}>
-            <KpiCard label={t('portfolioAnalysis.sharpeRatio')} value={riskData.sharpe_ratio.toFixed(3)} colors={colors} />
+            <KpiCard label={t('portfolioAnalysis.sharpeRatio')} value={riskData?.sharpe_ratio?.toFixed(3) ?? '0.000'} colors={colors} />
             <InfoTip term="Sharpe Ratio" definition={GLOSSARY["Sharpe Ratio"]} />
-            <KpiCard label={t('portfolioAnalysis.sortinoRatio')} value={riskData.sortino_ratio.toFixed(3)} colors={colors} />
+            <KpiCard label={t('portfolioAnalysis.sortinoRatio')} value={riskData?.sortino_ratio?.toFixed(3) ?? '0.000'} colors={colors} />
             <InfoTip term="Sortino Ratio" definition={GLOSSARY["Sortino Ratio"]} />
           </View>
         </View>
@@ -786,6 +787,7 @@ function TradingScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.bgPrimary }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "web" ? undefined : "padding"}>
       <ScrollView
         contentContainerStyle={[
           s.list,
@@ -925,6 +927,7 @@ function TradingScreen() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Footer stats bar */}
       {summary && (

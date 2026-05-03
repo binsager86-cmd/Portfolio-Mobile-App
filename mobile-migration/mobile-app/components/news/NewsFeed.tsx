@@ -12,7 +12,6 @@
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList } from "@shopify/flash-list";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -33,6 +32,7 @@ import i18n from "@/lib/i18n/config";
 import type { NewsCategory, NewsItem } from "@/services/news/types";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { ListContainer } from "@/components/ui/ListContainer";
 import { NewsDisclaimer } from "./NewsAttribution";
 import { NewsCard } from "./NewsCard";
 
@@ -282,11 +282,13 @@ export function NewsFeed({
         </View>
       )}
 
-      {/* News list — FlashList for 60fps virtualization */}
-      <FlashList
+      {/* News list — shared memoized list container */}
+      <ListContainer
         data={newsItems}
         keyExtractor={(item) => item.id}
-        drawDistance={200}
+        estimatedItemSize={compact ? 120 : 152}
+        isLoading={isLoading}
+        isEmpty={newsItems.length === 0}
         renderItem={({ item }) => (
           <NewsCard
             item={item}
@@ -339,14 +341,14 @@ export function NewsFeed({
         }
         ListEmptyComponent={
           <View style={s.emptyContainer}>
-            <FontAwesome name="newspaper-o" size={32} color={colors.textMuted} />
             <Text style={[s.emptyText, { color: colors.textMuted }]}>
-              {portfolioOnly
-                ? i18n.t('news.noPortfolioNews')
-                : i18n.t('news.noNews')}
+              {portfolioOnly ? i18n.t("news.noPortfolioNews") : i18n.t("news.noNews")}
             </Text>
           </View>
         }
+        emptyTitle={portfolioOnly ? i18n.t("news.noPortfolioNews") : i18n.t("news.noNews")}
+        emptyDesc={i18n.t("news.tryAnotherCategory")}
+        emptyIcon="newspaper-variant-outline"
         scrollEnabled={!compact}
       />
 

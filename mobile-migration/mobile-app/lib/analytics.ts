@@ -19,8 +19,30 @@ type EventParams = Record<string, string | number | boolean | undefined>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Sentry: any = null;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadSentry(): any {
+  if (Sentry) return Sentry;
+  try {
+    // Avoid static module resolution by Metro for optional runtime dependency.
+    // eslint-disable-next-line no-new-func
+    const dynamicRequire = new Function("moduleName", "return require(moduleName);") as (
+      moduleName: string,
+    ) => unknown;
+    const pkg = "@sentry/" + "react-native";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Sentry = dynamicRequire(pkg) as any;
+    return Sentry;
+  } catch {
+    return null;
+  }
+}
+
 /** Call once at app startup (before navigation mounts). */
 async function init(): Promise<void> {
+  if (globalThis.__APP_SENTRY_INITIALIZED__) {
+    return;
+  }
+
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) {
     if (__DEV__) console.info("[Analytics] No EXPO_PUBLIC_SENTRY_DSN — Sentry disabled");
@@ -28,10 +50,14 @@ async function init(): Promise<void> {
   }
 
   try {
-    // Dynamic require so Metro doesn't fail when the package isn't installed
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional dynamic require: optional Sentry package
-    Sentry = require("@sentry/react-native");
-    Sentry.init({
+    const runtimeSentry = loadSentry();
+    if (!runtimeSentry) {
+      if (__DEV__) console.warn("[Analytics] @sentry/react-native not installed — skipping");
+      Sentry = null;
+      return;
+    }
+
+    runtimeSentry.init({
       dsn,
       tracesSampleRate: __DEV__ ? 1.0 : 0.2,
       enableAutoSessionTracking: true,

@@ -1,13 +1,12 @@
 /**
- * DateInput — cross-platform date input with native date pickers.
- * Web: uses native HTML <input type="date"> for reliable calendar popup.
- * Native: shows a modal date picker.
+ * DateInput — cross-platform calendar picker.
+ * Uses a modal month calendar for both web and native.
  */
 
-import React, { useRef, useState } from "react";
-import { View, Pressable, StyleSheet, Platform, Text, Modal, TouchableOpacity } from "react-native";
-import { TextInput } from "./TextInput";
+import React, { useMemo, useState } from "react";
+import { View, Pressable, StyleSheet, Text, Modal, TouchableOpacity } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
+import { Calendar } from "react-native-calendars";
 import { useThemeStore } from "@/services/themeStore";
 
 interface DateInputProps {
@@ -16,177 +15,100 @@ interface DateInputProps {
   hasError?: boolean;
 }
 
-/* ── Web date picker (HTML <input type="date">) ── */
-function WebDateInput({ value, onChangeText, hasError }: DateInputProps) {
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function DateInput({ value, onChangeText, hasError }: DateInputProps) {
   const { colors } = useThemeStore();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const selectedDate = isIsoDate(value) ? value : undefined;
+  const today = toIsoDate(new Date());
+
+  const markedDates = useMemo(() => {
+    const marks: Record<string, { selected?: boolean; selectedColor?: string; selectedTextColor?: string; marked?: boolean; dotColor?: string }> = {
+      [today]: {
+        marked: true,
+        dotColor: colors.accentPrimary,
+      },
+    };
+
+    if (selectedDate) {
+      marks[selectedDate] = {
+        selected: true,
+        selectedColor: colors.accentPrimary,
+        selectedTextColor: "#FFFFFF",
+      };
+    }
+
+    return marks;
+  }, [selectedDate, today, colors.accentPrimary]);
 
   return (
     <View style={styles.row}>
       <Pressable
         style={[
-          styles.webDateBox,
+          styles.displayBox,
           {
             backgroundColor: colors.bgInput,
             borderColor: hasError ? colors.danger : colors.borderColor,
           },
         ]}
-        onPress={() => {
-          // Open the native date picker (showPicker is supported in modern browsers)
-          try {
-            inputRef.current?.showPicker?.();
-          } catch {
-            inputRef.current?.click();
-          }
-        }}
+        onPress={() => setShowPicker(true)}
       >
-        <FontAwesome name="calendar" size={16} color={colors.accentPrimary} style={{ marginRight: 10 }} />
-        <Text style={{ color: value ? colors.textPrimary : colors.textMuted, fontSize: 15, flex: 1 }}>
-          {value || "Select date..."}
+        <FontAwesome name="calendar" size={16} color={colors.accentPrimary} />
+        <Text style={[styles.displayText, { color: value ? colors.textPrimary : colors.textMuted }]}>
+          {value || "YYYY-MM-DD"}
         </Text>
-        <FontAwesome name="caret-down" size={14} color={colors.textSecondary} />
       </Pressable>
-
-      {/* Hidden native HTML date input */}
-      <input
-        ref={inputRef}
-        type="date"
-        value={value}
-        aria-label="Select date"
-        title="Select date"
-        onChange={(e) => onChangeText(e.target.value)}
-        style={{
-          position: "absolute",
-          opacity: 0,
-          width: 1,
-          height: 1,
-          pointerEvents: "none",
-        }}
-      />
-    </View>
-  );
-}
-
-/* ── Native date picker (modal with scroll wheels) ── */
-function NativeDateInput({ value, onChangeText, hasError }: DateInputProps) {
-  const { colors } = useThemeStore();
-  const [showPicker, setShowPicker] = useState(false);
-
-  // Date part helpers
-  const [selYear, setSelYear] = useState(() => (value ? new Date(value) : new Date()).getFullYear());
-  const [selMonth, setSelMonth] = useState(() => (value ? new Date(value) : new Date()).getMonth());
-  const [selDay, setSelDay] = useState(() => (value ? new Date(value) : new Date()).getDate());
-
-  const handleChange = (text: string) => {
-    const cleaned = text.replace(/[^0-9-]/g, "");
-    onChangeText(cleaned);
-  };
-
-  const openPicker = () => {
-    const d = value ? new Date(value) : new Date();
-    setSelYear(d.getFullYear());
-    setSelMonth(d.getMonth());
-    setSelDay(d.getDate());
-    setShowPicker(true);
-  };
-
-  const confirmDate = () => {
-    const formatted = `${selYear}-${String(selMonth + 1).padStart(2, "0")}-${String(selDay).padStart(2, "0")}`;
-    onChangeText(formatted);
-    setShowPicker(false);
-  };
-
-  const daysInMonth = new Date(selYear, selMonth + 1, 0).getDate();
-
-  return (
-    <View style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <TextInput
-          value={value}
-          onChangeText={handleChange}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
-          hasError={hasError}
-          maxLength={10}
-        />
-      </View>
       <Pressable
         style={[
           styles.iconBox,
           { backgroundColor: colors.bgInput, borderColor: colors.borderColor },
         ]}
-        onPress={openPicker}
+        onPress={() => setShowPicker(true)}
       >
         <FontAwesome name="calendar" size={18} color={colors.accentPrimary} />
       </Pressable>
 
-      {/* Simple date selection modal */}
       <Modal visible={showPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select Date</Text>
+            <Calendar
+              current={selectedDate ?? today}
+              markedDates={markedDates}
+              onDayPress={(day) => {
+                onChangeText(day.dateString);
+                setShowPicker(false);
+              }}
+              theme={{
+                backgroundColor: colors.bgCard,
+                calendarBackground: colors.bgCard,
+                textSectionTitleColor: colors.textSecondary,
+                selectedDayBackgroundColor: colors.accentPrimary,
+                selectedDayTextColor: "#FFFFFF",
+                todayTextColor: colors.accentPrimary,
+                dayTextColor: colors.textPrimary,
+                textDisabledColor: colors.textMuted,
+                monthTextColor: colors.textPrimary,
+                arrowColor: colors.accentPrimary,
+              }}
+            />
 
-            {/* Year / Month / Day selectors */}
-            <View style={styles.dateRow}>
-              {/* Year */}
-              <View style={styles.dateCol}>
-                <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Year</Text>
-                <View style={styles.spinnerRow}>
-                  <TouchableOpacity onPress={() => setSelYear((y) => y - 1)}>
-                    <FontAwesome name="minus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.spinnerValue, { color: colors.textPrimary }]}>{selYear}</Text>
-                  <TouchableOpacity onPress={() => setSelYear((y) => y + 1)}>
-                    <FontAwesome name="plus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {/* Month */}
-              <View style={styles.dateCol}>
-                <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Month</Text>
-                <View style={styles.spinnerRow}>
-                  <TouchableOpacity onPress={() => setSelMonth((m) => (m <= 0 ? 11 : m - 1))}>
-                    <FontAwesome name="minus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.spinnerValue, { color: colors.textPrimary }]}>{String(selMonth + 1).padStart(2, "0")}</Text>
-                  <TouchableOpacity onPress={() => setSelMonth((m) => (m >= 11 ? 0 : m + 1))}>
-                    <FontAwesome name="plus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {/* Day */}
-              <View style={styles.dateCol}>
-                <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Day</Text>
-                <View style={styles.spinnerRow}>
-                  <TouchableOpacity onPress={() => setSelDay((d) => (d <= 1 ? daysInMonth : d - 1))}>
-                    <FontAwesome name="minus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                  <Text style={[styles.spinnerValue, { color: colors.textPrimary }]}>{String(selDay).padStart(2, "0")}</Text>
-                  <TouchableOpacity onPress={() => setSelDay((d) => (d >= daysInMonth ? 1 : d + 1))}>
-                    <FontAwesome name="plus-circle" size={22} color={colors.accentPrimary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            {/* Preview */}
-            <Text style={[styles.datePreview, { color: colors.accentPrimary }]}>
-              {selYear}-{String(selMonth + 1).padStart(2, "0")}-{String(selDay).padStart(2, "0")}
-            </Text>
-
-            {/* Buttons */}
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => { const t = new Date(); setSelYear(t.getFullYear()); setSelMonth(t.getMonth()); setSelDay(t.getDate()); }}
-                style={[styles.modalBtn, { borderColor: colors.borderColor }]}
-              >
+              <TouchableOpacity onPress={() => onChangeText(today)} style={[styles.modalBtn, { borderColor: colors.borderColor }]}>
                 <Text style={{ color: colors.accentPrimary, fontWeight: "600" }}>Today</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowPicker(false)} style={[styles.modalBtn, { borderColor: colors.borderColor }]}>
                 <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={confirmDate} style={[styles.modalBtnPrimary, { backgroundColor: colors.accentPrimary }]}>
-                <Text style={{ color: "#fff", fontWeight: "700" }}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -196,26 +118,25 @@ function NativeDateInput({ value, onChangeText, hasError }: DateInputProps) {
   );
 }
 
-/* ── Platform switch ── */
-export function DateInput(props: DateInputProps) {
-  if (Platform.OS === "web") return <WebDateInput {...props} />;
-  return <NativeDateInput {...props} />;
-}
-
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: 8,
   },
-  webDateBox: {
+  displayBox: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     minHeight: 48,
+  },
+  displayText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
   iconBox: {
     borderWidth: 1,
@@ -233,63 +154,27 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: "100%",
-    maxWidth: 380,
+    maxWidth: 420,
     borderRadius: 16,
     borderWidth: 1,
-    padding: 24,
+    padding: 16,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 20,
-  },
-  dateRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-  },
-  dateCol: {
-    alignItems: "center",
-    gap: 8,
-  },
-  dateLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  spinnerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  spinnerValue: {
-    fontSize: 20,
-    fontWeight: "700",
-    minWidth: 40,
-    textAlign: "center",
-  },
-  datePreview: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 10,
   },
   modalButtons: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 10,
+    marginTop: 12,
   },
   modalBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-  },
-  modalBtnPrimary: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
   },
 });

@@ -10,7 +10,6 @@
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -128,13 +127,9 @@ function PortfolioAnalysisScreen() {
     [holdingsResp?.holdings, sortCol, sortDir],
   );
 
-  const holdingKeyExtractor = useCallback((item: (typeof sortedHoldings)[number]) => item.symbol, []);
-  const renderHoldingRow = useCallback(
-    ({ item, index }: { item: (typeof sortedHoldings)[number]; index: number }) => (
-      <HoldingRow holding={item} colors={colors} isEven={index % 2 === 0} />
-    ),
-    [colors],
-  );
+  const firstColumn = TABLE_COLUMNS[0];
+  const trailingColumns = TABLE_COLUMNS.slice(1);
+  const trailingTableWidth = Math.max(0, TOTAL_TABLE_WIDTH - firstColumn.width);
 
   // Keep module-level refs in sync so getCellValue can compute allocation
   // Set module-level context for getCellValue allocation calculations
@@ -180,21 +175,28 @@ function PortfolioAnalysisScreen() {
   }, [holdingsResp?.holdings, _totalPortfolioValueKwd, cashBalanceKwd]);
 
   const depositTotals = useMemo(() => {
-    const t: Record<string, number> = {};
+    const totalsByPortfolio: Record<string, number> = {};
     const calc = (deps: typeof kfhDeposits, pf: string) => {
       if (!deps?.deposits) return;
-      t[pf] = deps.deposits.filter((d) => d.amount > 0 && !d.is_deleted).reduce((sum, d) => sum + d.amount, 0);
+      totalsByPortfolio[pf] = deps.deposits
+        .filter((d) => d.amount > 0 && !d.is_deleted)
+        .reduce((sum, d) => sum + d.amount, 0);
     };
     calc(kfhDeposits, "KFH");
     calc(bbynDeposits, "BBYN");
     calc(usaDeposits, "USA");
-    return t;
+    return totalsByPortfolio;
   }, [kfhDeposits, bbynDeposits, usaDeposits]);
 
-  // ── Loading / Error ─────────────────────────────────────────────
-
   if (holdingsLoading) return <PortfolioAnalysisSkeleton />;
-  if (holdingsError) return <ErrorScreen message={(holdingsErr as Error)?.message ?? t('portfolioAnalysis.failedToLoad')} onRetry={() => refetchHoldings()} />;
+  if (holdingsError) {
+    return (
+      <ErrorScreen
+        message={(holdingsErr as Error)?.message ?? t("portfolioAnalysis.failedToLoad")}
+        onRetry={() => refetchHoldings()}
+      />
+    );
+  }
 
   const resp = holdingsResp;
   const totalsData = resp?.totals;
@@ -202,11 +204,8 @@ function PortfolioAnalysisScreen() {
   const totalCost = totalsData?.total_cost_kwd ?? 0;
   const totalUnrealized = totalsData?.total_unrealized_pnl_kwd ?? 0;
 
-  // ── Render ──────────────────────────────────────────────────────
-
   return (
     <View style={[s.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* ── Portfolio filter ─────────────────────────────────────── */}
       <View style={s.filterRow}>
         {PORTFOLIOS.map((pf) => (
           <FilterChip
@@ -289,40 +288,83 @@ function PortfolioAnalysisScreen() {
         <View
           style={[htStyles.tableOuter, { borderColor: colors.borderColor, backgroundColor: colors.bgCard, marginHorizontal: spacing.pagePx, marginBottom: 24 }]}
         >
-          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: TOTAL_TABLE_WIDTH }}>
-            <View style={{ width: TOTAL_TABLE_WIDTH }}>
-              {/* Header */}
+          <View style={{ flexDirection: "row", minWidth: 0 }}>
+            <View
+              style={{
+                width: firstColumn.width,
+                borderRightWidth: 1,
+                borderRightColor: colors.borderColor,
+                backgroundColor: colors.bgCard,
+                flexShrink: 0,
+                shadowColor: "#000",
+                shadowOpacity: 0.16,
+                shadowRadius: 6,
+                shadowOffset: { width: 3, height: 0 },
+                elevation: 3,
+              }}
+            >
               <View style={[htStyles.headerRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
-                {TABLE_COLUMNS.map((col) => (
-                  <HeaderCell key={col.key} col={col} colors={colors} sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
-                ))}
+                <HeaderCell col={firstColumn} colors={colors} sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
               </View>
 
-              {/* Data rows */}
-              <FlashList
-                data={sortedHoldings}
-                renderItem={renderHoldingRow}
-                keyExtractor={holdingKeyExtractor}
-                scrollEnabled={false}
-              />
+              {sortedHoldings.map((item, index) => (
+                <HoldingRow
+                  key={`${item.symbol}-${item.currency}-${index}`}
+                  holding={item}
+                  colors={colors}
+                  isEven={index % 2 === 0}
+                  columns={[firstColumn]}
+                />
+              ))}
 
-              {/* TOTAL row */}
               {sortedHoldings.length > 0 && (
                 <View style={[htStyles.dataRow, htStyles.totalRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.accentPrimary + "18", borderTopColor: colors.accentPrimary }]}>
-                  {TABLE_COLUMNS.map((col) => (
-                    <TotalCell key={col.key} col={col} totals={totals} colors={colors} />
-                  ))}
+                  <TotalCell col={firstColumn} totals={totals} colors={colors} />
                 </View>
               )}
 
-              {/* Empty state */}
-              {sortedHoldings.length === 0 && (
-                <View style={htStyles.emptyRow}>
-                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>{t('portfolioAnalysis.noActiveHoldings')}</Text>
-                </View>
-              )}
+              {sortedHoldings.length === 0 && <View style={htStyles.emptyRow} />}
             </View>
-          </ScrollView>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator
+              contentContainerStyle={{ minWidth: trailingTableWidth }}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              <View style={{ width: trailingTableWidth }}>
+                <View style={[htStyles.headerRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
+                  {trailingColumns.map((col) => (
+                    <HeaderCell key={col.key} col={col} colors={colors} sortCol={sortCol} sortDir={sortDir} onSort={onSort} />
+                  ))}
+                </View>
+
+                {sortedHoldings.map((item, index) => (
+                  <HoldingRow
+                    key={`${item.symbol}-${item.currency}-${index}`}
+                    holding={item}
+                    colors={colors}
+                    isEven={index % 2 === 0}
+                    columns={trailingColumns}
+                  />
+                ))}
+
+                {sortedHoldings.length > 0 && (
+                  <View style={[htStyles.dataRow, htStyles.totalRow, { borderBottomColor: colors.borderColor, backgroundColor: colors.accentPrimary + "18", borderTopColor: colors.accentPrimary }]}>
+                    {trailingColumns.map((col) => (
+                      <TotalCell key={col.key} col={col} totals={totals} colors={colors} />
+                    ))}
+                  </View>
+                )}
+
+                {sortedHoldings.length === 0 && (
+                  <View style={htStyles.emptyRow}>
+                    <Text style={{ color: colors.textMuted, fontSize: 14 }}>{t('portfolioAnalysis.noActiveHoldings')}</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
         </View>
 
         {/* ── 4. Allocation Donut ──────────────────────────────── */}

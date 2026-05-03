@@ -10,6 +10,7 @@ import KfhTradeImportButton from "@/components/trading/KfhTradeImportButton";
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import { FilterChip } from "@/components/ui/FilterChip";
+import { ListContainer } from "@/components/ui/ListContainer";
 import { TransactionsSkeleton } from "@/components/ui/PageSkeletons";
 import type { ThemePalette } from "@/constants/theme";
 import { useTransactions } from "@/hooks/queries";
@@ -30,7 +31,6 @@ import {
 import { useApplyReconciliation } from "@/services/api/reconciliation";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import type { Href } from "expo-router";
@@ -287,22 +287,23 @@ function TransactionsScreen() {
   });
 
   const deleteMutation = useDeleteTransaction();
+  const { mutate: deleteTxn } = deleteMutation;
 
   const handleEdit = useCallback((txn: TransactionRecord) => {
     router.push({ pathname: "/(tabs)/add-transaction", params: { editId: String(txn.id) } } as Href);
   }, [router]);
 
-  const handleDelete = (txn: TransactionRecord) => {
+  const handleDelete = useCallback((txn: TransactionRecord) => {
     const msg = t("transactionsScreen.deleteConfirm", { type: txn.txn_type, shares: txn.shares, symbol: txn.stock_symbol });
     if (Platform.OS === "web") {
-      if (window.confirm(msg)) deleteMutation.mutate(txn.id);
+      if (window.confirm(msg)) deleteTxn(txn.id);
     } else {
       Alert.alert(t("transactionsScreen.deleteTransaction"), msg, [
         { text: t("app.cancel"), style: "cancel" },
-        { text: t("app.delete"), style: "destructive", onPress: () => deleteMutation.mutate(txn.id) },
+        { text: t("app.delete"), style: "destructive", onPress: () => deleteTxn(txn.id) },
       ]);
     }
-  };
+  }, [deleteTxn, t]);
 
   // Client-side type filter
   const filteredTxns = React.useMemo(() => {
@@ -315,6 +316,19 @@ function TransactionsScreen() {
     refetch();
   }, [refetch]);
 
+  // ── FlashList helpers —————————————————————————————————
+  const renderTxnItem = useCallback(
+    ({ item }: { item: TransactionRecord }) => (
+      <TxnRow txn={item} colors={colors} onEdit={handleEdit} onDelete={handleDelete} />
+    ),
+    [colors, handleEdit, handleDelete],
+  );
+
+  const getTxnItemType = useCallback(
+    (item: TransactionRecord) => item.txn_type,
+    [],
+  );
+
   // ── Reconciliation: post-import handler ─────────────────────────
   const handleImportComplete = useCallback(async () => {
     refetch();
@@ -322,7 +336,7 @@ function TransactionsScreen() {
     try {
       const pf = "KFH";
       const [txnData, depData, cashData, holdingsData] = await Promise.all([
-        fetchAllTransactions({ portfolio: pf, per_page: 10000 }),
+        fetchAllTransactions({ portfolio: pf, page_size: 10000 }),
         getDeposits({ portfolio: pf, page_size: 10000 }),
         getCashBalances(true),
         getHoldings(pf),
@@ -401,7 +415,7 @@ function TransactionsScreen() {
         }
         // Delete orphaned sell transactions
         for (const id of txnIds) {
-          await deleteMutation.mutateAsync(id);
+          await deleteMutation.mutateAsync(id as number);
         }
         setReconModalVisible(false);
         setReconSummary(null);
@@ -496,11 +510,14 @@ function TransactionsScreen() {
       )}
 
       {/* List */}
-      <FlashList
+      <ListContainer
         data={transactions}
         keyExtractor={(item) => String(item.id)}
-        drawDistance={200}
-        renderItem={({ item }) => <TxnRow txn={item} colors={colors} onEdit={handleEdit} onDelete={handleDelete} />}
+        estimatedItemSize={84}
+        getItemType={getTxnItemType}
+        renderItem={renderTxnItem}
+        isLoading={isLoading}
+        isEmpty={transactions.length === 0}
         contentContainerStyle={[
           styles.list,
           isDesktop && { maxWidth: 800, alignSelf: "center", width: "100%" },
@@ -512,27 +529,29 @@ function TransactionsScreen() {
             tintColor={colors.accentPrimary}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <FontAwesome
-              name="exchange"
-              size={48}
-              color={colors.textMuted}
-            />
-            <Text
-              style={[styles.emptyText, { color: colors.textSecondary }]}
-            >
-              {t("transactionsScreen.noTransactionsYet")}
+        emptyTitle={t("transactionsScreen.noTransactionsYet")}
+        emptyDesc={t("transactionsScreen.addYourFirst")}
+        emptyIcon="swap-horizontal"
+        emptyAction={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("transactionsScreen.addTransaction")}
+            onPress={() => router.push("/(tabs)/add-transaction" as Href)}
+            style={[
+              {
+                backgroundColor: colors.accentPrimary,
+                paddingHorizontal: 18,
+                paddingVertical: 8,
+                borderRadius: 8,
+                marginTop: 12,
+              },
+              Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : undefined,
+            ]}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>
+              {t("transactionsScreen.addTransaction")}
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("transactionsScreen.addTransaction")}
-              onPress={() => router.push("/(tabs)/add-transaction" as Href)}
-              style={[{ backgroundColor: colors.accentPrimary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 8, marginTop: 12 }, Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : undefined]}
-            >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>{t("transactionsScreen.addTransaction")}</Text>
-            </Pressable>
-          </View>
+          </Pressable>
         }
         ListFooterComponent={
           totalPages > 1 ? (

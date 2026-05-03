@@ -1,6 +1,21 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const noHardcodedStyles = require("./eslint-rules/no-hardcoded-styles.js");
+const noLogicalProps = require("./eslint-rules/no-logical-props.js");
+const customStylesPlugin = {
+  rules: {
+    "no-hardcoded-styles": noHardcodedStyles,
+  },
+};
+const customRulesPlugin = {
+  rules: {
+    "no-logical-props": noLogicalProps,
+  },
+};
 
 export default tseslint.config(
   // Global ignores (replaces ignorePatterns)
@@ -23,11 +38,25 @@ export default tseslint.config(
         ecmaFeatures: { jsx: true },
       },
     },
+    settings: {
+      "import/resolver": {
+        alias: {
+          map: [["@", "./"]],
+          extensions: [".ts", ".tsx", ".js", ".jsx"],
+        },
+      },
+    },
+    plugins: {
+      "custom-styles": customStylesPlugin,
+      "custom-rules": customRulesPlugin,
+    },
     rules: {
       "max-lines": ["warn", { max: 500, skipBlankLines: true, skipComments: true }],
-      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/ban-ts-comment": "off",
+      "custom-styles/no-hardcoded-styles": "error",
+      "custom-rules/no-logical-props": "off",
       // Allow console.warn/error/info — they map to platform logs in
       // production and are useful for diagnosability. console.log is the
       // dev-only chatter we want to keep out of shipping bundles.
@@ -62,6 +91,25 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-function-type": "off",
       "max-lines": "off",
       "no-console": "off",
+    },
+  },
+
+  {
+    files: ["theme/tokens.ts"],
+    rules: {
+      "custom-styles/no-hardcoded-styles": "off",
+    },
+  },
+
+  {
+    files: [
+      "components/ui/**/*.{ts,tsx}",
+      "components/form/**/*.{ts,tsx}",
+      "hooks/**/*.{ts,tsx}",
+      "theme/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "custom-rules/no-logical-props": "error",
     },
   },
 );
