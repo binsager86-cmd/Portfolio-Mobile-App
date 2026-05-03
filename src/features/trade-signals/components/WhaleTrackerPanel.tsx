@@ -11,6 +11,8 @@ import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as XLSX from "xlsx";
 
 import type { ThemePalette } from "@/constants/theme";
 import { UITokens } from "@/constants/uiTokens";
@@ -78,6 +83,80 @@ function formatCompact(value: number): string {
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toFixed(0);
+}
+
+function calculateVWAP(high: number, low: number, close: number): number {
+  // Typical Price (VWAP approximation for single candle)
+  return (high + low + close) / 3;
+}
+
+async function exportToExcel(
+  rows: ReturnType<typeof calculateWhaleTracker>["rows"],
+  symbol: string,
+) {
+  try {
+    // Prepare data for Excel
+    const data = rows.map((row) => ({
+      DATE: row.date,
+      VWAP: calculateVWAP(row.high, row.low, row.close).toFixed(3),
+      CANDLE: row.candleType.toUpperCase(),
+      ACCUMULATION: row.accumulation > 0 ? row.accumulation.toFixed(0) : "-",
+      DISTRIBUTION: row.distribution < 0 ? row.distribution.toFixed(0) : "-",
+      VOLUME: row.volume.toFixed(0),
+    }));
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, // DATE
+      { wch: 10 }, // VWAP
+      { wch: 8 },  // CANDLE
+      { wch: 15 }, // ACCUMULATION
+      { wch: 15 }, // DISTRIBUTION
+      { wch: 12 }, // VOLUME
+    ];
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Volume Calculation");
+
+    const filename = `whale_tracker_${symbol}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    if (Platform.OS === "web") {
+      // Web: write as binary array → Blob → download
+      const wbout = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const blob = new Blob(
+        [wbout],
+        { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      // Mobile: Save and share
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const fileUri = FileSystem.documentDirectory + filename;
+      await FileSystem.writeAsStringAsync(fileUri, wbout, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert("Export Complete", `File saved to ${fileUri}`);
+      }
+    }
+  } catch (error) {
+    console.error("Export error:", error);
+    Alert.alert("Export Failed", "Could not export to Excel");
+  }
 }
 
 function percentOfRows(waves: WhaleWaveSummary[], predicate: (wave: WhaleWaveSummary) => boolean): number {
@@ -415,7 +494,7 @@ export function WhaleTrackerPanel({
       )}
 
       {/* ── Volume calculation table ────────────────────────────── */}
-      {summary.rows.length > 0 && <VolumeCalculationTable colors={colors} summary={summary} />}
+      {summary.rows.length > 0 && <VolumeCalculationTable colors={colors} summary={summary} symbol={normalized} />}
 
       {/* ── Wave scanner details ────────────────────────────────── */}
       {summary.rows.length > 0 && <WaveScanner colors={colors} summary={summary} />}
@@ -486,9 +565,11 @@ function TrackerSummary({
 function VolumeCalculationTable({
   colors,
   summary,
+  symbol,
 }: {
   colors: ThemePalette;
   summary: ReturnType<typeof calculateWhaleTracker>;
+  symbol: string;
 }) {
   const { t } = useTranslation();
   const allRows = useMemo(
@@ -498,72 +579,86 @@ function VolumeCalculationTable({
 
   return (
     <View style={[styles.tableCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-      <Text style={[styles.tableTitle, { color: colors.textPrimary }]}>
-        {t("whaleTracker.volumeCalculation", "Volume Calculation Stream")}
-      </Text>
-      <Text style={[styles.tableSub, { color: colors.textMuted }]}>
-        {t("whaleTracker.volumeCalculationDesc", "All rows for the selected period showing candle classification and how raw volume is split into accumulation and distribution.")}
-      </Text>
+      <View style={styles.tableHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.tableTitle, { color: colors.textPrimary }]}>
+            {t("whaleTracker.volumeCalculation", "Volume Calculation Stream")}
+          </Text>
+          <Text style={[styles.tableSub, { color: colors.textMuted }]}>
+            {t("whaleTracker.volumeCalculationDesc", "All rows for the selected period showing candle classification and how raw volume is split into accumulation and distribution.")}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => exportToExcel(summary.rows, symbol)}
+          style={[styles.exportButton, { backgroundColor: colors.accentPrimary }]}
+        >
+          <FontAwesome name="file-excel-o" size={16} color="#fff" />
+          <Text style={styles.exportButtonText}>Export</Text>
+        </Pressable>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.tableWrap}>
           <View style={[styles.tableHeaderRow, { backgroundColor: colors.bgSecondary }]}>
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 100 }]}>DATE</Text>
-            <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 90 }]}>PRICE</Text>
+            <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 90 }]}>VWAP</Text>
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 90 }]}>CANDLE</Text>
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 120 }]}>ACCUM.</Text>
             <Text style={[styles.tableHeaderCell, { color: colors.textSecondary, width: 120 }]}>DIST.</Text>
           </View>
-          {allRows.map((row, index) => (
-            <View
-              key={row.date}
-              style={[
-                styles.tableDataRow,
-                {
-                  backgroundColor: index % 2 === 0 ? "transparent" : colors.bgSecondary + "40",
-                  borderTopColor: colors.borderColor,
-                },
-              ]}
-            >
-              <Text style={[styles.tableCell, { color: colors.textPrimary, width: 100 }]}>{row.date}</Text>
-              <Text style={[styles.tableCell, { color: colors.textPrimary, width: 90 }]}>{row.close.toFixed(2)}</Text>
-              <Text
+          {allRows.map((row, index) => {
+            const vwap = calculateVWAP(row.high, row.low, row.close);
+            return (
+              <View
+                key={row.date}
                 style={[
-                  styles.tableCell,
+                  styles.tableDataRow,
                   {
-                    width: 90,
-                    color: row.candleType === "red" ? colors.danger : colors.success,
-                    fontWeight: "700",
+                    backgroundColor: index % 2 === 0 ? "transparent" : colors.bgSecondary + "40",
+                    borderTopColor: colors.borderColor,
                   },
                 ]}
               >
-                {row.candleType.toUpperCase()}
-              </Text>
-              <Text
-                style={[
-                  styles.tableCell,
-                  {
-                    width: 120,
-                    color: row.accumulation > 0 ? colors.success : colors.textMuted,
-                    fontWeight: row.accumulation > 0 ? "600" : "400",
-                  },
-                ]}
-              >
-                {row.accumulation > 0 ? formatCompact(row.accumulation) : "-"}
-              </Text>
-              <Text
-                style={[
-                  styles.tableCell,
-                  {
-                    width: 120,
-                    color: row.distribution < 0 ? colors.danger : colors.textMuted,
-                    fontWeight: row.distribution < 0 ? "600" : "400",
-                  },
-                ]}
-              >
-                {row.distribution < 0 ? formatCompact(row.distribution) : "-"}
-              </Text>
-            </View>
-          ))}
+                <Text style={[styles.tableCell, { color: colors.textPrimary, width: 100 }]}>{row.date}</Text>
+                <Text style={[styles.tableCell, { color: colors.textPrimary, width: 90 }]}>{vwap.toFixed(3)}</Text>
+                <Text
+                  style={[
+                    styles.tableCell,
+                    {
+                      width: 90,
+                      color: row.candleType === "red" ? colors.danger : colors.success,
+                      fontWeight: "700",
+                    },
+                  ]}
+                >
+                  {row.candleType.toUpperCase()}
+                </Text>
+                <Text
+                  style={[
+                    styles.tableCell,
+                    {
+                      width: 120,
+                      color: row.accumulation > 0 ? colors.success : colors.textMuted,
+                      fontWeight: row.accumulation > 0 ? "600" : "400",
+                    },
+                  ]}
+                >
+                  {row.accumulation > 0 ? formatCompact(row.accumulation) : "-"}
+                </Text>
+                <Text
+                  style={[
+                    styles.tableCell,
+                    {
+                      width: 120,
+                      color: row.distribution < 0 ? colors.danger : colors.textMuted,
+                      fontWeight: row.distribution < 0 ? "600" : "400",
+                    },
+                  ]}
+                >
+                  {row.distribution < 0 ? formatCompact(row.distribution) : "-"}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -861,6 +956,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 12,
+  },
+  tableHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  exportButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
   },
   tableTitle: {
     fontSize: 16,

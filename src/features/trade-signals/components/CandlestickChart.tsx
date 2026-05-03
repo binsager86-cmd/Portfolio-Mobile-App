@@ -56,13 +56,17 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
   const [granularity, setGranularity] = useState<Granularity>("1D");
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
-  const [mode, setMode] = useState<InteractionMode>("cross");
+  const [mode, setMode] = useState<InteractionMode>("pan");
   const [measuredW, setMeasuredW] = useState(0);
 
-  const series = useMemo(
-    () => (granularity === "1W" ? resampleWeekly(candles) : candles),
-    [candles, granularity],
-  );
+  const series = useMemo(() => {
+    const base = granularity === "1W" ? resampleWeekly(candles) : candles;
+    // Drop any phantom candles where any OHLC value is zero or missing —
+    // these are ex-dividend placeholder rows that corrupt the Y-axis scale.
+    return base.filter(
+      (c) => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0,
+    );
+  }, [candles, granularity]);
 
   // Responsive height: prefer prop, otherwise scale to viewport.
   const height = heightProp ?? Math.max(500, Math.min(720, Math.round(winHeight * 0.6)));
@@ -218,7 +222,9 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
       }
     },
     onMouseLeave: handleLeave,
-    onWheel: (e: { deltaY: number; nativeEvent: { offsetX?: number }; preventDefault?: () => void }) => {
+    onWheel: (e: { deltaY: number; ctrlKey?: boolean; nativeEvent: { offsetX?: number }; preventDefault?: () => void }) => {
+      // Only zoom when Ctrl is held — otherwise let the page scroll normally.
+      if (!e.ctrlKey) return;
       e.preventDefault?.();
       const x = e.nativeEvent.offsetX ?? padLeft + innerW / 2;
       const idx =
@@ -325,37 +331,39 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
 
       {/* ── Zoom / pan toolbar ────────────────────────────────── */}
       <View style={styles.toolRow}>
-        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
-          {(["cross", "pan"] as InteractionMode[]).map((m) => {
-            const active = mode === m;
-            return (
-              <Pressable
-                key={m}
-                onPress={() => {
-                  setMode(m);
-                  setHoverIdx(null);
-                  setCursor(null);
-                }}
-                style={[styles.toggleBtn, active && { backgroundColor: colors.accentPrimary }]}
-              >
-                <Text style={[styles.toggleText, { color: active ? "#fff" : colors.textSecondary }]}>
-                  {m === "cross" ? "Cross" : "Pan"}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
-          <Pressable onPress={() => zoomBy(1 / 1.4)} style={styles.toggleBtn}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>−</Text>
-          </Pressable>
-          <Pressable onPress={() => zoomBy(1.4)} style={styles.toggleBtn}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>+</Text>
-          </Pressable>
-          <Pressable onPress={fitAll} style={styles.toggleBtn}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>Fit</Text>
-          </Pressable>
-        </View>
+        {/* Zoom out */}
+        <Pressable
+          onPress={() => zoomBy(1 / 1.4)}
+          style={({ pressed }) => [
+            styles.zoomBtn,
+            { borderColor: colors.borderColor, backgroundColor: pressed ? colors.accentPrimary + "33" : colors.bgSecondary },
+          ]}
+        >
+          <Text style={[styles.zoomBtnIcon, { color: colors.textPrimary }]}>−</Text>
+          <Text style={[styles.zoomBtnLabel, { color: colors.textMuted }]}>Zoom Out</Text>
+        </Pressable>
+        {/* Zoom in */}
+        <Pressable
+          onPress={() => zoomBy(1.4)}
+          style={({ pressed }) => [
+            styles.zoomBtn,
+            { borderColor: colors.borderColor, backgroundColor: pressed ? colors.accentPrimary + "33" : colors.bgSecondary },
+          ]}
+        >
+          <Text style={[styles.zoomBtnIcon, { color: colors.textPrimary }]}>+</Text>
+          <Text style={[styles.zoomBtnLabel, { color: colors.textMuted }]}>Zoom In</Text>
+        </Pressable>
+        {/* Fit all */}
+        <Pressable
+          onPress={fitAll}
+          style={({ pressed }) => [
+            styles.fitBtn,
+            { backgroundColor: pressed ? colors.accentPrimary + "cc" : colors.accentPrimary, borderColor: colors.accentPrimary },
+          ]}
+        >
+          <Text style={styles.fitBtnText}>⊡ Fit All</Text>
+        </Pressable>
+        {/* Pan arrows */}
         <View style={[styles.toggle, { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary }]}>
           <Pressable onPress={() => panBars(Math.max(1, Math.round(visibleCount * 0.25)))} style={styles.toggleBtn}>
             <Text style={[styles.toggleText, { color: colors.textSecondary }]}>◀</Text>
@@ -669,7 +677,7 @@ export function CandlestickChart({ candles, colors, height: heightProp }: Props)
           <Text style={[styles.legendText, { color: colors.textSecondary }]}>Bearish</Text>
         </View>
         <Text style={[styles.legendText, { color: colors.textMuted, marginLeft: "auto" }]}>
-          Scroll/wheel to zoom · drag to pan · hover for OHLCV
+          Ctrl + scroll to zoom · drag to pan · hover for OHLCV
         </Text>
       </View>
     </View>
@@ -730,8 +738,25 @@ const styles = StyleSheet.create({
   toolRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
   toolMeta: { fontSize: 12, marginLeft: "auto", fontVariant: ["tabular-nums"] },
 
-  toolRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
-  toolMeta: { fontSize: 12, marginLeft: "auto", fontVariant: ["tabular-nums"] },
+  zoomBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  zoomBtnIcon: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
+  zoomBtnLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
+
+  fitBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fitBtnText: { fontSize: 13, fontWeight: "800", color: "#fff", letterSpacing: 0.4 },
 
   topBar: {
     borderWidth: 1,

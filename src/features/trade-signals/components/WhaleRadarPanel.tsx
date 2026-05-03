@@ -429,6 +429,87 @@ export function WhaleRadarPanel({ colors }: { colors: ThemePalette }) {
 
 // ── Summary (rendered above picker) ─────────────────────────────────
 
+function scoreHelper(score: number, type: "accum" | "dist"): string {
+  if (type === "accum") {
+    if (score >= 80) return `${score}/100 — Strong buying pressure. Institutions likely accumulating on price dips.`;
+    if (score >= 70) return `${score}/100 — Moderate buying pressure. Some institutional accumulation detected.`;
+    if (score >= 50) return `${score}/100 — Mild buying activity. No clear institutional footprint yet.`;
+    return `${score}/100 — Low buying pressure. Institutions are not actively accumulating.`;
+  } else {
+    if (score >= 80) return `${score}/100 — Heavy selling pressure. Institutions likely offloading positions.`;
+    if (score >= 70) return `${score}/100 — Moderate selling. Some distribution activity detected.`;
+    if (score >= 50) return `${score}/100 — Mild selling activity. Distribution is not dominant.`;
+    return `${score}/100 — Low distribution. Minimal institutional selling detected.`;
+  }
+}
+
+function parseSuggestedAction(
+  suggested: string,
+  action: Action,
+  colors: ThemePalette,
+) {
+  // Separate entry instruction from stop instruction for clearer display
+  const stopMatch = suggested.match(/Stop\s+([\d.]+)/);
+  const stop = stopMatch ? stopMatch[1] : null;
+  const entryPart = stop ? suggested.replace(/\.?\s*Stop\s+[\d.]+\.?/, "").trim() : suggested;
+
+  const entryLabel = action === "BUY" ? "ENTRY" : action === "SELL" ? "EXIT" : "WATCH";
+  const entryLabelColor =
+    action === "BUY" ? colors.success : action === "SELL" ? colors.danger : colors.textMuted;
+
+  return (
+    <View style={{ gap: 8, marginTop: 8 }}>
+      {/* Entry row */}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+        <View
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 5,
+            backgroundColor: entryLabelColor + "22",
+            borderWidth: 1,
+            borderColor: entryLabelColor + "66",
+          }}
+        >
+          <Text style={{ fontSize: 11, fontWeight: "800", color: entryLabelColor, letterSpacing: 1 }}>
+            {entryLabel}
+          </Text>
+        </View>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.textPrimary, flex: 1, lineHeight: 20 }}>
+          {entryPart}
+        </Text>
+      </View>
+      {/* Stop row */}
+      {stop && (
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+          <View
+            style={{
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 5,
+              backgroundColor: colors.danger + "22",
+              borderWidth: 1,
+              borderColor: colors.danger + "66",
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: "800", color: colors.danger, letterSpacing: 1 }}>
+              STOP
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: colors.danger, lineHeight: 22 }}>
+              {stop}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 1 }}>
+              Exit if price closes below this level
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RadarSummary({ colors, result }: { colors: ThemePalette; result: EngineOutput }) {
   const { t } = useTranslation();
   const { alert } = result;
@@ -445,7 +526,7 @@ function RadarSummary({ colors, result }: { colors: ThemePalette; result: Engine
           <Text style={[styles.actionTitle, { color: colors.textPrimary }]}>
             {result.ticker} · {alert.bias}
           </Text>
-          <Text style={[styles.actionSub, { color: colors.textSecondary }]}>{alert.suggested_action}</Text>
+          {parseSuggestedAction(alert.suggested_action, alert.action, colors)}
         </View>
       </View>
 
@@ -456,12 +537,14 @@ function RadarSummary({ colors, result }: { colors: ThemePalette; result: Engine
           label={t("whaleRadar.accum", "Accumulation")}
           score={result.accumulation_score}
           color={colors.success}
+          helperText={scoreHelper(result.accumulation_score, "accum")}
         />
         <ScoreCard
           colors={colors}
           label={t("whaleRadar.dist", "Distribution")}
           score={result.distribution_score}
           color={colors.danger}
+          helperText={scoreHelper(result.distribution_score, "dist")}
         />
       </View>
     </>
@@ -479,56 +562,74 @@ function RadarDetails({ colors, result }: { colors: ThemePalette; result: Engine
     <>
       {/* Meta row */}
       <View style={[styles.metaCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <FontAwesome name="bar-chart" size={14} color={colors.accentPrimary} />
+          <Text style={[styles.cardHeading, { color: colors.textPrimary, marginBottom: 0 }]}>Signal Details</Text>
+        </View>
         <MetaRow
           colors={colors}
           label={t("whaleRadar.alertLevel", "Alert Level")}
           value={alert.alert_level}
           valueColor={lvColor}
+          hint="STRONG = clear institutional footprint · MODERATE = partial evidence · WEAK = inconclusive"
         />
+        <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
         <MetaRow
           colors={colors}
-          label={t("whaleRadar.alignment", "Multi-TF Alignment")}
+          label={t("whaleRadar.alignment", "Timeframe Alignment")}
           value={alert.timeframe_alignment.toUpperCase()}
+          hint="ALIGNED = short & long-term agree · CONFLICTING = mixed signals, trade with extra caution"
         />
+        <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
         <MetaRow
           colors={colors}
-          label={t("whaleRadar.confidence", "Confidence")}
+          label={t("whaleRadar.confidence", "Model Confidence")}
           value={`${Math.round(result.confidence * 100)}%`}
+          hint="Reliability of this reading. Above 70% is considered actionable."
         />
+        <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
         <MetaRow
           colors={colors}
           label={t("whaleRadar.estFlow", "Est. Institutional Flow")}
           value={`${formatCompact(result.estimated_flow_range[0])}–${formatCompact(result.estimated_flow_range[1])}`}
+          hint="Estimated capital range moving in or out. Larger values = bigger players are active."
         />
+        <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
         <MetaRow
           colors={colors}
           label={t("whaleRadar.primaryDriver", "Primary Driver")}
           value={alert.primary_driver}
+          hint="The main factor that triggered this signal."
         />
       </View>
 
       {/* Factor contributions */}
       <View style={[styles.factorCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <Text style={[styles.cardHeading, { color: colors.textPrimary }]}>
-          {t("whaleRadar.factors", "Factor Contributions")}
+          {t("whaleRadar.factors", "Signal Breakdown")}
         </Text>
-        {factors.contributions.map((f) => {
-          const pct = (f.points / f.weight) * 100;
+        <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 14, lineHeight: 17 }}>
+          How much each market factor contributed to the final score (out of its max weight).
+        </Text>
+        {factors.contributions.map((f, idx) => {
+          const pct = Math.max(0, Math.min(100, (f.points / f.weight) * 100));
+          const barColor = pct >= 70 ? colors.success : pct >= 40 ? colors.accentPrimary : colors.danger;
           return (
-            <View key={f.name} style={styles.factorRow}>
+            <View key={f.name} style={[styles.factorRow, idx < factors.contributions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderColor }]}>
               <View style={styles.factorLabelRow}>
-                <Text style={[styles.factorName, { color: colors.textSecondary }]}>{f.name}</Text>
-                <Text style={[styles.factorPoints, { color: colors.textPrimary }]}>
-                  +{f.points.toFixed(1)} <Text style={{ color: colors.textMuted }}>/ {f.weight}</Text>
-                </Text>
+                <Text style={[styles.factorName, { color: colors.textPrimary }]}>{f.name}</Text>
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+                  <Text style={[styles.factorPoints, { color: barColor }]}>+{f.points.toFixed(1)}</Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }}>/ {f.weight} pts</Text>
+                </View>
               </View>
-              <View style={[styles.factorTrack, { backgroundColor: colors.bgSecondary }]}>
-                <View
-                  style={[
-                    styles.factorFill,
-                    { width: `${Math.max(0, Math.min(100, pct))}%`, backgroundColor: colors.accentPrimary },
-                  ]}
-                />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <View style={[styles.factorTrack, { flex: 1, backgroundColor: colors.bgSecondary }]}>
+                  <View style={[styles.factorFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: barColor, width: 36, textAlign: "right" }}>
+                  {Math.round(pct)}%
+                </Text>
               </View>
             </View>
           );
@@ -538,19 +639,46 @@ function RadarDetails({ colors, result }: { colors: ThemePalette; result: Engine
       {/* Levels */}
       <View style={[styles.levelsCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <Text style={[styles.cardHeading, { color: colors.textPrimary }]}>
-          {t("whaleRadar.levels", "Key Levels")}
+          {t("whaleRadar.levels", "Key Price Levels")}
         </Text>
-        <LevelRow colors={colors} icon="arrow-up" iconColor={colors.success} text={alert.key_level} />
-        <LevelRow colors={colors} icon="ban" iconColor={colors.danger} text={alert.invalidation} />
+        <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 14, lineHeight: 17 }}>
+          Two critical prices that define whether the trade idea is valid or has failed.
+        </Text>
+        <LevelRow
+          colors={colors}
+          icon="arrow-up"
+          iconColor={colors.success}
+          label="BREAKOUT TARGET"
+          text={alert.key_level}
+          description="This is the price the stock needs to break and close above. When it does — with strong volume — it confirms institutional buyers are in control and the move is real."
+        />
+        <LevelRow
+          colors={colors}
+          icon="ban"
+          iconColor={colors.danger}
+          label="INVALIDATION LEVEL"
+          text={alert.invalidation}
+          description="If the stock closes below this price, the setup is broken. It means the expected institutional support failed and you should exit or avoid the trade entirely."
+        />
         {alert.confirmation_signals.length > 0 && (
-          <View style={{ marginTop: 8 }}>
+          <View style={{ marginTop: 12, gap: 6 }}>
             <Text style={[styles.confirmHeading, { color: colors.textMuted }]}>
-              {t("whaleRadar.confirmations", "Supporting Signals")}
+              {t("whaleRadar.confirmations", "What Would Confirm This Signal")}
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8, lineHeight: 17 }}>
+              These are additional signs that would strengthen the case for this trade.
             </Text>
             {alert.confirmation_signals.map((s) => (
-              <Text key={s} style={[styles.confirmItem, { color: colors.textSecondary }]}>
-                ◦ {s}
-              </Text>
+              <View
+                key={s}
+                style={[
+                  styles.confirmChip,
+                  { backgroundColor: colors.accentPrimary + "14", borderColor: colors.accentPrimary + "33" },
+                ]}
+              >
+                <FontAwesome name="check-circle" size={11} color={colors.accentPrimary} />
+                <Text style={[styles.confirmItem, { color: colors.textSecondary }]}>{s}</Text>
+              </View>
             ))}
           </View>
         )}
@@ -574,24 +702,40 @@ function ScoreCard({
   label,
   score,
   color,
+  helperText,
 }: {
   colors: ThemePalette;
   label: string;
   score: number;
   color: string;
+  helperText?: string;
 }) {
+  const pct = Math.max(0, Math.min(100, score));
   return (
-    <View style={[styles.scoreCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-      <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.scoreValue, { color }]}>{score}</Text>
-      <View style={[styles.scoreTrack, { backgroundColor: colors.bgSecondary }]}>
-        <View
-          style={[
-            styles.scoreFill,
-            { width: `${Math.max(0, Math.min(100, score))}%`, backgroundColor: color },
-          ]}
-        />
+    <View style={[styles.scoreCard, { backgroundColor: colors.bgCard, borderColor: color + "44" }]}>
+      {/* Colored top accent bar */}
+      <View style={{ height: 3, borderRadius: 2, backgroundColor: color, marginBottom: 10 }} />
+      <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>{label.toUpperCase()}</Text>
+      {/* Score + arc */}
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4, marginVertical: 6 }}>
+        <Text style={[styles.scoreValue, { color }]}>{score}</Text>
+        <Text style={{ fontSize: 16, color: colors.textMuted, fontWeight: "600" }}>/100</Text>
       </View>
+      {/* Progress bar */}
+      <View style={[styles.scoreTrack, { backgroundColor: colors.bgSecondary }]}>
+        <View style={[styles.scoreFill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
+      {/* Tick marks */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 3 }}>
+        {[0, 25, 50, 75, 100].map((t) => (
+          <Text key={t} style={{ fontSize: 9, color: colors.textMuted }}>{t}</Text>
+        ))}
+      </View>
+      {helperText && (
+        <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 8, lineHeight: 16 }}>
+          {helperText}
+        </Text>
+      )}
     </View>
   );
 }
@@ -601,16 +745,30 @@ function MetaRow({
   label,
   value,
   valueColor,
+  hint,
 }: {
   colors: ThemePalette;
   label: string;
   value: string;
   valueColor?: string;
+  hint?: string;
 }) {
   return (
     <View style={styles.metaRow}>
-      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.metaValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+      <View style={styles.metaLeft}>
+        <Text style={[styles.metaLabel, { color: colors.textPrimary }]}>{label}</Text>
+        {hint ? (
+          <Text style={[styles.metaHint, { color: "#7EB8D4" }]}>{hint}</Text>
+        ) : null}
+      </View>
+      <View
+        style={[
+          styles.metaValueBadge,
+          { backgroundColor: (valueColor ?? colors.accentPrimary) + "18", borderColor: (valueColor ?? colors.accentPrimary) + "44" },
+        ]}
+      >
+        <Text style={[styles.metaValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -620,16 +778,35 @@ function LevelRow({
   icon,
   iconColor,
   text,
+  label,
+  description,
 }: {
   colors: ThemePalette;
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   iconColor: string;
   text: string;
+  label?: string;
+  description?: string;
 }) {
   return (
-    <View style={styles.levelRow}>
-      <FontAwesome name={icon} size={12} color={iconColor} style={{ marginTop: 3 }} />
-      <Text style={[styles.levelText, { color: colors.textSecondary }]}>{text}</Text>
+    <View style={[
+      styles.levelRow,
+      { backgroundColor: iconColor + "10", borderLeftColor: iconColor, borderLeftWidth: 3, borderRadius: 8 },
+    ]}>
+      <FontAwesome name={icon} size={13} color={iconColor} />
+      <View style={{ flex: 1 }}>
+        {label ? (
+          <Text style={{ fontSize: 10, fontWeight: "800", color: iconColor, letterSpacing: 0.8, marginBottom: 2 }}>
+            {label}
+          </Text>
+        ) : null}
+        <Text style={[styles.levelText, { color: colors.textPrimary }]}>{text}</Text>
+        {description ? (
+          <Text style={{ fontSize: 12, color: "#7EB8D4", marginTop: 5, lineHeight: 17 }}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -726,35 +903,44 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: "row", gap: 12 },
   scoreCard: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 18,
-    gap: 8,
   },
-  scoreLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 },
-  scoreValue: { fontSize: 36, fontWeight: "800", letterSpacing: -1 },
-  scoreTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
-  scoreFill: { height: 8, borderRadius: 4 },
+  scoreLabel: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2 },
+  scoreValue: { fontSize: 40, fontWeight: "900", letterSpacing: -2 },
+  scoreTrack: { height: 10, borderRadius: 5, overflow: "hidden" },
+  scoreFill: { height: 10, borderRadius: 5 },
 
-  metaCard: { borderRadius: 12, borderWidth: 1, padding: 18, gap: 12 },
-  metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  metaLabel: { fontSize: 14, fontWeight: "500" },
-  metaValue: { fontSize: 15, fontWeight: "700" },
+  metaCard: { borderRadius: 14, borderWidth: 1, padding: 20 },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingVertical: 10 },
+  metaLeft: { flex: 1, gap: 3, paddingRight: 16 },
+  metaLabel: { fontSize: 14, fontWeight: "700" },
+  metaHint: { fontSize: 12, lineHeight: 18, letterSpacing: 0.1 },
+  metaValueBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  metaValue: { fontSize: 13, fontWeight: "800", letterSpacing: 0.3 },
 
-  factorCard: { borderRadius: 12, borderWidth: 1, padding: 18 },
-  cardHeading: { fontSize: 16, fontWeight: "700", marginBottom: 14 },
-  factorRow: { marginBottom: 14 },
-  factorLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  factorCard: { borderRadius: 14, borderWidth: 1, padding: 20 },
+  cardHeading: { fontSize: 17, fontWeight: "800", marginBottom: 14 },
+  factorRow: { paddingVertical: 12 },
+  factorLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   factorName: { fontSize: 14, fontWeight: "600" },
-  factorPoints: { fontSize: 14, fontWeight: "700" },
-  factorTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
-  factorFill: { height: 6, borderRadius: 3 },
+  factorPoints: { fontSize: 15, fontWeight: "800" },
+  factorTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  factorFill: { height: 8, borderRadius: 4 },
 
-  levelsCard: { borderRadius: 12, borderWidth: 1, padding: 18 },
-  levelRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
-  levelText: { flex: 1, fontSize: 14, lineHeight: 20 },
-  confirmHeading: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", marginBottom: 6 },
-  confirmItem: { fontSize: 14, lineHeight: 20 },
+  levelsCard: { borderRadius: 14, borderWidth: 1, padding: 20 },
+  levelRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 14, marginBottom: 10 },
+  levelText: { flex: 1, fontSize: 14, lineHeight: 21, fontWeight: "500" },
+  confirmHeading: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 },
+  confirmChip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  confirmItem: { fontSize: 13, lineHeight: 18, flex: 1 },
 
-  disclaimer: { fontSize: 13, fontStyle: "italic", lineHeight: 18, paddingHorizontal: 4 },
+  disclaimer: { fontSize: 12, fontStyle: "italic", lineHeight: 18, paddingHorizontal: 4, opacity: 0.7 },
 });

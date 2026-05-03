@@ -16,6 +16,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useThemeStore } from "@/services/themeStore";
 import type { ThemePalette } from "@/constants/theme";
 import { FSignalsPanel } from "@/src/features/trade-signals/components/FSignalsPanel";
+import { TechnicalAnalysisPanel } from "@/src/features/trade-signals/components/TechnicalAnalysisPanel";
 import { WhaleRadarPanel } from "@/src/features/trade-signals/components/WhaleRadarPanel";
 
 type SubTabKey = "fsignals" | "technical" | "whaleRadar";
@@ -106,17 +107,9 @@ export default function TradeSignalsScreen() {
         </View>
       )}
       {tab === "technical" && (
-        <ScrollView contentContainerStyle={styles.content}>
-          <PlaceholderPanel
-            icon="line-chart"
-            title={t("tradeSignals.technical", "Technical Analysis")}
-            description={t(
-              "tradeSignals.technicalDesc",
-              "Technical indicators and chart-based signals will appear here.",
-            )}
-            colors={colors}
-          />
-        </ScrollView>
+        <View style={{ flex: 1 }}>
+          <TechnicalAnalysisPanel colors={colors} />
+        </View>
       )}
       {tab === "whaleRadar" && (
         <View style={{ flex: 1 }}>
