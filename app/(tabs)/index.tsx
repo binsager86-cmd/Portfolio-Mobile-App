@@ -287,13 +287,32 @@ function OverviewScreen() {
       }
     }
 
+    // FX rate from API (e.g. 0.307 USD/KWD).  Fallback to 1 so pure-KWD
+    // portfolios are never affected even if the field is absent.
+    const fxRate = Number(holdingsResp?.usd_kwd_rate ?? 1) || 1;
+
     return items
       .map((h) => {
         const symbol = (h.symbol ?? "").trim().toUpperCase();
-        const last = Number(h.market_price ?? 0);
         const qty = Number(h.shares_qty ?? 0);
-        const costPerPrice = Number(h.avg_cost ?? 0);
-        const persistedPrevClose = Number(h.previous_close ?? 0);
+        const isUsd = (h.currency ?? "KWD").toUpperCase() === "USD";
+
+        // ── Per-share prices — always in KWD for display ──────────
+        // For USD holdings the API returns raw USD prices in market_price /
+        // avg_cost / previous_close.  We convert them to KWD using the
+        // authoritative KWD totals (market_value_kwd, total_cost_kwd) when
+        // available, falling back to × fxRate when not.
+        const last = isUsd
+          ? (qty > 0 ? Number(h.market_value_kwd ?? 0) / qty : Number(h.market_price ?? 0) * fxRate)
+          : Number(h.market_price ?? 0);
+
+        const costPerPrice = isUsd
+          ? (qty > 0 ? Number(h.total_cost_kwd ?? 0) / qty : Number(h.avg_cost ?? 0) * fxRate)
+          : Number(h.avg_cost ?? 0);
+
+        // previous_close is always in the stock's native currency — multiply by fxRate for USD
+        const rawPrevClose = Number(h.previous_close ?? 0);
+        const persistedPrevClose = isUsd ? rawPrevClose * fxRate : rawPrevClose;
         const hasPersistedPrevClose = Number.isFinite(persistedPrevClose) && persistedPrevClose > 0;
         const fallbackChangePct = moverMap.get(symbol) ?? null;
 
@@ -332,7 +351,7 @@ function OverviewScreen() {
         };
       })
       .sort((a, b) => b.quantity * b.lastPrice - a.quantity * a.lastPrice);
-  }, [holdingsResp?.holdings, marketSummary?.top_gainers, marketSummary?.top_losers, marketSummary?.top_value]);
+  }, [holdingsResp?.holdings, holdingsResp?.usd_kwd_rate, marketSummary?.top_gainers, marketSummary?.top_losers, marketSummary?.top_value]);
 
   const holdingsMobileColumns = useMemo<DataColumn<OverviewHoldingRow>[]>(() => [
     {
