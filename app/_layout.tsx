@@ -6,11 +6,12 @@ import {
 } from "@react-navigation/native";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { I18nManager, Platform, View } from "react-native";
+import { AppState, I18nManager, Platform, View } from "react-native";
 import { PaperProvider } from "react-native-paper";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -37,6 +38,21 @@ import { registerForPushNotificationsAsync } from "@/services/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { useAppTheme } from "@/theme";
+
+// ── Critical: set notification handler at module load time ───────────
+// Must be called synchronously before any component renders so notifications
+// delivered when the app is backgrounded / cold-started are handled correctly.
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export {
     ErrorBoundary
@@ -115,6 +131,18 @@ function RootLayoutNav() {
   // ── Session guard: periodic heartbeat + focus re-validation ────
   useSessionGuard();
   usePushNotifications();
+
+  // Clear badge count when the user opens the app (foreground)
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    Notifications.setBadgeCountAsync(0).catch(() => {});
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        Notifications.setBadgeCountAsync(0).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // ── Google Analytics: track page views on route changes (web) ──
   usePageViewTracking();

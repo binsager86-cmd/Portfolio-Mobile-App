@@ -129,20 +129,36 @@ export async function registerPushToken(): Promise<string | null> {
     return null;
   }
 
-  // Ensure an Android notification channel exists (required on Android 8+
-  // for notifications to be displayed at all). On Android 13, creating at
-  // least one channel before token/permission calls helps trigger the OS
-  // POST_NOTIFICATIONS prompt reliably.
+  // Ensure all Android notification channels exist (required on Android 8+).
+  // We create them here (during registration) and also in usePushNotifications
+  // so they exist regardless of which code path runs first.
   if (Platform.OS === "android") {
-    try {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "Default",
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#8a2be2",
-      });
-    } catch (e) {
-      if (__DEV__) console.warn("[Push] setNotificationChannelAsync failed:", e);
+    // Android LED light color (native hardware — not a UI token)
+     
+    const LED_PURPLE = "#8a2be2";
+    const channels: { id: string; name: string; importance: number; description: string }[] = [
+      { id: "news",              name: "Market News",              importance: Notifications.AndroidImportance.HIGH,    description: "Breaking news about stocks you hold" },
+      { id: "portfolio-news",   name: "Portfolio News Alerts",    importance: Notifications.AndroidImportance.HIGH,    description: "News matching companies in your portfolio" },
+      { id: "portfolio-updates",name: "Portfolio Updates",        importance: Notifications.AndroidImportance.HIGH,    description: "Significant moves in your portfolio value" },
+      { id: "price-alerts",     name: "Price Alerts",             importance: Notifications.AndroidImportance.MAX,     description: "Urgent alerts when a stock hits your target price" },
+      { id: "daily-updates",    name: "Daily Portfolio Summary",  importance: Notifications.AndroidImportance.DEFAULT, description: "End-of-day portfolio value summary" },
+    ];
+    for (const ch of channels) {
+      try {
+        await Notifications.setNotificationChannelAsync(ch.id, {
+          name: ch.name,
+          importance: ch.importance,
+          description: ch.description,
+          vibrationPattern: ch.importance >= Notifications.AndroidImportance.HIGH ? [0, 250, 250, 250] : [0, 150],
+          lightColor: LED_PURPLE,
+          sound: "default",
+          enableLights: ch.importance >= Notifications.AndroidImportance.HIGH,
+          enableVibrate: ch.importance >= Notifications.AndroidImportance.HIGH,
+          showBadge: true,
+        });
+      } catch (e) {
+        if (__DEV__) console.warn("[Push] setNotificationChannelAsync failed:", ch.id, e);
+      }
     }
   }
 

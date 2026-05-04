@@ -222,6 +222,29 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
     } catch (err) {
       if (__DEV__) console.warn("[UserPrefsStore] remote hydrate failed:", err);
     }
+
+    // Also pull notification prefs so they stay in sync across devices.
+    try {
+      const notifMod = await import("../../services/notifications/notificationPrefsService");
+      const remoteNotif = await notifMod.pullNotificationPrefs();
+      if (remoteNotif) {
+        const prev = get().preferences;
+        const mergedNotif: UserPreferences = {
+          ...prev,
+          notifications: {
+            ...prev.notifications,
+            ...(remoteNotif.newsNotifications !== undefined   && { newsNotifications:   remoteNotif.newsNotifications }),
+            ...(remoteNotif.portfolioUpdates  !== undefined   && { portfolioUpdates:    remoteNotif.portfolioUpdates }),
+            ...(remoteNotif.priceAlerts       !== undefined   && { priceAlerts:         remoteNotif.priceAlerts }),
+            ...(remoteNotif.dailyPriceUpdates !== undefined   && { dailyPriceUpdates:   remoteNotif.dailyPriceUpdates }),
+          },
+        };
+        set({ preferences: mergedNotif });
+        savePrefs(mergedNotif);
+      }
+    } catch (err) {
+      if (__DEV__) console.warn("[UserPrefsStore] notification prefs remote pull failed:", err);
+    }
   },
 
   setExpertiseLevel: (level) => {
