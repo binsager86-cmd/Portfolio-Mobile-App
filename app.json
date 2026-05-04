@@ -22,7 +22,9 @@
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS",
+        "USE_EXACT_ALARM"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -49,7 +51,8 @@
         {
           "icon": "./assets/images/icon.png",
           "color": "#8a2be2",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "requestPermissionsAndroid": true
         }
       ],
       "@sentry/react-native",
