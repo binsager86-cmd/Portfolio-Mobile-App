@@ -189,13 +189,28 @@ function RootLayoutNav() {
             returnedState &&
             expectedState === returnedState
           ) {
-            // Await the full sign-in flow — this sets token + loading:false
-            const ok = await googleSignIn(accessToken);
+            // Retry the backend exchange up to 3 attempts total.
+            // The server may be cold-starting on DigitalOcean (spin-up adds
+            // 15-25s), causing the first attempt to hit the backend's internal
+            // Google-verification timeout and return a 401. A warm retry
+            // almost always succeeds, avoiding a needless round-trip back
+            // through the Google consent screen.
+            let ok = false;
+            for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+              if (attempt > 0) {
+                // Wait before retry: 2 s after 1st failure, 4 s after 2nd.
+                await new Promise<void>((resolve) => {
+                  setTimeout(resolve, attempt * 2000);
+                });
+              }
+              ok = await googleSignIn(accessToken);
+            }
             if (ok) {
               return; // skip hydration — googleSignIn already set session
             }
-            // If OAuth exchange fails, continue with normal hydration so
-            // the app never stays on a blank waiting state.
+            // All retries exhausted — fall through to normal hydration.
+            // The error is already stored in authStore; the login screen
+            // will surface it so the user understands what happened.
           }
           if (__DEV__ && accessToken) {
             console.warn("[OAuth] Discarded callback: state mismatch or no pending request.");
