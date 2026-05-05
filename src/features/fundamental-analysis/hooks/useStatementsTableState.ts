@@ -34,6 +34,7 @@ import {
     logStatementChange,
 } from "@/services/api/analytics";
 import { STMNT_META } from "../types";
+import { inferQuarterFromDate } from "../utils";
 import type { PeriodInfo } from "../components/StatementTableRows";
 
 const RECONCILE_OPTS = [
@@ -236,14 +237,17 @@ export function useStatementsTableState(
   const periods: PeriodInfo[] = useMemo(() =>
     [...statements]
       .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date))
-      .map((s) => ({
-        label: `FY${s.fiscal_year}${s.fiscal_quarter ? ` Q${s.fiscal_quarter}` : ""}`,
-        period: s.period_end_date,
-        statementId: s.id,
-        items: Object.fromEntries(
-          (s.line_items ?? []).map((li) => [li.line_item_code, { id: li.id, amount: li.amount, name: li.line_item_name, isTotal: li.is_total, edited: li.manually_edited }])
-        ),
-      })),
+      .map((s) => {
+        const q = s.fiscal_quarter ?? inferQuarterFromDate(s.period_end_date);
+        return {
+          label: `FY${s.fiscal_year}${q ? ` Q${q}` : ""}`,
+          period: s.period_end_date,
+          statementId: s.id,
+          items: Object.fromEntries(
+            (s.line_items ?? []).map((li) => [li.line_item_code, { id: li.id, amount: li.amount, name: li.line_item_name, isTotal: li.is_total, edited: li.manually_edited }])
+          ),
+        };
+      }),
   [statements]);
 
   const allCodes = useMemo(() => {
