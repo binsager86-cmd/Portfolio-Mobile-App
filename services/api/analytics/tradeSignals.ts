@@ -113,15 +113,89 @@ export interface KuwaitSignalLiquidityDetails {
   pass_concentration: boolean;
 }
 
+export interface KuwaitHurstFilter {
+  h_value: number;
+  h_std_error: number;
+  threshold: number;
+  confidence_penalty: number;
+  action: "proceed" | "skip_or_downgrade" | "skip_signal";
+  description: string;
+}
+
+export interface KuwaitOrderBookMetrics {
+  imbalance_ratio: number | null;
+  liquidity_wall: {
+    side: "bid" | "ask";
+    price: number;
+    volume: number;
+    strength: string;
+  } | null;
+  available: boolean;
+}
+
+export interface KuwaitBankingLeadLag {
+  active: boolean;
+  multiplier: number;
+  banking_trend_raw: number;
+}
+
+export type FourScoreTier = "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+
+export interface FourScoreComponent {
+  score: number;
+  tier: FourScoreTier;
+  description: string;
+}
+
+export interface FourScoreRisk extends FourScoreComponent {
+  is_blocked: boolean;
+  block_reason: string;
+}
+
+export interface FourScoreOverall extends FourScoreComponent {
+  risk_multiplier: number;
+}
+
+export interface FourScorePositionAction {
+  action: string;
+  label: string;
+  max_position_pct: number;
+}
+
+export interface FourScores {
+  potential: FourScoreComponent;
+  timing: FourScoreComponent;
+  risk: FourScoreRisk;
+  overall: FourScoreOverall;
+  position_action: FourScorePositionAction;
+}
+
 export interface KuwaitSignalConfluence {
   total_score: number;
+  total_score_raw: number | null;
   regime: string;
   regime_confidence: number | null;
   auction_intensity: number | null;
+  hurst_filter: KuwaitHurstFilter | null;
+  orderbook_metrics: KuwaitOrderBookMetrics | null;
+  banking_lead_lag: KuwaitBankingLeadLag | null;
   sub_scores: KuwaitSignalSubScores;
   raw_sub_scores: KuwaitSignalSubScores;
   liquidity_passed: boolean;
   liquidity_details: KuwaitSignalLiquidityDetails;
+  circuit_proximity: {
+    is_near_limit: boolean;
+    direction: "upper" | "lower" | "both" | null;
+    distance_to_upper_pct: number | null;
+    distance_to_lower_pct: number | null;
+  } | null;
+  circuit_breaker: {
+    penalty_multiplier: number;
+    severity: "severe" | "moderate" | "light" | "none";
+    nearest_circuit_pct: number | null;
+    is_near_upper_circuit: boolean | null;
+    description: string;
+  } | null;
   /** Nearest support price levels (fils), sorted descending (closest first) */
   support_levels: number[];
   /** Nearest resistance price levels (fils), sorted ascending (closest first) */
@@ -132,6 +206,8 @@ export interface KuwaitSignalConfluence {
   rich_sr: KuwaitRichSR | null;
   /** Volume profile summary */
   volume_profile: KuwaitVolumeProfile | null;
+  /** Four-score architecture: Potential, Timing, Risk, Overall */
+  four_scores: FourScores | null;
 }
 
 export type SRLevelStrength = "very_strong" | "strong" | "moderate" | "weak";
@@ -175,6 +251,36 @@ export interface KuwaitSignal {
   segment: string;
   signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL";
   setup_type: string;
+
+  // ── Score transparency ─────────────────────────────────────────────────
+  /** Weighted technical score BEFORE circuit / CVaR penalties. null for NEUTRAL. */
+  raw_technical_score: number | null;
+  /** Score after all penalties applied. null for NEUTRAL. */
+  risk_adjusted_score: number | null;
+  /** Breakdown of how the final score was derived from penalties */
+  score_breakdown: {
+    raw_technical: number;
+    circuit_penalty_pct: number;
+    cvar_penalty_pct: number;
+    age_decay_applied: boolean;
+    final_risk_adjusted: number;
+  } | null;
+  /** Per-component raw, weighted, and weight_pct */
+  component_scores: {
+    trend: { raw: number | null; weighted: number | null; weight_pct: number | null };
+    momentum: { raw: number | null; weighted: number | null; weight_pct: number | null };
+    volume_flow: { raw: number | null; weighted: number | null; weight_pct: number | null };
+    support_resistance: { raw: number | null; weighted: number | null; weight_pct: number | null };
+    risk_reward: { raw: number | null; weighted: number | null; weight_pct: number | null };
+  } | null;
+
+  // ── Block reason (populated only for NEUTRAL signals) ─────────────────
+  reason: string | null;
+  reason_description: string | null;
+  failed_gates: string[];
+  details: Record<string, unknown>;
+  technical_scores_debug: Record<string, number> | null;
+
   execution: KuwaitSignalExecution;
   risk_metrics: KuwaitSignalRisk;
   probabilities: KuwaitSignalProbabilities;

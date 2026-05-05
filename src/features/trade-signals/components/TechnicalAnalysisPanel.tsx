@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 
+import type { FourScores, FourScoreTier } from "@/services/api/analytics/tradeSignals";
 import type { ThemePalette } from "@/constants/theme";
 import {
   getKuwaitSignal,
@@ -526,7 +527,7 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
 }
 
 // ── Full signal output ────────────────────────────────────────────────
-function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemePalette }) {
+export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemePalette }) {
   const c = signal.confluence_details;
   const e = signal.execution;
   const r = signal.risk_metrics;
@@ -550,20 +551,78 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           <Text style={[{ fontSize: 10, color: colors.textMuted, marginTop: 2 }]}>
             Data as of {signal.metadata.data_as_of}
           </Text>
+
+          {/* ── Hurst exponent badge ───────────────────────── */}
+          {c.hurst_filter && (
+            <View style={[
+              styles.metaBadge,
+              { backgroundColor: c.hurst_filter.action === "proceed" ? "#22c55e18" : "#f59e0b18" },
+            ]}>
+              <Text style={[
+                styles.metaBadgeText,
+                { color: c.hurst_filter.action === "proceed" ? "#16a34a" : "#b45309" },
+              ]}>
+                H: {c.hurst_filter.h_value.toFixed(3)}
+                {"  ·  "}
+                {c.hurst_filter.action === "proceed" ? "Trending ✓" : "Choppy ⚠️"}
+              </Text>
+            </View>
+          )}
+
+          {/* ── Banking Lead-Lag badge ─────────────────────── */}
+          {c.banking_lead_lag?.active && (
+            <View style={[styles.metaBadge, { backgroundColor: "#3b82f618" }]}>
+              <Text style={[styles.metaBadgeText, { color: "#1d4ed8" }]}>
+                🏦 Banking Lead  ×{c.banking_lead_lag.multiplier.toFixed(1)}
+                {"  ·  "}trend {c.banking_lead_lag.banking_trend_raw.toFixed(0)}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={styles.signalHeaderRight}>
           <SignalBadge signal={signal.signal} />
           <View style={{ alignItems: "flex-end", marginTop: 6 }}>
-            <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Overall Score</Text>
+            <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Raw Technical</Text>
             <Text style={[styles.scoreCircleText, {
-              color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
+              color: (signal.raw_technical_score ?? c.total_score) >= 75 ? "#22c55e"
+                : (signal.raw_technical_score ?? c.total_score) >= 50 ? "#f59e0b"
+                : "#ef4444",
             }]}>
-              {c.total_score}
+              {signal.raw_technical_score ?? c.total_score}
               <Text style={{ fontSize: 12, color: colors.textMuted }}>/100</Text>
             </Text>
+            {signal.risk_adjusted_score != null
+              && signal.risk_adjusted_score !== signal.raw_technical_score && (
+              <Text style={[{ fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>
+                Adj: <Text style={{ color: "#f59e0b" }}>{signal.risk_adjusted_score}</Text>
+              </Text>
+            )}
           </View>
         </View>
       </View>
+
+      {/* ── NEUTRAL reason banner ────────────────────────────── */}
+      {signal.signal === "NEUTRAL" && signal.reason && (
+        <View style={[styles.card, {
+          backgroundColor: "#fef3c7",
+          borderColor: "#f59e0b",
+          borderWidth: 1,
+        }]}>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: "#92400e", marginBottom: 4 }}>
+            🚧 Signal Blocked: {signal.reason_description ?? signal.reason}
+          </Text>
+          {signal.failed_gates.length > 0 && (
+            <Text style={{ fontSize: 12, color: "#b45309", marginBottom: 4 }}>
+              Failed gates: {signal.failed_gates.join(" · ")}
+            </Text>
+          )}
+          {signal.technical_scores_debug && (
+            <Text style={{ fontSize: 11, color: "#92400e" }}>
+              Debug — Trend: {signal.technical_scores_debug.trend_raw ?? "—"}  Mom: {signal.technical_scores_debug.momentum_raw ?? "—"}  Vol: {signal.technical_scores_debug.volume_raw ?? "—"}  SR: {signal.technical_scores_debug.sr_raw ?? "—"}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && <PriceLadder signal={signal} colors={colors} />}
@@ -715,7 +774,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
                       <Text style={{ fontSize: 12, color: textColor, fontWeight: "600" }}>
                         {isSup ? "▲ Support" : "▼ Resistance"}{lv.volume_cluster ? "  📦" : ""}
                       </Text>
-                      <Text style={{ fontSize: 11, color: colors.subText, marginTop: 1 }}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
                         {lv.type}
                       </Text>
                     </View>
@@ -723,7 +782,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
                       <Text style={{ fontSize: 13, color: textColor, fontWeight: "700" }}>
                         {lv.price.toFixed(1)}
                       </Text>
-                      <Text style={{ fontSize: 10, color: colors.subText }}>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>
                         {strengthDots}  {lv.strength}
                       </Text>
                     </View>
@@ -781,13 +840,25 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
             <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Combined Score</Text>
             <Text style={[styles.totalHint, { color: colors.textMuted }]}>Need ≥ 75 for a BUY signal</Text>
           </View>
-          <Text style={[styles.totalValue, {
-            color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
-          }]}>
-            {c.total_score} / 100
-          </Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={[styles.totalValue, {
+              color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
+            }]}>
+              {signal.raw_technical_score ?? c.total_score} / 100
+            </Text>
+            {signal.score_breakdown && signal.score_breakdown.circuit_penalty_pct > 0 && (
+              <Text style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>
+                Circuit penalty: −{signal.score_breakdown.circuit_penalty_pct}%  →  Adj: {signal.risk_adjusted_score}
+              </Text>
+            )}
+          </View>
         </View>
       </SectionCard>
+
+      {/* ── Four-score decision matrix ────────────────────────── */}
+      {c.four_scores && (
+        <FourScoreCards fourScores={c.four_scores} colors={colors} />
+      )}
 
       {/* ── Market conditions ────────────────────────────────── */}
       <SectionCard
@@ -894,6 +965,38 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
             }
             colors={colors}
           />
+        </SectionCard>
+      )}
+
+      {/* ── Order book imbalance quick row ─────────────────── */}
+      {c.orderbook_metrics?.available && c.orderbook_metrics.imbalance_ratio != null && (
+        <SectionCard
+          title="📖 Order Book Snapshot"
+          subtitle="Real-time bid vs ask pressure at point of signal generation"
+          colors={colors}
+        >
+          <Row
+            label="Bid/Ask Imbalance"
+            hint="Positive = more buying pressure, negative = more selling pressure"
+            value={
+              c.orderbook_metrics.imbalance_ratio > 0
+                ? `▶ Bid +${(c.orderbook_metrics.imbalance_ratio * 100).toFixed(0)}%`
+                : `◀ Ask ${(c.orderbook_metrics.imbalance_ratio * 100).toFixed(0)}%`
+            }
+            valueColor={c.orderbook_metrics.imbalance_ratio > 0.1 ? "#22c55e" : c.orderbook_metrics.imbalance_ratio < -0.1 ? "#ef4444" : colors.textPrimary}
+            colors={colors}
+          />
+          {c.orderbook_metrics.liquidity_wall && (
+            <View style={[styles.alertRow, { backgroundColor: "#fef3c720", borderRadius: 6, padding: 8, marginTop: 4 }]}>
+              <Text style={{ fontSize: 13, marginRight: 6 }}>🧱</Text>
+              <Text style={[styles.alertText, { color: "#92400e" }]}>
+                {c.orderbook_metrics.liquidity_wall.strength.toUpperCase()}{" "}
+                {c.orderbook_metrics.liquidity_wall.side.toUpperCase()} wall @{" "}
+                {c.orderbook_metrics.liquidity_wall.price.toFixed(1)} fils
+                {" — "}vol {c.orderbook_metrics.liquidity_wall.volume.toLocaleString()}
+              </Text>
+            </View>
+          )}
         </SectionCard>
       )}
 
@@ -1166,6 +1269,248 @@ function humaniseAlert(raw: string): string {
   return raw;
 }
 
+// ── ★ FOUR SCORE CARDS ────────────────────────────────────────────────
+
+const TIER_CONFIG: Record<FourScoreTier, { bg: string; border: string; text: string; label: string }> = {
+  "Strong Buy":  { bg: "#16a34a20", border: "#16a34a", text: "#16a34a", label: "Strong Buy" },
+  "Buy":         { bg: "#22c55e14", border: "#22c55e", text: "#22c55e", label: "Buy" },
+  "Hold":        { bg: "#f59e0b14", border: "#f59e0b", text: "#b45309", label: "Hold" },
+  "Sell":        { bg: "#f9731614", border: "#f97316", text: "#c2410c", label: "Sell" },
+  "Strong Sell": { bg: "#ef444414", border: "#ef4444", text: "#ef4444", label: "Strong Sell" },
+};
+
+const _DESC_LABELS: Record<string, string> = {
+  maximum_conviction_aligned: "All factors aligned",
+  good_setup_acceptable_edge: "Good setup, solid edge",
+  neutral_mixed_signals_wait: "Mixed signals — wait",
+  weak_setup_avoid_or_reduce: "Weak setup — reduce",
+  dangerous_no_edge_block:    "Dangerous — no edge",
+  blocked_by_risk_gate:       "Blocked by risk gate",
+};
+function humanizeDesc(d: string): string {
+  return _DESC_LABELS[d] ?? d.replace(/_/g, " ");
+}
+
+function ScoreCard({
+  icon,
+  title,
+  hint,
+  score,
+  tier,
+  description,
+  isBlocked,
+  isGated,
+  colors,
+}: {
+  icon: string;
+  title: string;
+  hint: string;
+  score: number;
+  tier: FourScoreTier;
+  description: string;
+  isBlocked?: boolean;
+  isGated?: boolean;
+  colors: ThemePalette;
+}) {
+  const cfg = TIER_CONFIG[tier] ?? TIER_CONFIG["Hold"];
+  return (
+    <View
+      style={{
+        width: "48%",
+        margin: "1%",
+        borderRadius: 10,
+        borderWidth: isBlocked || isGated ? 2 : 1,
+        borderColor: isBlocked || isGated ? "#ef4444" : cfg.border + "60",
+        backgroundColor: isBlocked || isGated ? "#ef444410" : cfg.bg,
+        padding: 10,
+        alignItems: "center",
+      }}
+    >
+      <Text style={{ fontSize: 18, marginBottom: 2 }}>{icon}</Text>
+      <Text style={{ fontSize: 11, fontWeight: "700", color: colors.textPrimary, textAlign: "center" }}>
+        {title}
+      </Text>
+      <Text style={{ fontSize: 9, color: colors.textMuted, textAlign: "center", marginBottom: 6 }}>
+        {hint}
+      </Text>
+
+      {/* Score ring */}
+      <View
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          borderWidth: 4,
+          borderColor: isBlocked || isGated ? "#ef4444" : cfg.border,
+          justifyContent: "center",
+          alignItems: "center",
+          marginBottom: 6,
+          backgroundColor: colors.bgCard,
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: "800", color: isBlocked || isGated ? "#ef4444" : cfg.text }}>
+          {score}
+        </Text>
+      </View>
+
+      {/* Tier badge */}
+      <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: (isBlocked || isGated ? "#ef4444" : cfg.border) + "20" }}>
+        <Text style={{ fontSize: 10, fontWeight: "700", color: isBlocked || isGated ? "#ef4444" : cfg.text }}>
+          {isBlocked ? "⛔ BLOCKING" : isGated ? "⛔ GATED" : cfg.label}
+        </Text>
+      </View>
+
+      {/* Human-readable description */}
+      <Text style={{ fontSize: 9, color: colors.textMuted, textAlign: "center", marginTop: 4 }}>
+        {humanizeDesc(description)}
+      </Text>
+
+      {/* Mini score bar */}
+      <View
+        style={{
+          marginTop: 6,
+          width: "100%",
+          height: 4,
+          backgroundColor: colors.borderColor,
+          borderRadius: 2,
+        }}
+      >
+        <View
+          style={{
+            height: 4,
+            width: `${score}%`,
+            backgroundColor: isBlocked || isGated ? "#ef4444" : cfg.border,
+            borderRadius: 2,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+function FourScoreCards({ fourScores, colors }: { fourScores: FourScores; colors: ThemePalette }) {
+  const action = fourScores.position_action;
+  const actionColor =
+    action.max_position_pct >= 2.0 ? "#16a34a"
+      : action.max_position_pct >= 1.0 ? "#22c55e"
+      : action.max_position_pct > 0   ? "#f59e0b"
+      : "#ef4444";
+
+  return (
+    <SectionCard
+      title="🎯 Four-Score Decision Matrix"
+      subtitle="Four independent lenses — all must align for a high-conviction trade"
+      colors={colors}
+    >
+      {/* 2×2 grid */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
+        <ScoreCard
+          icon="🚀"
+          title="Potential"
+          hint="Trend 40% · Momentum 25% · Volume 35%"
+          score={fourScores.potential.score}
+          tier={fourScores.potential.tier as FourScoreTier}
+          description={fourScores.potential.description}
+          colors={colors}
+        />
+        <ScoreCard
+          icon="⏱️"
+          title="Timing"
+          hint="S/R 35% · POC 30% · Auction 15% · Resist 20%"
+          score={fourScores.timing.score}
+          tier={fourScores.timing.tier as FourScoreTier}
+          description={fourScores.timing.description}
+          colors={colors}
+        />
+        <ScoreCard
+          icon="🛡️"
+          title="Risk"
+          hint="RR 40% · Volatility 25% · Liquidity 20% · Circuit 15%"
+          score={fourScores.risk.score}
+          tier={fourScores.risk.tier as FourScoreTier}
+          description={fourScores.risk.description}
+          isBlocked={fourScores.risk.is_blocked}
+          colors={colors}
+        />
+        <ScoreCard
+          icon="⭐"
+          title="Overall"
+          hint="Risk-gated composite (Potential 50% · Timing 50%)"
+          score={fourScores.overall.score}
+          tier={fourScores.overall.tier as FourScoreTier}
+          description={fourScores.overall.description}
+          isGated={fourScores.overall.description === "blocked_by_risk_gate"}
+          colors={colors}
+        />
+      </View>
+
+      {/* Position action banner */}
+      <View
+        style={{
+          backgroundColor: actionColor + "15",
+          borderWidth: 1,
+          borderColor: actionColor + "50",
+          borderRadius: 8,
+          padding: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <Text style={{ fontSize: 18 }}>
+          {action.max_position_pct >= 2.0 ? "💪"
+            : action.max_position_pct >= 1.0 ? "✅"
+            : action.max_position_pct > 0   ? "⚠️"
+            : "🚫"}
+        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: actionColor }}>
+            {action.label}
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+            {action.max_position_pct > 0
+              ? `Max position size: ${action.max_position_pct}% of account equity`
+              : "Do not enter this trade"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Tier legend */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 10, gap: 4 }}>
+        {(Object.entries(TIER_CONFIG) as [FourScoreTier, typeof TIER_CONFIG[FourScoreTier]][]).map(
+          ([t, cfg]) => (
+            <View
+              key={t}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+                backgroundColor: cfg.bg,
+              }}
+            >
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: cfg.border,
+                  marginRight: 4,
+                }}
+              />
+              <Text style={{ fontSize: 9, color: cfg.text }}>{cfg.label}</Text>
+            </View>
+          )
+        )}
+        <Text style={{ fontSize: 9, color: colors.textMuted, alignSelf: "center", marginLeft: 4 }}>
+          ≥85 / ≥70 / ≥40 / ≥15 / &lt;15
+        </Text>
+      </View>
+    </SectionCard>
+  );
+}
+
 // ── Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { padding: 14 },
@@ -1212,6 +1557,11 @@ const styles = StyleSheet.create({
   stockCode: { fontSize: 24, fontWeight: "800", letterSpacing: -0.5 },
   setupType: { fontSize: 12 },
   scoreCircleText: { fontSize: 22, fontWeight: "800" },
+
+  metaBadge: {
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start",
+  },
+  metaBadgeText: { fontSize: 11, fontWeight: "600" },
 
   badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   badgeText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
