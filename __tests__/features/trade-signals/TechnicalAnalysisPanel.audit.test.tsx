@@ -10,7 +10,7 @@
  *  6. BUY signal — full UI sections rendered
  *  7. SELL signal — TP card uses orange colour (not green)
  *  8. Alert humanisation — every known alert key maps to plain English
- *  9. Quick-pick tickers — all 7 chips rendered
+ *  9. Recent searches — appears after search submit
  * 10. "Five factors" subtitle (regression — was "Six")
  * 11. Loading / error states
  * 12. Distance summary bar values
@@ -510,24 +510,35 @@ describe("Alert humanisation", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 9. QUICK-PICK TICKERS
+// 9. RECENT SEARCHES
 // ─────────────────────────────────────────────────────────────────────
 
-describe("Quick-pick tickers", () => {
+describe("Recent searches", () => {
   beforeEach(() => {
     mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: false });
   });
 
-  const expectedTickers = ["NBK", "KFH", "ZAIN", "MABANEE", "BURG", "CBK", "AGILITY"];
-
-  it.each(expectedTickers)("renders %s chip", (ticker) => {
+  it("shows empty recent-search hint initially", () => {
     render(<TechnicalAnalysisPanel colors={colors} />);
-    expect(screen.getByText(ticker)).toBeTruthy();
+    expect(screen.getByText(/Recent searches will appear here/i)).toBeTruthy();
   });
 
-  it("renders exactly 7 quick-pick chips", () => {
+  it("adds searched symbol to recent chips", () => {
     render(<TechnicalAnalysisPanel colors={colors} />);
-    expectedTickers.forEach((t) => expect(screen.getByText(t)).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Enter ticker/i);
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    expect(screen.getByText("NBK")).toBeTruthy();
+  });
+
+  it("keeps recent searches unique", () => {
+    render(<TechnicalAnalysisPanel colors={colors} />);
+    const input = screen.getByPlaceholderText(/Enter ticker/i);
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    expect(screen.getAllByText("NBK")).toHaveLength(1);
   });
 });
 

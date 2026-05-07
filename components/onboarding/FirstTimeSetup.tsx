@@ -2,7 +2,7 @@ import { useThemeStore } from "@/services/themeStore";
 import type { ThemePalette } from "@/constants/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as DocumentPicker from "expo-document-picker";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -39,7 +39,10 @@ export function FirstTimeSetup({ visible, onComplete }: FirstTimeSetupProps) {
   };
 
   const handleAddManual = () => {
-    router.push("/(tabs)/add-transaction");
+    router.push({
+      pathname: "/(tabs)/add-transaction",
+      params: { editId: "", createKey: String(Date.now()) },
+    } as Href);
     onComplete();
   };
 

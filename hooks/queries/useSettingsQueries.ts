@@ -38,6 +38,7 @@ export function useRfRateSetting() {
     queryKey: settingsKeys.rfRate(),
     queryFn: getRfRate,
     staleTime: Infinity,
+    retry: false,
   });
 }
 

@@ -8,10 +8,11 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import React, { useState, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,8 +29,8 @@ import {
   type KuwaitSignalSubScores,
 } from "@/services/api/analytics/tradeSignals";
 
-// ── Quick-pick tickers ────────────────────────────────────────────────
-const QUICK_TICKERS = ["NBK", "KFH", "ZAIN", "MABANEE", "BURG", "CBK", "AGILITY"];
+const RECENT_SEARCH_STORAGE_KEY = "ta_recent_searches";
+const MAX_RECENT_SEARCHES = 7;
 
 // ── Helper formatters ─────────────────────────────────────────────────
 function fmtFils(v: number | null | undefined): string {
@@ -39,6 +40,50 @@ function fmtFils(v: number | null | undefined): string {
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return "—";
   return `${(v * 100).toFixed(1)}%`;
+}
+
+function normalizeTicker(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\.KW$/i, "");
+}
+
+async function loadRecentSearches(): Promise<string[]> {
+  try {
+    let raw: string | null = null;
+    if (Platform.OS === "web") {
+      raw = localStorage.getItem(RECENT_SEARCH_STORAGE_KEY);
+    } else {
+      const SecureStore = require("expo-secure-store");
+      raw = await SecureStore.getItemAsync(RECENT_SEARCH_STORAGE_KEY);
+    }
+
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((item): item is string => typeof item === "string")
+      .map(normalizeTicker)
+      .filter(Boolean)
+      .slice(0, MAX_RECENT_SEARCHES);
+  } catch (err) {
+    if (__DEV__) console.warn("[TechnicalAnalysisPanel] Failed to load recent searches:", err);
+    return [];
+  }
+}
+
+async function saveRecentSearches(items: string[]): Promise<void> {
+  try {
+    const payload = JSON.stringify(items.slice(0, MAX_RECENT_SEARCHES));
+    if (Platform.OS === "web") {
+      localStorage.setItem(RECENT_SEARCH_STORAGE_KEY, payload);
+    } else {
+      const SecureStore = require("expo-secure-store");
+      await SecureStore.setItemAsync(RECENT_SEARCH_STORAGE_KEY, payload);
+    }
+  } catch (err) {
+    if (__DEV__) console.warn("[TechnicalAnalysisPanel] Failed to save recent searches:", err);
+  }
 }
 
 // ── Human-readable regime names ───────────────────────────────────────
@@ -119,7 +164,10 @@ function ScoreBar({
   colors: ThemePalette;
   onPress?: () => void;
 }) {
-  const pct = Math.min(1, Math.max(0, value / max));
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const pctRaw = safeValue / max;
+  const pct = Number.isFinite(pctRaw) ? Math.min(1, Math.max(0, pctRaw)) : 0;
+  const widthPct = `${Math.max(0, Math.min(100, pct * 100)).toFixed(1)}%`;
   const barColor =
     pct >= 0.7 ? "#22c55e" : pct >= 0.5 ? "#f59e0b" : "#ef4444";
   const grade =
@@ -139,12 +187,12 @@ function ScoreBar({
           <Text style={[styles.scoreBarHint, { color: colors.textMuted }]}>{hint}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.scoreBarVal, { color: barColor }]}>{value}</Text>
+          <Text style={[styles.scoreBarVal, { color: barColor }]}>{Math.round(safeValue)}</Text>
           <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
         </View>
       </View>
       <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
-        <View style={[styles.scoreBarFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
+        <View style={[styles.scoreBarFill, { width: widthPct, backgroundColor: barColor }]} />
       </View>
     </Pressable>
   );
@@ -195,6 +243,9 @@ function ScoreBreakdownModal({
   colors: ThemePalette;
 }) {
   const scoreColor = totalScore >= 70 ? "#22c55e" : totalScore >= 40 ? "#f59e0b" : "#ef4444";
+  const componentSum = items.reduce((sum, item) => sum + item.pts, 0);
+  const hasAdjustedFinal = items.length > 0 && componentSum !== totalScore;
+  const adjustmentFactor = componentSum > 0 ? totalScore / componentSum : 0;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
@@ -226,7 +277,11 @@ function ScoreBreakdownModal({
               <Text style={{ fontSize: 22 }}>{icon}</Text>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>{title}</Text>
-                <Text style={{ fontSize: 11, color: colors.textMuted }}>Score: <Text style={{ color: scoreColor, fontWeight: "700" }}>{totalScore}/100</Text></Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                  {hasAdjustedFinal ? "Final Score: " : "Score: "}
+                  <Text style={{ color: scoreColor, fontWeight: "700" }}>{totalScore}/100</Text>
+                  {hasAdjustedFinal ? <Text style={{ color: colors.textMuted }}> (Base {componentSum}/100)</Text> : null}
+                </Text>
               </View>
             </View>
             <Pressable onPress={onClose} hitSlop={12}>
@@ -271,10 +326,36 @@ function ScoreBreakdownModal({
                   })}
                   <Text style={{ fontSize: 16, color: colors.textMuted, marginHorizontal: 2 }}>=</Text>
                   <View style={{ alignItems: "center", backgroundColor: scoreColor + "22", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, minWidth: 52 }}>
-                    <Text style={{ fontSize: 20, fontWeight: "800", color: scoreColor, lineHeight: 24 }}>{totalScore}</Text>
-                    <Text style={{ fontSize: 9, color: colors.textMuted }}>TOTAL</Text>
+                    <Text style={{ fontSize: 20, fontWeight: "800", color: scoreColor, lineHeight: 24 }}>{componentSum}</Text>
+                    <Text style={{ fontSize: 9, color: colors.textMuted }}>
+                      {hasAdjustedFinal ? "SUBTOTAL" : "TOTAL"}
+                    </Text>
                   </View>
                 </View>
+
+                {hasAdjustedFinal && (
+                  <View style={{
+                    marginTop: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                    backgroundColor: colors.bgPrimary,
+                    padding: 10,
+                  }}>
+                    <Text style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, letterSpacing: 0.4 }}>
+                      ADJUSTED FINAL SCORE
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 18 }}>
+                      Base subtotal {componentSum}/100 was adjusted by model modifiers to final score {totalScore}/100
+                      {componentSum > 0 ? ` (x${adjustmentFactor.toFixed(2)}).` : "."}
+                    </Text>
+                    {title === "Trend Direction" && (
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, fontStyle: "italic" }}>
+                        Trend uses quality modifiers for noise, trend maturity, and over-extension.
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
             )}
 
@@ -745,19 +826,53 @@ function PriceLadder({
 export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
   const [input, setInput] = useState("");
   const [ticker, setTicker] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
-  const { data: signal, isLoading, isError, error } = useQuery<KuwaitSignal>({
+  useEffect(() => {
+    let isMounted = true;
+    void loadRecentSearches().then((items) => {
+      if (!isMounted || items.length === 0) return;
+      setRecentSearches(items);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const { data: signal, isLoading, isError, error, refetch } = useQuery<KuwaitSignal>({
     queryKey: ["kuwait-signal", ticker],
     queryFn: () =>
       getKuwaitSignal({ symbol: ticker!, exchange: "KSE", segment: "PREMIER" }),
     enabled: !!ticker,
-    staleTime: 5 * 60 * 1000,
+    staleTime: __DEV__ ? 0 : 5 * 60 * 1000,
+    refetchOnMount: __DEV__ ? "always" : true,
     retry: 0, // Fail fast on errors instead of 8+ retry loops
   });
 
+  const applySearch = useCallback((raw: string) => {
+    const sym = normalizeTicker(raw);
+    if (!sym) return;
+
+    setInput(sym);
+    if (sym === ticker) {
+      void refetch();
+    } else {
+      setTicker(sym);
+    }
+    setRecentSearches((prev) => {
+      const next = [sym, ...prev.filter((item) => item !== sym)].slice(0, MAX_RECENT_SEARCHES);
+      void saveRecentSearches(next);
+      return next;
+    });
+  }, [refetch, ticker]);
+
   function submit() {
-    const sym = input.trim().toUpperCase().replace(/\.KW$/i, "");
-    if (sym) setTicker(sym);
+    applySearch(input);
+  }
+
+  function clearRecent() {
+    setRecentSearches([]);
+    void saveRecentSearches([]);
   }
 
   return (
@@ -793,34 +908,46 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
           </Pressable>
         </View>
 
-        {/* Quick-pick chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-          {QUICK_TICKERS.map((sym) => (
-            <Pressable
-              key={sym}
-              onPress={() => { setInput(sym); setTicker(sym); }}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor:
-                    ticker === sym ? colors.accentPrimary + "20" : colors.bgPrimary,
-                  borderColor:
-                    ticker === sym ? colors.accentPrimary : colors.borderColor,
-                },
-              ]}
-            >
-              <Text
-                style={{
-                  color: ticker === sym ? colors.accentPrimary : colors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: "600",
-                }}
-              >
-                {sym}
-              </Text>
+        <View style={styles.recentHeaderRow}>
+          <Text style={[styles.recentLabel, { color: colors.textMuted }]}>Recent searches</Text>
+          {recentSearches.length > 0 && (
+            <Pressable onPress={clearRecent} hitSlop={8}>
+              <Text style={[styles.clearRecentText, { color: colors.accentPrimary }]}>Clear</Text>
             </Pressable>
-          ))}
-        </ScrollView>
+          )}
+        </View>
+
+        {recentSearches.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+            {recentSearches.map((sym) => (
+              <Pressable
+                key={sym}
+                onPress={() => applySearch(sym)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor:
+                      ticker === sym ? colors.accentPrimary + "20" : colors.bgPrimary,
+                    borderColor:
+                      ticker === sym ? colors.accentPrimary : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: ticker === sym ? colors.accentPrimary : colors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: "600",
+                  }}
+                >
+                  {sym}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={[styles.recentEmpty, { color: colors.textMuted }]}>Recent searches will appear here.</Text>
+        )}
       </View>
 
       {/* ── Loading ────────────────────────────────────────── */}
@@ -888,14 +1015,99 @@ function deriveBlockedFourScores(
   };
 }
 
+type RawScoreShape = Partial<Record<keyof KuwaitSignalSubScores, number | null | undefined>>;
+
+function _normalizeRawScore(v: number | null | undefined): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, Number(v)));
+}
+
+function _hasAnyRawValue(raw: RawScoreShape | null | undefined): boolean {
+  if (!raw) return false;
+  return [
+    raw.trend,
+    raw.momentum,
+    raw.volume_flow,
+    raw.support_resistance,
+    raw.risk_reward,
+  ].some((v) => Number.isFinite(v));
+}
+
+function resolveRawSubScores(
+  confluence: KuwaitSignalConfluence,
+  signal: KuwaitSignal,
+): { scores: KuwaitSignalSubScores; fromSource: boolean } {
+  const fromConfluence = confluence.raw_sub_scores as RawScoreShape | null | undefined;
+  if (_hasAnyRawValue(fromConfluence)) {
+    return {
+      fromSource: true,
+      scores: {
+        trend: _normalizeRawScore(fromConfluence?.trend),
+        momentum: _normalizeRawScore(fromConfluence?.momentum),
+        volume_flow: _normalizeRawScore(fromConfluence?.volume_flow),
+        support_resistance: _normalizeRawScore(fromConfluence?.support_resistance),
+        risk_reward: _normalizeRawScore(fromConfluence?.risk_reward),
+      },
+    };
+  }
+
+  const cs = signal.component_scores;
+  const fromComponent: RawScoreShape | null = cs
+    ? {
+        trend: cs.trend?.raw,
+        momentum: cs.momentum?.raw,
+        volume_flow: cs.volume_flow?.raw,
+        support_resistance: cs.support_resistance?.raw,
+        risk_reward: cs.risk_reward?.raw,
+      }
+    : null;
+
+  if (_hasAnyRawValue(fromComponent)) {
+    return {
+      fromSource: true,
+      scores: {
+        trend: _normalizeRawScore(fromComponent?.trend),
+        momentum: _normalizeRawScore(fromComponent?.momentum),
+        volume_flow: _normalizeRawScore(fromComponent?.volume_flow),
+        support_resistance: _normalizeRawScore(fromComponent?.support_resistance),
+        risk_reward: _normalizeRawScore(fromComponent?.risk_reward),
+      },
+    };
+  }
+
+  return {
+    fromSource: false,
+    scores: {
+      trend: 0,
+      momentum: 0,
+      volume_flow: 0,
+      support_resistance: 0,
+      risk_reward: 0,
+    },
+  };
+}
+
 // ── Full signal output ────────────────────────────────────────────────
 export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemePalette }) {
   const c = signal.confluence_details;
   const e = signal.execution;
   const r = signal.risk_metrics;
   const p = signal.probabilities;
-  const raw = c.raw_sub_scores as KuwaitSignalSubScores;
+  const rawResolution = useMemo(() => resolveRawSubScores(c, signal), [c, signal]);
+  const raw = rawResolution.scores;
+  const hasRawSource = rawResolution.fromSource;
   const bd = c.indicator_breakdown ?? null;
+
+  const combinedDisplayScore = useMemo(() => {
+    const primary = signal.raw_technical_score ?? c.total_score;
+    if (typeof primary === "number" && Number.isFinite(primary) && (hasRawSource || primary > 0)) {
+      return primary;
+    }
+    const fallbackOverall = c.four_scores?.overall?.score;
+    return typeof fallbackOverall === "number" && Number.isFinite(fallbackOverall)
+      ? fallbackOverall
+      : (typeof primary === "number" && Number.isFinite(primary) ? primary : 0);
+  }, [signal.raw_technical_score, c.total_score, c.four_scores, hasRawSource]);
 
   const [scoreModal, setScoreModal] = useState<"trend" | "momentum" | "volume" | "sr" | "rr" | null>(null);
   const scoreModalConfig = useMemo(
@@ -983,11 +1195,6 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
           {signal.failed_gates.length > 0 && (
             <Text style={{ fontSize: 12, color: "#b45309", marginBottom: 4 }}>
               Failed gates: {signal.failed_gates.join(" · ")}
-            </Text>
-          )}
-          {signal.technical_scores_debug && (
-            <Text style={{ fontSize: 11, color: "#92400e" }}>
-              Debug — Trend: {signal.technical_scores_debug.trend_raw ?? "—"}  Mom: {signal.technical_scores_debug.momentum_raw ?? "—"}  Vol: {signal.technical_scores_debug.volume_raw ?? "—"}  SR: {signal.technical_scores_debug.sr_raw ?? "—"}
             </Text>
           )}
         </View>
@@ -1175,46 +1382,56 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
         subtitle="Five factors are scored. All must align for a strong signal."
         colors={colors}
       >
-        <ScoreBar
-          icon="📈"
-          label="Trend Direction"
-          hint="Is the stock consistently moving in the right direction?"
-          value={raw.trend}
-          colors={colors}
-          onPress={() => setScoreModal("trend")}
-        />
-        <ScoreBar
-          icon="⚡"
-          label="Speed & Momentum"
-          hint="How fast and strong is the current price move?"
-          value={raw.momentum}
-          colors={colors}
-          onPress={() => setScoreModal("momentum")}
-        />
-        <ScoreBar
-          icon="💧"
-          label="Buying Pressure"
-          hint="Are large investors actively accumulating this stock?"
-          value={raw.volume_flow}
-          colors={colors}
-          onPress={() => setScoreModal("volume")}
-        />
-        <ScoreBar
-          icon="🏦"
-          label="Key Price Levels"
-          hint="Is the price near a strong support level with room to run?"
-          value={raw.support_resistance}
-          colors={colors}
-          onPress={() => setScoreModal("sr")}
-        />
-        <ScoreBar
-          icon="⚖️"
-          label="Risk vs Reward"
-          hint="Is the potential gain worth the risk being taken? (Calculated separately)"
-          value={raw.risk_reward}
-          colors={colors}
-          onPress={() => setScoreModal("rr")}
-        />
+        {!hasRawSource ? (
+          <View style={[styles.rawUnavailableBox, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
+            <Text style={[styles.rawUnavailableText, { color: colors.textMuted }]}>
+              Detailed factor scores are unavailable for this blocked signal. Use the Four-Score Decision Matrix above for the reliable breakdown.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <ScoreBar
+              icon="📈"
+              label="Trend Direction"
+              hint="Is the stock consistently moving in the right direction?"
+              value={raw.trend}
+              colors={colors}
+              onPress={() => setScoreModal("trend")}
+            />
+            <ScoreBar
+              icon="⚡"
+              label="Speed & Momentum"
+              hint="How fast and strong is the current price move?"
+              value={raw.momentum}
+              colors={colors}
+              onPress={() => setScoreModal("momentum")}
+            />
+            <ScoreBar
+              icon="💧"
+              label="Buying Pressure"
+              hint="Are large investors actively accumulating this stock?"
+              value={raw.volume_flow}
+              colors={colors}
+              onPress={() => setScoreModal("volume")}
+            />
+            <ScoreBar
+              icon="🏦"
+              label="Key Price Levels"
+              hint="Is the price near a strong support level with room to run?"
+              value={raw.support_resistance}
+              colors={colors}
+              onPress={() => setScoreModal("sr")}
+            />
+            <ScoreBar
+              icon="⚖️"
+              label="Risk vs Reward"
+              hint="Is the potential gain worth the risk being taken? (Calculated separately)"
+              value={raw.risk_reward}
+              colors={colors}
+              onPress={() => setScoreModal("rr")}
+            />
+          </>
+        )}
         <View style={[styles.totalRow, { borderTopColor: colors.borderColor }]}>
           <View>
             <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Combined Score</Text>
@@ -1222,9 +1439,9 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={[styles.totalValue, {
-              color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
+              color: combinedDisplayScore >= 75 ? "#22c55e" : combinedDisplayScore >= 50 ? "#f59e0b" : "#ef4444",
             }]}>
-              {signal.raw_technical_score ?? c.total_score} / 100
+              {combinedDisplayScore} / 100
             </Text>
             {signal.score_breakdown && signal.score_breakdown.circuit_penalty_pct > 0 && (
               <Text style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>
@@ -2057,6 +2274,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1, marginRight: 10,
   },
+  recentHeaderRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recentLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  clearRecentText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  recentEmpty: {
+    marginTop: 10,
+    fontSize: 12,
+  },
 
   center: { alignItems: "center", paddingVertical: 48, gap: 16 },
   loadingText: { fontSize: 15 },
@@ -2103,6 +2340,18 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 14, fontWeight: "600", flex: 1 },
   rowHint: { fontSize: 12, marginTop: 4, lineHeight: 16 },
   rowValue: { fontSize: 15, fontWeight: "700", textAlign: "right", flexShrink: 0, marginLeft: 12 },
+
+  rawUnavailableBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  rawUnavailableText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
 
   divider: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 10 },
 

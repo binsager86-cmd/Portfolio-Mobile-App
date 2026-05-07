@@ -19,6 +19,9 @@ describe("Config — API_BASE_URL resolution", () => {
     // Default: no env override
     if (typeof process !== "undefined") {
       delete process.env.EXPO_PUBLIC_API_URL;
+      delete process.env.EXPO_PUBLIC_API_URL_WEB;
+      delete process.env.EXPO_PUBLIC_API_URL_ANDROID;
+      delete process.env.EXPO_PUBLIC_API_URL_IOS;
     }
   });
 
@@ -30,9 +33,25 @@ describe("Config — API_BASE_URL resolution", () => {
   });
 
   /** Helper: load Config with mocked Platform.OS */
-  function loadConfig(platformOS: string, hostname?: string) {
+  function loadConfig(
+    platformOS: string,
+    hostname?: string,
+    opts?: { hostUri?: string; isDevice?: boolean },
+  ) {
     jest.doMock("react-native", () => ({
       Platform: { OS: platformOS },
+    }));
+
+    jest.doMock("expo-constants", () => ({
+      __esModule: true,
+      default: {
+        expoConfig: { hostUri: opts?.hostUri ?? "192.168.1.5:8081" },
+      },
+    }));
+
+    jest.doMock("expo-device", () => ({
+      __esModule: true,
+      isDevice: opts?.isDevice ?? false,
     }));
 
     // Simulate window.location for web tests
@@ -78,5 +97,23 @@ describe("Config — API_BASE_URL resolution", () => {
   it("exports API_TIMEOUT as a positive number", () => {
     const config = loadConfig("web", "localhost");
     expect(config.API_TIMEOUT).toBeGreaterThan(0);
+  });
+
+  it("keeps EXPO_PUBLIC_API_URL_ANDROID on Android emulator", () => {
+    process.env.EXPO_PUBLIC_API_URL_ANDROID = "http://10.0.2.2:8004";
+    const config = loadConfig("android", undefined, {
+      hostUri: "192.168.1.2:8081",
+      isDevice: false,
+    });
+    expect(config.API_BASE_URL).toBe("http://10.0.2.2:8004");
+  });
+
+  it("prefers inferred LAN URL on physical Android when env points to emulator", () => {
+    process.env.EXPO_PUBLIC_API_URL_ANDROID = "http://10.0.2.2:8004";
+    const config = loadConfig("android", undefined, {
+      hostUri: "192.168.1.2:8081",
+      isDevice: true,
+    });
+    expect(config.API_BASE_URL).toBe("http://192.168.1.2:8004");
   });
 });

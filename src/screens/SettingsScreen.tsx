@@ -56,11 +56,13 @@ type ApiError = {
 };
 
 type PushDiagnostics = {
+  runtime: string;
   permission: string;
   iosStatus: string;
   channels: string;
   expoToken: string;
   backendTokenCount: string;
+  hint: string;
   lastChecked: string;
   error: string;
 };
@@ -90,11 +92,13 @@ export default function SettingsScreen() {
 
   const [diagLoading, setDiagLoading] = useState(false);
   const [diag, setDiag] = useState<PushDiagnostics>({
+    runtime: "—",
     permission: "—",
     iosStatus: "—",
     channels: "—",
     expoToken: "—",
     backendTokenCount: "—",
+    hint: "",
     lastChecked: "—",
     error: "",
   });
@@ -106,11 +110,13 @@ export default function SettingsScreen() {
     try {
       if (Platform.OS === "web") {
         setDiag({
+          runtime: "Web",
           permission: "web",
           iosStatus: "n/a",
           channels: "n/a",
           expoToken: "n/a (web)",
           backendTokenCount: "n/a (web)",
+          hint: "",
           lastChecked: new Date().toLocaleString(),
           error: "",
         });
@@ -118,6 +124,17 @@ export default function SettingsScreen() {
       }
 
       const Notifications = await import("expo-notifications");
+      const Constants = await import("expo-constants");
+      const appOwnership = (Constants.default as { appOwnership?: string }).appOwnership;
+      const runtime =
+        appOwnership === "expo"
+          ? "Expo Go"
+          : appOwnership === "standalone"
+            ? "Standalone"
+            : appOwnership === "guest"
+              ? "Dev Client"
+              : "Unknown";
+
       const perm = await Notifications.getPermissionsAsync();
       const iosStatus =
         Platform.OS === "ios" && perm.ios?.status != null
@@ -135,7 +152,12 @@ export default function SettingsScreen() {
             : "none"
           : "n/a";
 
-      const expoToken = await registerPushToken();
+      const hint =
+        appOwnership === "expo"
+          ? "Remote push is disabled in Expo Go. Install a Development Build or production app to receive server pushes."
+          : "";
+
+      const expoToken = appOwnership === "expo" ? null : await registerPushToken();
 
       let backendTokenCount = "unknown";
       const jwt = await getToken();
@@ -152,11 +174,13 @@ export default function SettingsScreen() {
       }
 
       setDiag({
+        runtime,
         permission: `${perm.status}${perm.granted ? " (granted)" : ""}`,
         iosStatus,
         channels: channelText,
         expoToken: expoToken ?? "not available",
         backendTokenCount,
+        hint,
         lastChecked: new Date().toLocaleString(),
         error: "",
       });
@@ -746,6 +770,7 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={[s.diagRow, { color: colors.textSecondary }]}>Permission: {diag.permission}</Text>
+          <Text style={[s.diagRow, { color: colors.textSecondary }]}>Runtime: {diag.runtime}</Text>
           {Platform.OS === "ios" && (
             <Text style={[s.diagRow, { color: colors.textSecondary }]}>iOS Status: {diag.iosStatus}</Text>
           )}
@@ -755,6 +780,9 @@ export default function SettingsScreen() {
             Expo Token: {diag.expoToken}
           </Text>
           <Text style={[s.diagRow, { color: colors.textMuted }]}>Last Checked: {diag.lastChecked}</Text>
+          {diag.hint ? (
+            <Text style={[s.diagRow, { color: colors.warning }]}>{diag.hint}</Text>
+          ) : null}
           {diag.error ? (
             <Text style={[s.diagRow, { color: colors.danger }]}>Error: {diag.error}</Text>
           ) : null}

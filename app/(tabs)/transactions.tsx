@@ -289,6 +289,13 @@ function TransactionsScreen() {
   const deleteMutation = useDeleteTransaction();
   const { mutate: deleteTxn } = deleteMutation;
 
+  const openCreateTransaction = useCallback(() => {
+    router.push({
+      pathname: "/(tabs)/add-transaction",
+      params: { editId: "", createKey: String(Date.now()) },
+    } as Href);
+  }, [router]);
+
   const handleEdit = useCallback((txn: TransactionRecord) => {
     router.push({ pathname: "/(tabs)/add-transaction", params: { editId: String(txn.id) } } as Href);
   }, [router]);
@@ -536,7 +543,7 @@ function TransactionsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t("transactionsScreen.addTransaction")}
-            onPress={() => router.push("/(tabs)/add-transaction" as Href)}
+            onPress={openCreateTransaction}
             style={[
               {
                 backgroundColor: colors.accentPrimary,
@@ -610,7 +617,7 @@ function TransactionsScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("transactionsScreen.addTransaction")}
-        onPress={() => router.push("/(tabs)/add-transaction" as Href)}
+        onPress={openCreateTransaction}
         style={({ pressed }) => [
           styles.fab,
           {
