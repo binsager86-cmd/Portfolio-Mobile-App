@@ -102,6 +102,59 @@ export interface KuwaitSignalSubScores {
   risk_reward: number;
 }
 
+export interface IndicatorBreakdownTrend {
+  ema_pts: number;
+  ema_desc: string;
+  adx_pts: number;
+  adx_desc: string;
+  swing_pts: number;
+  swing_desc: string;
+  raw_score: number;
+}
+
+export interface IndicatorBreakdownMomentum {
+  rsi_pts: number;
+  rsi_desc: string;
+  macd_pts: number;
+  macd_desc: string;
+  roc_pts: number;
+  roc_desc: string;
+  stoch_pts: number;
+  stoch_desc: string;
+  raw_score: number;
+}
+
+export interface IndicatorBreakdownVolume {
+  cmf_pts: number;
+  cmf_desc: string;
+  obv_pts: number;
+  obv_desc: string;
+  rvol_pts: number;
+  rvol_desc: string;
+  auction_pts: number;
+  auction_desc: string;
+  auction_intensity: number;
+  raw_score: number;
+}
+
+export interface IndicatorBreakdownSR {
+  support_proximity_pts: number | null;
+  resistance_clearance_pts: number | null;
+  volume_profile_pts: number | null;
+  nearest_support: number | null;
+  nearest_resistance: number | null;
+  volume_poc: number | null;
+  anchored_vwap: number | null;
+  raw_score: number;
+}
+
+export interface KuwaitIndicatorBreakdown {
+  trend: IndicatorBreakdownTrend | null;
+  momentum: IndicatorBreakdownMomentum | null;
+  volume: IndicatorBreakdownVolume | null;
+  sr: IndicatorBreakdownSR | null;
+}
+
 export interface KuwaitSignalLiquidityDetails {
   adtv_20d_kd: number | null;
   spread_proxy_pct: number | null;
@@ -147,9 +200,10 @@ export interface FourScoreComponent {
   description: string;
 }
 
-export interface FourScoreRisk extends FourScoreComponent {
-  is_blocked: boolean;
-  block_reason: string;
+export interface FourScoreRisk {
+  score: number;
+  risk_level: "Low Risk" | "Moderate Risk" | "High Risk";
+  description: string;
 }
 
 export interface FourScoreOverall extends FourScoreComponent {
@@ -208,6 +262,8 @@ export interface KuwaitSignalConfluence {
   volume_profile: KuwaitVolumeProfile | null;
   /** Four-score architecture: Potential, Timing, Risk, Overall */
   four_scores: FourScores | null;
+  /** Per-indicator breakdown for Score Drill-Down UI */
+  indicator_breakdown: KuwaitIndicatorBreakdown | null;
 }
 
 export type SRLevelStrength = "very_strong" | "strong" | "moderate" | "weak";
