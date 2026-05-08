@@ -52,6 +52,7 @@ import {
   getExtractionStatus,
   validateFinancialStatement,
   verifyStatementPlacement,
+  fetchStatementsOnline,
   AnalysisStock,
   FinancialStatement,
   StockMetric,
@@ -881,6 +882,25 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
   const [uploadResult, setUploadResult] = useState<AIUploadResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // ── Online fetch state ────────────────────────────────────────────
+  const [fetchingOnline, setFetchingOnline] = useState(false);
+  const [onlineResult, setOnlineResult] = useState<string | null>(null);
+
+  const handleFetchOnline = useCallback(async () => {
+    setFetchingOnline(true);
+    setOnlineResult(null);
+    try {
+      const res = await fetchStatementsOnline(stockId);
+      setOnlineResult(res.message);
+      queryClient.invalidateQueries({ queryKey: ["analysis-statements"] });
+      refetch();
+    } catch (err: unknown) {
+      setOnlineResult("Error: " + (err instanceof Error ? err.message : "Failed to fetch statements"));
+    } finally {
+      setFetchingOnline(false);
+    }
+  }, [stockId, queryClient, refetch]);
+
   const handlePickAndUpload = useCallback(async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -1011,6 +1031,58 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
         borderBottomWidth: 1, borderBottomColor: colors.borderColor,
         backgroundColor: colors.bgCard,
       }}>
+        {/* Get Statements Online */}
+        <Pressable
+          onPress={handleFetchOnline}
+          disabled={fetchingOnline || uploading}
+          style={({ pressed }) => [
+            {
+              flexDirection: "row", alignItems: "center", justifyContent: "center",
+              paddingVertical: 10, paddingHorizontal: 16,
+              borderRadius: 10, borderWidth: 1.5,
+              borderColor: fetchingOnline ? colors.textMuted : colors.accentPrimary,
+              backgroundColor: fetchingOnline ? colors.bgInput : colors.accentPrimary + "08",
+              gap: 8,
+            },
+            pressed && !fetchingOnline && { backgroundColor: colors.accentPrimary + "15", transform: [{ scale: 0.98 }] },
+          ]}
+        >
+          {fetchingOnline ? (
+            <ActivityIndicator size="small" color={colors.accentPrimary} />
+          ) : (
+            <FontAwesome name="globe" size={16} color={colors.accentPrimary} />
+          )}
+          <Text style={{ color: fetchingOnline ? colors.textMuted : colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
+            {fetchingOnline ? "Fetching..." : "Get Statements"}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 10 }}>
+            from stockanalysis.com
+          </Text>
+        </Pressable>
+
+        {/* Online fetch result banner */}
+        {onlineResult && (() => {
+          const isError = onlineResult.startsWith("Error");
+          return (
+            <View style={{
+              marginTop: 8, padding: 10, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 8,
+              backgroundColor: isError ? colors.danger + "15" : colors.success + "15",
+            }}>
+              <FontAwesome
+                name={isError ? "exclamation-circle" : "check-circle"}
+                size={13}
+                color={isError ? colors.danger : colors.success}
+              />
+              <Text style={{ flex: 1, fontSize: 11, color: isError ? colors.danger : colors.success }}>
+                {onlineResult}
+              </Text>
+              <Pressable onPress={() => setOnlineResult(null)} hitSlop={8}>
+                <FontAwesome name="times" size={12} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          );
+        })()}
+
         <Pressable
           onPress={handlePickAndUpload}
           disabled={uploading}
@@ -1019,6 +1091,7 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
+              marginTop: 10,
               paddingVertical: 14,
               paddingHorizontal: 20,
               borderRadius: 12,
