@@ -108,8 +108,13 @@ function humanSetup(setup: string): string {
   return setup.replace(/_/g, " ");
 }
 
+// ── Buy-signal helpers ───────────────────────────────────────────────
+const BUY_SIGNALS = new Set(["BUY", "STRONG_BUY"] as const);
+const isBuySignal = (s: string) => BUY_SIGNALS.has(s as any);
+const isActionSignal = (s: string) => BUY_SIGNALS.has(s as any) || s === "SELL";
+
 // ── Section card ──────────────────────────────────────────────────────
-function SectionCard({
+const SectionCard = React.memo(function SectionCard({
   title,
   subtitle,
   children,
@@ -129,10 +134,10 @@ function SectionCard({
       {children}
     </View>
   );
-}
+});
 
 // ── Row item ──────────────────────────────────────────────────────────
-function Row({
+const Row = React.memo(function Row({
   label,
   hint,
   value,
@@ -154,10 +159,10 @@ function Row({
       <Text style={[styles.rowValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
     </View>
   );
-}
+});
 
 // ── Score bar (beginner labelled) ────────────────────────────────────
-function ScoreBar({
+const ScoreBar = React.memo(function ScoreBar({
   icon,
   label,
   hint,
@@ -247,7 +252,7 @@ function ScoreBar({
       )}
     </Pressable>
   );
-}
+});
 
 // ── Score Breakdown Modal ─────────────────────────────────────────────────────
 
@@ -304,6 +309,8 @@ function ScoreBreakdownModal({
         <Pressable
           style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.6)" }]}
           onPress={onClose}
+          accessibilityLabel="Close"
+          accessibilityRole="button"
         />
         {/* Bottom sheet — rendered on top of backdrop */}
         <View
@@ -688,7 +695,7 @@ const TRIGGER_CONFIG: Record<
   },
 };
 
-function EntryTriggerCard({ trigger, colors }: { trigger: KuwaitEntryTrigger; colors: ThemePalette }) {
+const EntryTriggerCard = React.memo(function EntryTriggerCard({ trigger, colors }: { trigger: KuwaitEntryTrigger; colors: ThemePalette }) {
   const cfg = TRIGGER_CONFIG[trigger.action] ?? TRIGGER_CONFIG.HOLD;
 
   const triggerDetail =
@@ -749,7 +756,7 @@ function EntryTriggerCard({ trigger, colors }: { trigger: KuwaitEntryTrigger; co
       </View>
     </View>
   );
-}
+});
 
 // ── ★ VISUAL PRICE LADDER ─────────────────────────────────────────────
 type LadderLevel = {
@@ -853,7 +860,7 @@ function PriceLadder({
   if (entryMid != null) {
     levels.push({
       price: entryMid,
-      label: (direction === "BUY" || direction === "STRONG_BUY") ? "Buy Zone (Entry)" : direction === "SELL" ? "Sell Zone (Entry)" : "Entry Zone",
+      label: isBuySignal(direction) ? "Buy Zone (Entry)" : direction === "SELL" ? "Sell Zone (Entry)" : "Entry Zone",
       sublabel:
         e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
           ? `Place your order between ${e.entry_zone_fils[0]?.toFixed(1)} – ${e.entry_zone_fils[1]?.toFixed(1)} fils`
@@ -1031,9 +1038,9 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
     });
   }, [refetch, ticker]);
 
-  function submit() {
+  const submit = useCallback(() => {
     applySearch(input);
-  }
+  }, [applySearch, input]);
 
   function clearRecent() {
     setRecentSearches([]);
@@ -1067,6 +1074,8 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
           />
           <Pressable
             onPress={submit}
+            accessibilityLabel="Search ticker"
+            accessibilityRole="button"
             style={[styles.searchBtn, { backgroundColor: colors.accentPrimary }]}
           >
             <FontAwesome name="search" size={14} color="#fff" />
@@ -1076,7 +1085,7 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
         <View style={styles.recentHeaderRow}>
           <Text style={[styles.recentLabel, { color: colors.textMuted }]}>Recent searches</Text>
           {recentSearches.length > 0 && (
-            <Pressable onPress={clearRecent} hitSlop={8}>
+            <Pressable onPress={clearRecent} hitSlop={12} accessibilityLabel="Clear recent searches" accessibilityRole="button">
               <Text style={[styles.clearRecentText, { color: colors.accentPrimary }]}>Clear</Text>
             </Pressable>
           )}
@@ -1088,6 +1097,8 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
               <Pressable
                 key={sym}
                 onPress={() => applySearch(sym)}
+                accessibilityLabel={sym}
+                accessibilityRole="button"
                 style={[
                   styles.chip,
                   {
@@ -1574,15 +1585,15 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
         </View>
       )}
 
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "WATCH" || signal.signal === "HOLD") && signal.entry_trigger && (
+      {(isBuySignal(signal.signal) || signal.signal === "WATCH" || signal.signal === "HOLD") && signal.entry_trigger && (
         <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && <PriceLadder signal={signal} colors={colors} />}
+      {isActionSignal(signal.signal) && <PriceLadder signal={signal} colors={colors} />}
 
       {/* ── Execution levels ─────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
+      {isActionSignal(signal.signal) && (
         <SectionCard
           title="📋 Your Trade Plan"
           subtitle="Exactly where to buy, where to exit if wrong, and where to take profits"
@@ -1677,7 +1688,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
       )}
 
       {/* ── Win chances ──────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
+      {isActionSignal(signal.signal) && (
         <SectionCard
           title="🎲 Probability — What Are the Chances?"
           subtitle="How likely is this trade to work? Estimated from thousands of simulated outcomes."
@@ -1688,7 +1699,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
       )}
 
       {/* ── Rich S/R Map ─────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && signal.confluence_details.rich_sr && (
+      {isActionSignal(signal.signal) && signal.confluence_details.rich_sr && (
         (() => {
           const richSR = signal.confluence_details.rich_sr!;
           const allLevels = [
@@ -1962,7 +1973,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
       />
 
       {/* ── Position sizing ───────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
+      {isActionSignal(signal.signal) && (
         <SectionCard
           title="💰 How Much to Invest"
           subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
@@ -2076,7 +2087,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
 }
 
 // ── TP Target Card — price + probability combined ────────────────────
-function TPTargetCard({
+const TPTargetCard = React.memo(function TPTargetCard({
   icon,
   label,
   hint,
@@ -2167,7 +2178,7 @@ function TPTargetCard({
       <Text style={[styles.tpCardDesc, { color: colors.textMuted }]}>{description}</Text>
     </View>
   );
-}
+});
 
 // ── Win-chances block (CI + expected return) ──────────────────────────
 function WinChancesBlock({
@@ -2235,7 +2246,7 @@ function WinChancesBlock({
 }
 
 // ── Liquidity chip ────────────────────────────────────────────────────
-function LiqChip({
+const LiqChip = React.memo(function LiqChip({
   label,
   desc,
   pass,
@@ -2289,7 +2300,7 @@ function LiqChip({
   }
 
   return <View style={chipStyle}>{content}</View>;
-}
+});
 
 // ── Alert humaniser ───────────────────────────────────────────────────
 function humaniseAlert(raw: string): string {
@@ -2479,7 +2490,7 @@ const ScoreCard = React.memo(function ScoreCard({
               <Pressable
                 accessibilityLabel={`Help for ${meta.title}`}
                 accessibilityRole="button"
-                onPress={() => onShowHelp?.(scoreType)} hitSlop={10} style={{ padding: 2 }}>
+                onPress={() => onShowHelp?.(scoreType)} hitSlop={12} style={{ padding: 2 }}>
                 <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
               </Pressable>
             </View>
@@ -2529,7 +2540,7 @@ function HelpModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
         <Pressable style={[styles.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           {/* Header */}
           <View style={[styles.modalHead, { borderBottomColor: colors.borderColor }]}>
@@ -2537,7 +2548,7 @@ function HelpModal({
             <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 10 }]}>
               {meta.title}
             </Text>
-            <Pressable onPress={onClose} hitSlop={10}>
+            <Pressable onPress={onClose} hitSlop={12}>
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -2605,14 +2616,14 @@ function MarketHelpModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
         <Pressable style={[styles.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           <View style={[styles.modalHead, { borderBottomColor: colors.borderColor }]}>
             <Ionicons name={meta.icon} size={26} color={colors.accentSecondary} />
             <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 10 }]}>
               {meta.title}
             </Text>
-            <Pressable onPress={onClose} hitSlop={10}>
+            <Pressable onPress={onClose} hitSlop={12}>
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>

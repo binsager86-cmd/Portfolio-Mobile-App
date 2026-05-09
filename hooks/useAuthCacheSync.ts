@@ -20,8 +20,16 @@ export function useAuthCacheSync() {
         // Logout — wipe everything
         queryClient.clear();
       } else if (!prevState.token && state.token) {
-        // Login — refetch stale data
-        queryClient.invalidateQueries({ type: "active" });
+        // Login — refetch user-scoped data only (avoid nuking shared caches)
+        queryClient.invalidateQueries({
+          predicate: (q) => {
+            const key = q.queryKey[0];
+            return key === "portfolio" || key === "portfolio-overview"
+              || key === "holdings" || key === "transactions"
+              || key === "news" || key === "deposits"
+              || key === "dividends" || key === "user";
+          },
+        });
       }
     });
     return unsubscribe;

@@ -99,7 +99,9 @@ export function usePushNotifications(): void {
     if (Platform.OS === "android") {
       for (const ch of ANDROID_CHANNELS) {
         const { id, ...channel } = ch;
-        Notifications.setNotificationChannelAsync(id, channel).catch(() => {});
+        Notifications.setNotificationChannelAsync(id, channel).catch((err) => {
+          if (__DEV__) console.warn(`[PushNotifications] channel "${id}" setup failed:`, err);
+        });
       }
     }
 
@@ -140,7 +142,9 @@ export function usePushNotifications(): void {
       // Increment badge counter for received notifications
       Notifications.getBadgeCountAsync()
         .then((count) => Notifications.setBadgeCountAsync(count + 1))
-        .catch(() => {});
+        .catch((err) => {
+          if (__DEV__) console.warn("[PushNotifications] badge update failed:", err);
+        });
       // If it's a portfolio notification, also refresh portfolio data
       const data = notification.request.content.data as Record<string, unknown> | undefined;
       if (data?.type === "portfolio_update" || data?.type === "daily_update") {
@@ -167,7 +171,9 @@ export function usePushNotifications(): void {
           | undefined;
         routeFromData(data);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (__DEV__) console.warn("[PushNotifications] initial notification read failed:", err);
+      });
 
     return () => {
       receivedSub.remove();

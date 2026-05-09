@@ -10,6 +10,7 @@
  * max-content width, navigation mode, and touch-target sizing.
  */
 
+import { useMemo } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 
 // ── Breakpoints ─────────────────────────────────────────────────────
@@ -91,39 +92,35 @@ export interface ResponsiveInfo {
 export function useResponsive(): ResponsiveInfo {
   const { width, height } = useWindowDimensions();
 
-  // Use the smaller dimension to determine device class (works in both orientations)
-  const shortSide = Math.min(width, height);
+  return useMemo(() => {
+    const shortSide = Math.min(width, height);
 
-  let bp: Breakpoint = "phone";
-  if (width >= BP_DESKTOP) bp = "desktop";
-  else if (width >= BP_TABLET) bp = "tablet";
-  // Native devices: if the short side (portrait width) is ≥ 600px, it's a tablet
-  // (iPads, Android tablets in portrait mode, even if current width < 768 in split-view)
-  else if (Platform.OS !== "web" && shortSide >= 600) bp = "tablet";
+    let bp: Breakpoint = "phone";
+    if (width >= BP_DESKTOP) bp = "desktop";
+    else if (width >= BP_TABLET) bp = "tablet";
+    else if (Platform.OS !== "web" && shortSide >= 600) bp = "tablet";
 
-  const isPhone = bp === "phone";
-  const isTablet = bp === "tablet";
-  const isDesktop = bp === "desktop";
+    const isPhone = bp === "phone";
+    const isTablet = bp === "tablet";
+    const isDesktop = bp === "desktop";
 
-  // Keep native platforms in drawer mode for consistent mobile app navigation.
-  const showSidebar = Platform.OS === "web" && (isDesktop || isTablet);
+    const showSidebar = Platform.OS === "web" && (isDesktop || isTablet);
+    const showHamburger = !showSidebar;
 
-  // Hamburger: shown whenever there's no persistent sidebar.
-  const showHamburger = !showSidebar;
-
-  return {
-    width,
-    height,
-    bp,
-    isPhone,
-    isTablet,
-    isDesktop,
-    metricCols: isDesktop ? 5 : isTablet ? 3 : 2,
-    maxContentWidth: isDesktop ? 1200 : isTablet ? 900 : width,
-    showSidebar,
-    showHamburger,
-    touchTarget: isDesktop ? 36 : 44,
-    spacing: SPACING[bp],
-    fonts: FONTS[bp],
-  };
+    return {
+      width,
+      height,
+      bp,
+      isPhone,
+      isTablet,
+      isDesktop,
+      metricCols: isDesktop ? 5 : isTablet ? 3 : 2,
+      maxContentWidth: isDesktop ? 1200 : isTablet ? 900 : width,
+      showSidebar,
+      showHamburger,
+      touchTarget: isDesktop ? 36 : 44,
+      spacing: SPACING[bp],
+      fonts: FONTS[bp],
+    };
+  }, [width, height]);
 }

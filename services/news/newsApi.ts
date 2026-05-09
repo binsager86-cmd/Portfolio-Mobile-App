@@ -18,12 +18,16 @@ async function authHeaders(): Promise<Record<string, string>> {
 // lifetime of the JS bundle (cleared on app reload), which is exactly the
 // horizon React Query already trusts for `staleTime`.
 type CachedResponse = { etag?: string; lastModified?: string; body: unknown };
+const MAX_CONDITIONAL_CACHE_SIZE = 50;
 const _conditionalCache = new Map<string, CachedResponse>();
 
 async function fetchJson<T>(url: string): Promise<T> {
   const headers = await authHeaders();
   const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`News API error: ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`News API error: ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
+  }
   return res.json();
 }
 
@@ -46,6 +50,10 @@ async function fetchJsonConditional<T>(url: string): Promise<T> {
   const etag = res.headers.get("etag") ?? undefined;
   const lastModified = res.headers.get("last-modified") ?? undefined;
   if (etag || lastModified) {
+    if (_conditionalCache.size >= MAX_CONDITIONAL_CACHE_SIZE) {
+      const oldest = _conditionalCache.keys().next().value!;
+      _conditionalCache.delete(oldest);
+    }
     _conditionalCache.set(url, { etag, lastModified, body });
   }
   return body;

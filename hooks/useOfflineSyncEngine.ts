@@ -24,8 +24,9 @@ export function useOfflineSyncEngine() {
       for (const item of queue) {
         try {
           await api.post(`/api/v1/${item.mutationKey.join("/")}`, item.payload);
-        } catch {
+        } catch (err) {
           conflictCount += 1;
+          if (__DEV__) console.warn("[OfflineSyncEngine] mutation replay failed:", item.mutationKey, err);
         }
       }
       if (queue.length) clearQueue();
@@ -53,11 +54,14 @@ export function useOfflineSyncEngine() {
         conflictCount,
       });
 
-      queryClient.invalidateQueries({ queryKey: ["portfolio"] });
-      queryClient.invalidateQueries({ queryKey: ["news"] });
-      queryClient.invalidateQueries({ queryKey: ["holdings"] });
-      queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] });
-    } catch {
+      queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey[0];
+          return key === "portfolio" || key === "news" || key === "holdings" || key === "portfolio-overview";
+        },
+      });
+    } catch (err) {
+      if (__DEV__) console.warn("[OfflineSyncEngine] sync failed:", err);
       const meta = OfflineCache.getMeta();
       OfflineCache.updateMeta({
         status: "error",
