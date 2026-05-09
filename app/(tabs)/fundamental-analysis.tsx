@@ -23,7 +23,6 @@ import {
 } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import * as DocumentPicker from "expo-document-picker";
 import { FlashList } from "@shopify/flash-list";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
@@ -48,22 +47,16 @@ import {
   runDDMValuation,
   runMultiplesValuation,
   updateLineItem,
-  uploadFinancialStatement,
-  getExtractionStatus,
-  validateFinancialStatement,
-  verifyStatementPlacement,
   fetchStatementsOnline,
   AnalysisStock,
   FinancialStatement,
   StockMetric,
   StockListEntry,
-  AIUploadResult,
 } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
-import { showErrorAlert, extractErrorMessage } from "@/lib/errorHandling";
+import { showErrorAlert } from "@/lib/errorHandling";
 import { exportCSV, exportExcel, exportPDF, type TableData } from "@/lib/exportAnalysis";
 import { useResponsive } from "@/hooks/useResponsive";
-import { MAX_UPLOAD_BYTES } from "@/constants/layout";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import type { ThemePalette } from "@/constants/theme";
 
@@ -91,9 +84,6 @@ const STMNT_META: Record<string, { label: string; icon: React.ComponentProps<typ
   cashflow: { label: "Cash Flow",     icon: "exchange",      color: "#3b82f6" },
   equity:   { label: "Equity",        icon: "users",         color: "#ec4899" },
 };
-
-// Keep STMNT_ICONS alias for backward compat (upload result badges etc.)
-const STMNT_ICONS = STMNT_META;
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>["name"]; color: string }> = {
   profitability: { label: "Profitability",        icon: "trophy",        color: "#10b981" },
@@ -876,12 +866,6 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
   const [typeFilter, setTypeFilter] = useState<string | undefined>("income");
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
 
-  // ── AI Upload state ───────────────────────────────────────────────
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState("");
-  const [uploadResult, setUploadResult] = useState<AIUploadResult | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
   // ── Online fetch state ────────────────────────────────────────────
   const [fetchingOnline, setFetchingOnline] = useState(false);
   const [onlineResult, setOnlineResult] = useState<string | null>(null);
@@ -893,179 +877,53 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
       const res = await fetchStatementsOnline(stockId);
       setOnlineResult(res.message);
       queryClient.invalidateQueries({ queryKey: ["analysis-statements"] });
-      refetch();
+      await refetch();
     } catch (err: unknown) {
       setOnlineResult("Error: " + (err instanceof Error ? err.message : "Failed to fetch statements"));
     } finally {
       setFetchingOnline(false);
     }
   }, [stockId, queryClient, refetch]);
-
-  const handlePickAndUpload = useCallback(async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
-
-      const file = result.assets[0];
-      if (!file.uri) return;
-
-      // Validate file
-      if (file.size && file.size > MAX_UPLOAD_BYTES) {
-        Alert.alert("File Too Large", "Maximum file size is 50 MB.");
-        return;
-      }
-
-      setUploading(true);
-      setUploadError(null);
-      setUploadResult(null);
-
-      const fileName = file.name || "financial_report.pdf";
-      const mimeType = file.mimeType || "application/pdf";
-      let valCorrections = 0;
-      let placeCorrections = 0;
-
-      // ── Step 1/3: Extract financials (upload + poll) ──────────
-      setUploadProgress("⏳ Step 1/3 — Uploading PDF...");
-
-      const jobRes = await uploadFinancialStatement(
-        stockId,
-        file.uri,
-        fileName,
-        mimeType,
-      );
-
-      // Poll until extraction job is done
-      setUploadProgress("⏳ Step 1/3 — Extracting financials from PDF...");
-      let extractionResult: AIUploadResult | undefined;
-      for (let attempt = 0; attempt < 120; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        const status = await getExtractionStatus(jobRes.job_id);
-        if (status.status === "done" && status.result) {
-          extractionResult = status.result;
-          break;
-        }
-        if (status.status === "failed") {
-          throw new Error(status.error_message || "Extraction failed on server.");
-        }
-        const pct = Math.round(status.progress_percent ?? 0);
-        setUploadProgress(`⏳ Step 1/3 — Extracting financials... ${pct}%`);
-      }
-      if (!extractionResult) {
-        throw new Error("Extraction timed out. Please try again.");
-      }
-
-      setUploadResult(extractionResult);
-
-      // ── Step 2/3: Validate extraction ───────────────────────────
-      setUploadProgress("🔍 Step 2/3 — AI is validating extracted data...");
-
-      try {
-        const valRes = await validateFinancialStatement(
-          stockId,
-          file.uri,
-          fileName,
-          mimeType,
-        );
-        valCorrections = valRes.corrections_applied || 0;
-      } catch (valErr: any) {
-        // Non-fatal — continue to step 3
-        if (__DEV__) console.warn("Validation step failed (non-fatal):", valErr);
-      }
-
-      // ── Step 3/3: Verify placement ──────────────────────────────
-      setUploadProgress("✅ Step 3/3 — Verifying item placement...");
-
-      try {
-        const placeRes = await verifyStatementPlacement(
-          stockId,
-          file.uri,
-          fileName,
-          mimeType,
-        );
-        placeCorrections = placeRes.corrections_applied || 0;
-      } catch (placeErr: any) {
-        // Non-fatal
-        if (__DEV__) console.warn("Placement step failed (non-fatal):", placeErr);
-      }
-
-      const totalItems = extractionResult.statements.reduce((s: number, st: { line_items_count: number }) => s + st.line_items_count, 0);
-      setUploadProgress("");
-      queryClient.invalidateQueries({ queryKey: ["analysis-statements"] });
-
-      const summaryParts = [
-        `${extractionResult.statements.length} statements extracted with ${totalItems} line items.`,
-      ];
-      if (valCorrections > 0) {
-        summaryParts.push(`\n\n🔍 Validation: ${valCorrections} correction(s) applied.`);
-      } else {
-        summaryParts.push(`\n\n🔍 Validation passed.`);
-      }
-      if (placeCorrections > 0) {
-        summaryParts.push(`\n✅ Placement: ${placeCorrections} item(s) corrected.`);
-      } else {
-        summaryParts.push(`\n✅ Placement verified.`);
-      }
-
-      Alert.alert("Extraction Complete", summaryParts.join(""));
-    } catch (err: any) {
-      const msg = extractErrorMessage(err, "Upload failed.");
-      setUploadError(msg);
-      setUploadProgress("");
-      Alert.alert("Upload Failed", msg);
-    } finally {
-      setUploading(false);
-    }
-  }, [stockId, queryClient]);
-
   const statements = data?.statements ?? [];
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ── Upload Section ─────────────────────────────────────────── */}
+      {/* ── Fetch Section ──────────────────────────────────────────── */}
       <View style={{
-        paddingHorizontal: 16, paddingVertical: 14,
+        paddingHorizontal: 16, paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: colors.borderColor,
         backgroundColor: colors.bgCard,
       }}>
-        {/* Get Statements Online */}
-        <Pressable
-          onPress={handleFetchOnline}
-          disabled={fetchingOnline || uploading}
-          style={({ pressed }) => [
-            {
-              flexDirection: "row", alignItems: "center", justifyContent: "center",
-              paddingVertical: 10, paddingHorizontal: 16,
-              borderRadius: 10, borderWidth: 1.5,
-              borderColor: fetchingOnline ? colors.textMuted : colors.accentPrimary,
-              backgroundColor: fetchingOnline ? colors.bgInput : colors.accentPrimary + "08",
-              gap: 8,
-            },
-            pressed && !fetchingOnline && { backgroundColor: colors.accentPrimary + "15", transform: [{ scale: 0.98 }] },
-          ]}
-        >
-          {fetchingOnline ? (
-            <ActivityIndicator size="small" color={colors.accentPrimary} />
-          ) : (
-            <FontAwesome name="globe" size={16} color={colors.accentPrimary} />
-          )}
-          <Text style={{ color: fetchingOnline ? colors.textMuted : colors.textPrimary, fontSize: 13, fontWeight: "600" }}>
-            {fetchingOnline ? "Fetching..." : "Get Statements"}
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 10 }}>
-            from stockanalysis.com
-          </Text>
-        </Pressable>
+        <View style={[st.rowBetween, { gap: 12 }]}> 
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "700" }}>
+              Financial Statements
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+              Tap Get Statements to fetch the latest data.
+            </Text>
+          </View>
+          <ActionButton
+            label={fetchingOnline ? "Fetching..." : "Get Statements"}
+            onPress={handleFetchOnline}
+            colors={colors}
+            variant="secondary"
+            icon="globe"
+            disabled={fetchingOnline}
+            loading={fetchingOnline}
+          />
+        </View>
 
-        {/* Online fetch result banner */}
         {onlineResult && (() => {
           const isError = onlineResult.startsWith("Error");
           return (
             <View style={{
-              marginTop: 8, padding: 10, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 8,
+              marginTop: 8,
+              padding: 10,
+              borderRadius: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
               backgroundColor: isError ? colors.danger + "15" : colors.success + "15",
             }}>
               <FontAwesome
@@ -1082,116 +940,6 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
             </View>
           );
         })()}
-
-        <Pressable
-          onPress={handlePickAndUpload}
-          disabled={uploading}
-          style={({ pressed }) => [
-            {
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              marginTop: 10,
-              paddingVertical: 14,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              borderWidth: 2,
-              borderStyle: "dashed",
-              borderColor: uploading ? colors.textMuted : colors.accentPrimary,
-              backgroundColor: uploading ? colors.bgInput : colors.accentPrimary + "08",
-              gap: 10,
-            },
-            pressed && !uploading && { backgroundColor: colors.accentPrimary + "15", transform: [{ scale: 0.98 }] },
-          ]}
-        >
-          {uploading ? (
-            <ActivityIndicator size="small" color={colors.accentPrimary} />
-          ) : (
-            <View style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: colors.accentPrimary + "15",
-              alignItems: "center", justifyContent: "center",
-            }}>
-              <FontAwesome name="cloud-upload" size={18} color={colors.accentPrimary} />
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={{
-              color: uploading ? colors.textMuted : colors.textPrimary,
-              fontSize: 14, fontWeight: "700",
-            }}>
-              {uploading ? "Processing..." : "Upload Financial Report (PDF)"}
-            </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
-              {uploading ? uploadProgress : "AI extracts income, balance sheet, cash flow & equity statements"}
-            </Text>
-          </View>
-          {!uploading && (
-            <FontAwesome name="file-pdf-o" size={20} color={colors.danger + "80"} />
-          )}
-        </Pressable>
-
-        {/* Upload result summary */}
-        {uploadResult && !uploading && (
-          <View style={{
-            marginTop: 10, padding: 12, borderRadius: 10,
-            backgroundColor: colors.success + "10",
-            borderWidth: 1, borderColor: colors.success + "30",
-          }}>
-            <View style={[st.rowCenter, { gap: 8 }]}>
-              <FontAwesome name="check-circle" size={16} color={colors.success} />
-              <Text style={{ color: colors.success, fontSize: 13, fontWeight: "700", flex: 1 }}>
-                Extraction Complete
-              </Text>
-              <Pressable onPress={() => setUploadResult(null)} hitSlop={8}>
-                <FontAwesome name="times" size={14} color={colors.textMuted} />
-              </Pressable>
-            </View>
-            <View style={{ marginTop: 8, gap: 4 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                <Text style={{ fontWeight: "600" }}>Source:</Text> {uploadResult.source_file} ({uploadResult.pages_processed} pages)
-              </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                <Text style={{ fontWeight: "600" }}>Model:</Text> {uploadResult.model}
-              </Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-                {uploadResult.statements.map((s, i) => (
-                  <View key={i} style={{
-                    paddingHorizontal: 8, paddingVertical: 3,
-                    borderRadius: 6,
-                    backgroundColor: (STMNT_ICONS[s.statement_type]?.color ?? "#6366f1") + "15",
-                  }}>
-                    <Text style={{
-                      color: STMNT_ICONS[s.statement_type]?.color ?? "#6366f1",
-                      fontSize: 10, fontWeight: "700", textTransform: "capitalize",
-                    }}>
-                      {s.statement_type} {s.fiscal_year} ({s.line_items_count} items)
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Upload error */}
-        {uploadError && !uploading && (
-          <View style={{
-            marginTop: 10, padding: 12, borderRadius: 10,
-            backgroundColor: colors.danger + "10",
-            borderWidth: 1, borderColor: colors.danger + "30",
-          }}>
-            <View style={[st.rowCenter, { gap: 8 }]}>
-              <FontAwesome name="exclamation-circle" size={16} color={colors.danger} />
-              <Text style={{ color: colors.danger, fontSize: 13, fontWeight: "600", flex: 1 }}>
-                {uploadError}
-              </Text>
-              <Pressable onPress={() => setUploadError(null)} hitSlop={8}>
-                <FontAwesome name="times" size={14} color={colors.textMuted} />
-              </Pressable>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* Type filter tabs */}
@@ -1261,7 +1009,7 @@ function StatementsTable({
           <FontAwesome name="file-text-o" size={32} color={colors.accentSecondary} />
         </View>
         <Text style={[st.emptyTitle, { color: colors.textPrimary }]}>No statements</Text>
-        <Text style={[st.emptySubtitle, { color: colors.textMuted }]}>Upload a financial report PDF above to extract statements with AI</Text>
+          <Text style={[st.emptySubtitle, { color: colors.textMuted }]}>Tap Get Statements to load available statements.</Text>
       </View>
     );
   }
@@ -1466,7 +1214,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
             <FontAwesome name="columns" size={32} color={colors.warning} />
           </View>
           <Text style={[st.emptyTitle, { color: colors.textPrimary }]}>Need 2+ periods</Text>
-          <Text style={[st.emptySubtitle, { color: colors.textMuted }]}>Upload statements for multiple fiscal years to compare.</Text>
+          <Text style={[st.emptySubtitle, { color: colors.textMuted }]}>Use Get Statements to load multiple fiscal years for comparison.</Text>
         </View>
       ) : (
         <ScrollView refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={colors.accentPrimary} />}>
@@ -1617,7 +1365,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
         <Card colors={colors} style={{ marginBottom: 16 }}>
           <SectionHeader title="Calculate Metrics" icon="cogs" iconColor={colors.accentSecondary} colors={colors} />
           <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4, marginBottom: 10 }}>
-            Select a period or calculate all at once from uploaded statements.
+            Select a period or calculate all at once from retrieved statements.
           </Text>
 
           {periods.length > 0 && (
@@ -1671,7 +1419,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
           </View>
           <Text style={[st.emptyTitle, { color: colors.textPrimary }]}>No metrics yet</Text>
           <Text style={[st.emptySubtitle, { color: colors.textMuted, textAlign: "center" }]}>
-            Upload statements and calculate metrics above.
+            Get statements and calculate metrics above.
           </Text>
         </View>
       ) : (
