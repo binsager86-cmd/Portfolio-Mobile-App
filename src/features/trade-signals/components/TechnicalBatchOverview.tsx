@@ -35,6 +35,11 @@ function scoreColor(score: number, colors: ThemePalette): string {
   return colors.danger;
 }
 
+function scoreCellColor(score: number | null | undefined, colors: ThemePalette): string {
+  if (!Number.isFinite(score)) return colors.textMuted;
+  return scoreColor(Number(score), colors);
+}
+
 function statusChipColors(status: string, colors: ThemePalette): { bg: string; fg: string } {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "completed") {
@@ -49,12 +54,24 @@ function statusChipColors(status: string, colors: ThemePalette): { bg: string; f
   return { bg: colors.bgInput, fg: colors.textSecondary };
 }
 
-function scoreText(value: number): string {
+function scoreText(value: number | null | undefined): string {
   return Number.isFinite(value) ? String(value) : "-";
 }
 
 function sortableScore(value: number | null | undefined): number {
   return Number.isFinite(value) ? Number(value) : Number.NEGATIVE_INFINITY;
+}
+
+function baseOverallScore(row: TechnicalBatchRow): number | null {
+  if (row.raw_technical_score != null) return row.raw_technical_score;
+  return null;
+}
+
+function adjustedOverallScore(row: TechnicalBatchRow): number | null {
+  if (row.risk_adjusted_score != null) return row.risk_adjusted_score;
+  if (row.overall_score != null) return row.overall_score;
+  if (row.raw_technical_score != null) return row.raw_technical_score;
+  return null;
 }
 
 function buildLayout(windowWidth: number) {
@@ -65,14 +82,16 @@ function buildLayout(windowWidth: number) {
   const rankWidth = wide ? 56 : 50;
   const companyWidth = wide ? 280 : medium ? 250 : 220;
   const metricWidth = wide ? 148 : medium ? 138 : 130;
-  const overallWidth = wide ? 152 : medium ? 142 : 132;
-  const minTableWidth = rankWidth + companyWidth + metricWidth * 4 + overallWidth + 16;
+  const baseOverallWidth = wide ? 170 : medium ? 158 : 148;
+  const adjustedOverallWidth = wide ? 176 : medium ? 164 : 154;
+  const minTableWidth = rankWidth + companyWidth + metricWidth * 4 + baseOverallWidth + adjustedOverallWidth + 16;
 
   return {
     rankWidth,
     companyWidth,
     metricWidth,
-    overallWidth,
+    baseOverallWidth,
+    adjustedOverallWidth,
     tableWidth: Math.max(contentWidth, minTableWidth),
     titleSize: wide ? 24 : medium ? 22 : 20,
     subtitleSize: wide ? 15 : 14,
@@ -94,7 +113,11 @@ async function exportTechnicalRowsToExcel(
   runId: number | null | undefined,
 ): Promise<void> {
   try {
-    const ordered = [...rows].sort((a, b) => sortableScore(b.overall_score) - sortableScore(a.overall_score));
+    const ordered = [...rows].sort(
+      (a, b) =>
+        sortableScore(baseOverallScore(b)) -
+        sortableScore(baseOverallScore(a)),
+    );
     const data = ordered.map((row, index) => ({
       "#": index + 1,
       COMPANY: row.company_name || row.symbol,
@@ -103,7 +126,8 @@ async function exportTechnicalRowsToExcel(
       SPEED_MOMENTUM: row.speed_momentum,
       BUYING_PRESSURE: row.buying_pressure,
       KEY_PRICE_LEVEL: row.key_price_level,
-      OVERALL_SCORE: row.overall_score,
+      COMBINED_SCORE_NO_ADJUSTMENT: baseOverallScore(row),
+      COMBINED_SCORE_WITH_ADJUSTMENT: adjustedOverallScore(row),
       SIGNAL: row.signal || "-",
       REASON: row.reason || "-",
       STATUS: row.error ? "ERROR" : "OK",
@@ -119,7 +143,8 @@ async function exportTechnicalRowsToExcel(
       { wch: 16 },
       { wch: 16 },
       { wch: 15 },
-      { wch: 14 },
+      { wch: 30 },
+      { wch: 32 },
       { wch: 12 },
       { wch: 28 },
       { wch: 10 },
@@ -197,7 +222,8 @@ function TableHeader({
       <Text style={[styles.hMetric, { width: layout.metricWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Speed Momentum</Text>
       <Text style={[styles.hMetric, { width: layout.metricWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Buying Pressure</Text>
       <Text style={[styles.hMetric, { width: layout.metricWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Key Price Level</Text>
-      <Text style={[styles.hOverall, { width: layout.overallWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Overall Score</Text>
+      <Text style={[styles.hOverall, { width: layout.baseOverallWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Combined (No Dir Adjust)</Text>
+      <Text style={[styles.hOverall, { width: layout.adjustedOverallWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Combined (Dir Adjust)</Text>
     </View>
   );
 }
@@ -214,7 +240,10 @@ function TableRow({
   layout: ReturnType<typeof buildLayout>;
 }) {
   const zebra = index % 2 === 0 ? "transparent" : colors.bgPrimary;
-  const overallTone = scoreColor(row.overall_score, colors);
+  const baseScore = baseOverallScore(row);
+  const adjustedScore = adjustedOverallScore(row);
+  const overallBaseTone = scoreCellColor(baseScore, colors);
+  const overallAdjustedTone = scoreCellColor(adjustedScore, colors);
 
   return (
     <View
@@ -260,8 +289,12 @@ function TableRow({
         {scoreText(row.key_price_level)}
       </Text>
 
-      <Text style={[styles.overallCell, { width: layout.overallWidth, fontSize: layout.overallSize, color: overallTone }]}>
-        {scoreText(row.overall_score)}
+      <Text style={[styles.overallCell, { width: layout.baseOverallWidth, fontSize: layout.overallSize, color: overallBaseTone }]}>
+        {scoreText(baseScore)}
+      </Text>
+
+      <Text style={[styles.overallCell, { width: layout.adjustedOverallWidth, fontSize: layout.overallSize, color: overallAdjustedTone }]}>
+        {scoreText(adjustedScore)}
       </Text>
     </View>
   );
@@ -304,9 +337,10 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
   const runMut = useMutation({
     mutationFn: () =>
       runTechnicalBatchScan({
-        background: true,
+        // Safer in development: finish in-request instead of fragile in-process background task.
+        background: false,
         segment: "PREMIER",
-        max_concurrency: 4,
+        max_concurrency: 3,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["trade-signals", "technical-batch", "latest"] });
@@ -320,7 +354,12 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
   const rows = latestQ.data?.rows ?? [];
   const layout = useMemo(() => buildLayout(width), [width]);
   const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => sortableScore(b.overall_score) - sortableScore(a.overall_score)),
+    () =>
+      [...rows].sort(
+        (a, b) =>
+          sortableScore(baseOverallScore(b)) -
+          sortableScore(baseOverallScore(a)),
+      ),
     [rows],
   );
   const isRunning = String(run?.status || "").toLowerCase() === "running";

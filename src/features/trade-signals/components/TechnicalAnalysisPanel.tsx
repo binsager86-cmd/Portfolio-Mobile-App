@@ -21,7 +21,12 @@ import {
   View,
 } from "react-native";
 
-import type { FourScores, FourScoreTier, KuwaitSignalConfluence, KuwaitIndicatorBreakdown } from "@/services/api/analytics/tradeSignals";
+import type {
+  FourScores,
+  FourScoreTier,
+  KuwaitSignalConfluence,
+  KuwaitIndicatorBreakdown,
+} from "@/services/api/analytics/tradeSignals";
 import type { ThemePalette } from "@/constants/theme";
 import {
   getKuwaitSignal,
@@ -154,6 +159,7 @@ function ScoreBar({
   value,
   max = 100,
   colors,
+  dualScores,
   onPress,
 }: {
   icon: string;
@@ -162,6 +168,7 @@ function ScoreBar({
   value: number;
   max?: number;
   colors: ThemePalette;
+  dualScores?: { adjusted: number; unadjusted: number };
   onPress?: () => void;
 }) {
   const safeValue = Number.isFinite(value) ? value : 0;
@@ -172,6 +179,16 @@ function ScoreBar({
     pct >= 0.7 ? "#22c55e" : pct >= 0.5 ? "#f59e0b" : "#ef4444";
   const grade =
     pct >= 0.7 ? "Strong" : pct >= 0.5 ? "Moderate" : "Weak";
+  const adjustedDual = Number.isFinite(dualScores?.adjusted) ? dualScores!.adjusted : safeValue;
+  const unadjustedDual = Number.isFinite(dualScores?.unadjusted) ? dualScores!.unadjusted : safeValue;
+  const adjustedPct = Math.max(0, Math.min(1, adjustedDual / max));
+  const unadjustedPct = Math.max(0, Math.min(1, unadjustedDual / max));
+  const adjustedWidthPct = `${(adjustedPct * 100).toFixed(1)}%`;
+  const unadjustedWidthPct = `${(unadjustedPct * 100).toFixed(1)}%`;
+  const adjustedBarColor =
+    adjustedPct >= 0.7 ? "#22c55e" : adjustedPct >= 0.5 ? "#f59e0b" : "#ef4444";
+  const unadjustedBarColor =
+    unadjustedPct >= 0.7 ? "#22c55e" : unadjustedPct >= 0.5 ? "#f59e0b" : "#ef4444";
   return (
     <Pressable onPress={onPress} style={{ marginBottom: 12 }}>
       <View style={styles.scoreBarRow}>
@@ -187,13 +204,42 @@ function ScoreBar({
           <Text style={[styles.scoreBarHint, { color: colors.textMuted }]}>{hint}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.scoreBarVal, { color: barColor }]}>{Math.round(safeValue)}</Text>
-          <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
+          {dualScores ? (
+            <>
+              <Text style={[styles.scoreBarDualAdj, { color: adjustedBarColor }]}>Adjusted</Text>
+              <Text style={[styles.scoreBarDualBase, { color: unadjustedBarColor }]}>Not Adjusted</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.scoreBarVal, { color: barColor }]}>{Math.round(safeValue)}</Text>
+              <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
+            </>
+          )}
         </View>
       </View>
-      <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
-        <View style={[styles.scoreBarFill, { width: widthPct, backgroundColor: barColor }]} />
-      </View>
+      {dualScores ? (
+        <>
+          <View style={styles.scoreBarDualLineRow}>
+            <Text style={[styles.scoreBarDualLineLabel, { color: adjustedBarColor }]}>Adjusted</Text>
+            <Text style={[styles.scoreBarDualLineValue, { color: adjustedBarColor }]}>{Math.round(adjustedDual)}</Text>
+          </View>
+          <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
+            <View style={[styles.scoreBarFill, { width: adjustedWidthPct, backgroundColor: adjustedBarColor }]} />
+          </View>
+
+          <View style={styles.scoreBarDualLineRow}>
+            <Text style={[styles.scoreBarDualLineLabel, { color: unadjustedBarColor }]}>Not Adjusted</Text>
+            <Text style={[styles.scoreBarDualLineValue, { color: unadjustedBarColor }]}>{Math.round(unadjustedDual)}</Text>
+          </View>
+          <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor, marginTop: 0 }]}> 
+            <View style={[styles.scoreBarFill, { width: unadjustedWidthPct, backgroundColor: unadjustedBarColor }]} />
+          </View>
+        </>
+      ) : (
+        <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
+          <View style={[styles.scoreBarFill, { width: widthPct, backgroundColor: barColor }]} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -529,11 +575,29 @@ function getScoreModalProps(
 ): { title: string; icon: string; totalScore: number; items: BreakdownItem[]; formula: string } | null {
   if (!mode) return null;
   switch (mode) {
-    case "trend": return {
-      title: "Trend Direction", icon: "📈", totalScore: raw.trend,
-      items: buildTrendItems(bd?.trend ?? null),
-      formula: "EMA Alignment (40%) + ADX Strength (30%) + Swing Structure (30%)",
-    };
+    case "trend": {
+      const trend = bd?.trend ?? null;
+      const baseRaw = trend?.base_raw ?? buildTrendItems(trend).reduce((sum, item) => sum + item.pts, 0);
+      const adjusted = trend?.final_adjusted ?? trend?.raw_score ?? raw.trend;
+      const explicitFactor = trend?.adjustment_factor;
+      const derivedFactor = baseRaw > 0 ? adjusted / baseRaw : 1;
+      const factor = typeof explicitFactor === "number" && Number.isFinite(explicitFactor)
+        ? explicitFactor
+        : derivedFactor;
+
+      const multipliers = trend?.multipliers;
+      const factorComputation = multipliers
+        ? `Directional factor = ER(${multipliers.efficiency_ratio.toFixed(2)}) × Age(${multipliers.trend_age.toFixed(2)}) × Stretch(${multipliers.ema_stretch.toFixed(2)}) × Sector(${multipliers.sector_lead_lag.toFixed(2)}) = ${factor.toFixed(2)}`
+        : `Directional factor = Adjusted / Base = ${adjusted.toFixed(0)} / ${baseRaw.toFixed(0)} = ${factor.toFixed(2)}`;
+
+      return {
+        title: "Trend Direction",
+        icon: "📈",
+        totalScore: adjusted,
+        items: buildTrendItems(trend),
+        formula: `Base Trend = EMA Alignment (40%) + ADX Strength (30%) + Swing Structure (30%).\nAdjusted Trend = Base Trend × Directional Factor.\n${factorComputation}.\nWhy apply the factor: it penalizes noisy, late-stage, over-extended, or weak-sector trends so entries rely on cleaner trend quality, not structure alone.`,
+      };
+    }
     case "momentum": return {
       title: "Speed & Momentum", icon: "⚡", totalScore: raw.momentum,
       items: buildMomentumItems(bd?.momentum ?? null),
@@ -1010,7 +1074,14 @@ function deriveBlockedFourScores(
     potential: { score: potScore, tier: toTier(potScore), description: "mixed_signals" },
     timing:    { score: timScore, tier: toTier(timScore), description: "mixed_signals" },
     risk:      { score: 50, risk_level: "Moderate Risk" as const, description: "moderate_risk_caution_advised" },
-    overall:   { score: overallScore, tier: toTier(overallScore), description: "mixed_signals", risk_multiplier: 1.0 },
+    overall:   {
+      base_score: overallScore,
+      score: overallScore,
+      adjustment_factor: 1.0,
+      tier: toTier(overallScore),
+      description: "mixed_signals",
+      risk_multiplier: 1.0,
+    },
     position_action: { action: "NO_ACTION", label: "No Action", max_position_pct: 0 },
   };
 }
@@ -1097,28 +1168,229 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
   const raw = rawResolution.scores;
   const hasRawSource = rawResolution.fromSource;
   const bd = c.indicator_breakdown ?? null;
+  const resolvedFourScores = useMemo(
+    () => c.four_scores ?? deriveBlockedFourScores(c, raw, signal),
+    [c, raw, signal],
+  );
+  const trendBreakdown = bd?.trend;
 
-  const combinedDisplayScore = useMemo(() => {
+  const combinedAdjustedDirectionalScore = useMemo(() => {
+    const explicit = signal.combined_score_adjusted_directional;
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return Math.max(0, Math.min(100, Math.trunc(explicit)));
+    }
+
     const primary = signal.raw_technical_score ?? c.total_score;
     if (typeof primary === "number" && Number.isFinite(primary) && (hasRawSource || primary > 0)) {
-      return primary;
+      return Math.max(0, Math.min(100, Math.trunc(primary)));
     }
+
     const fallbackOverall = c.four_scores?.overall?.score;
-    return typeof fallbackOverall === "number" && Number.isFinite(fallbackOverall)
-      ? fallbackOverall
-      : (typeof primary === "number" && Number.isFinite(primary) ? primary : 0);
-  }, [signal.raw_technical_score, c.total_score, c.four_scores, hasRawSource]);
+    if (typeof fallbackOverall === "number" && Number.isFinite(fallbackOverall)) {
+      return Math.max(0, Math.min(100, Math.trunc(fallbackOverall)));
+    }
+
+    return typeof primary === "number" && Number.isFinite(primary)
+      ? Math.max(0, Math.min(100, Math.trunc(primary)))
+      : 0;
+  }, [signal.combined_score_adjusted_directional, signal.raw_technical_score, c.total_score, c.four_scores, hasRawSource]);
+
+  const combinedUnadjustedDirectionalScore = useMemo(() => {
+    const explicit = signal.combined_score_unadjusted_directional;
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return Math.max(0, Math.min(100, Math.trunc(explicit)));
+    }
+
+    if (!hasRawSource) {
+      return combinedAdjustedDirectionalScore;
+    }
+
+    const trendBase = trendBreakdown?.base_raw;
+    if (!(typeof trendBase === "number" && Number.isFinite(trendBase))) {
+      return combinedAdjustedDirectionalScore;
+    }
+
+    const trendWeight = (signal.component_scores?.trend?.weight_pct ?? 25) / 100;
+    const momentumWeight = (signal.component_scores?.momentum?.weight_pct ?? 20) / 100;
+    const volumeWeight = (signal.component_scores?.volume_flow?.weight_pct ?? 25) / 100;
+    const srWeight = (signal.component_scores?.support_resistance?.weight_pct ?? 15) / 100;
+
+    const fourFactorSum =
+      Math.round(trendBase * trendWeight)
+      + Math.round(raw.momentum * momentumWeight)
+      + Math.round(raw.volume_flow * volumeWeight)
+      + Math.round(raw.support_resistance * srWeight);
+
+    let total = Math.trunc(fourFactorSum / 0.85);
+    const hurstPenalty = c.hurst_filter?.confidence_penalty;
+    if (typeof hurstPenalty === "number" && Number.isFinite(hurstPenalty)) {
+      total = Math.trunc(total * hurstPenalty);
+    }
+
+    return Math.max(0, Math.min(100, Math.trunc(total)));
+  }, [
+    signal.combined_score_unadjusted_directional,
+    signal.component_scores,
+    hasRawSource,
+    trendBreakdown?.base_raw,
+    raw.momentum,
+    raw.volume_flow,
+    raw.support_resistance,
+    c.hurst_filter?.confidence_penalty,
+    combinedAdjustedDirectionalScore,
+  ]);
+
+  const trendBaseScore = useMemo(() => {
+    const base = trendBreakdown?.base_raw;
+    if (typeof base === "number" && Number.isFinite(base)) {
+      return Math.max(0, Math.min(100, Math.trunc(base)));
+    }
+    const fallback = signal.raw_technical_score ?? c.total_score_raw ?? c.total_score;
+    return typeof fallback === "number" && Number.isFinite(fallback)
+      ? Math.max(0, Math.min(100, Math.trunc(fallback)))
+      : 0;
+  }, [trendBreakdown?.base_raw, signal.raw_technical_score, c.total_score_raw, c.total_score]);
+
+  const trendDirectionalFactor = useMemo(() => {
+    const explicit = trendBreakdown?.adjustment_factor;
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return Math.max(0, explicit);
+    }
+
+    const base = trendBreakdown?.base_raw;
+    const adjusted = trendBreakdown?.final_adjusted ?? trendBreakdown?.raw_score;
+    if (
+      typeof base === "number"
+      && base > 0
+      && Number.isFinite(base)
+      && typeof adjusted === "number"
+      && Number.isFinite(adjusted)
+    ) {
+      return Math.max(0, adjusted / base);
+    }
+
+    return 1;
+  }, [
+    trendBreakdown?.adjustment_factor,
+    trendBreakdown?.base_raw,
+    trendBreakdown?.final_adjusted,
+    trendBreakdown?.raw_score,
+  ]);
+
+  const trendAdjustedScore = useMemo(() => {
+    const adjusted = trendBreakdown?.final_adjusted ?? trendBreakdown?.raw_score;
+    if (typeof adjusted === "number" && Number.isFinite(adjusted)) {
+      return Math.max(0, Math.min(100, Math.trunc(adjusted)));
+    }
+
+    return Math.max(0, Math.min(100, Math.trunc(trendBaseScore * trendDirectionalFactor)));
+  }, [trendBreakdown?.final_adjusted, trendBreakdown?.raw_score, trendBaseScore, trendDirectionalFactor]);
+
+  const headerBaseScore = useMemo(
+    () => combinedUnadjustedDirectionalScore,
+    [combinedUnadjustedDirectionalScore],
+  );
+
+  const headerAdjustedScore = useMemo(
+    () => combinedAdjustedDirectionalScore,
+    [combinedAdjustedDirectionalScore],
+  );
+
+  const headerAdjustmentFactor = useMemo(() => {
+    if (headerBaseScore <= 0) {
+      return 1;
+    }
+    return Math.max(0, headerAdjustedScore / headerBaseScore);
+  }, [headerAdjustedScore, headerBaseScore]);
 
   const [scoreModal, setScoreModal] = useState<"trend" | "momentum" | "volume" | "sr" | "rr" | null>(null);
   const scoreModalConfig = useMemo(
     () => getScoreModalProps(scoreModal, raw, bd, signal, c),
     [scoreModal, raw, bd, signal, c],
   );
+  const [marketHelpType, setMarketHelpType] = useState<MarketHelpType | null>(null);
+
+  const marketHelpDetails = useMemo<Record<MarketHelpType, MarketHelpEntry>>(() => {
+    const liquidity = c.liquidity_details;
+    const regimeLabel = humanRegime(c.regime ?? "Neutral_Chop");
+    const regimeConfText = c.regime_confidence != null
+      ? `${fmtPct(c.regime_confidence)} confidence`
+      : "Confidence unavailable";
+    const auctionIntensity = c.auction_intensity;
+    const auctionLevel = auctionIntensity == null
+      ? "Unavailable"
+      : auctionIntensity > 1.8
+        ? "High"
+        : auctionIntensity < 1.0
+          ? "Low"
+          : "Normal";
+
+    const adtv = liquidity?.adtv_20d_kd;
+    const spreadProxy = liquidity?.spread_proxy_pct;
+    const activeDays = liquidity?.active_days_30d_pct;
+    const concentration = liquidity?.volume_concentration;
+
+    return {
+      regime: {
+        title: "Market Regime",
+        icon: "globe-outline",
+        currentValue: `${regimeLabel} • ${regimeConfText}`,
+        calculation: "A regime model classifies recent behavior into bull, neutral/chop, or bear conditions using trend and volatility structure. Confidence is the model probability for the selected regime.",
+        threshold: "No hard pass/fail. Higher confidence means the detected regime is more reliable.",
+        whyItMatters: "Regime changes how signals are interpreted. In choppy markets, breakout-style momentum is less reliable and level-based confirmation becomes more important.",
+      },
+      auction: {
+        title: "End-of-Day Buying Activity",
+        icon: "flash-outline",
+        currentValue: auctionIntensity != null ? `${auctionIntensity.toFixed(2)} (${auctionLevel})` : "—",
+        calculation: "Auction intensity is a close-session participation proxy. 1.0 is baseline activity, values above 1.8 indicate unusually strong end-of-day buying.",
+        threshold: "Guide: >1.8 High, 1.0–1.8 Normal, <1.0 Low.",
+        whyItMatters: "Strong close participation can indicate institutional accumulation and improves confidence in next-session follow-through.",
+      },
+      daily_volume: {
+        title: "Daily Volume",
+        icon: "stats-chart-outline",
+        currentValue: adtv != null ? `ADTV 20D: KD ${(adtv / 1000).toFixed(0)}K` : "—",
+        calculation: "Computed as the median traded value over the last 20 sessions (KWD). If raw value is missing, the engine falls back to volume × close / 1000.",
+        threshold: "Pass when ADTV is at least KD 100K.",
+        whyItMatters: "Higher traded value means better execution and lower slippage when entering or exiting positions.",
+      },
+      buy_sell_gap: {
+        title: "Buy/Sell Gap",
+        icon: "swap-horizontal-outline",
+        currentValue: spreadProxy != null ? `Spread proxy: ${spreadProxy.toFixed(2)}%` : "—",
+        calculation: "Spread proxy is the median of (High − Low) / Close over 20 sessions, shown as a percentage and capped at 10% to avoid data spikes.",
+        threshold: "Pass when spread proxy is 1.5% or below.",
+        whyItMatters: "Smaller gaps reduce hidden transaction cost and improve fill quality.",
+      },
+      active_days: {
+        title: "Active Days",
+        icon: "calendar-outline",
+        currentValue: activeDays != null ? `Active sessions: ${activeDays.toFixed(1)}%` : "—",
+        calculation: "Active-day percentage is non-zero-volume sessions divided by the last 30 sessions.",
+        threshold: "Pass when at least 80% of sessions are active.",
+        whyItMatters: "Consistent activity lowers the chance of getting trapped in stale or thinly traded sessions.",
+      },
+      volume_check: {
+        title: "Volume Check",
+        icon: "shield-checkmark-outline",
+        currentValue: concentration != null ? `Concentration: ${concentration.toFixed(1)}%` : "—",
+        calculation: "Volume concentration equals the largest single-day volume divided by 20-day total volume.",
+        threshold: "Pass when concentration is 40% or less.",
+        whyItMatters: "Rejects names where one isolated spike dominates activity and could mislead liquidity quality.",
+      },
+    };
+  }, [c.regime, c.regime_confidence, c.auction_intensity, c.liquidity_details]);
 
   const entryMid =
     e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
       ? (e.entry_zone_fils[0] + e.entry_zone_fils[1]) / 2
       : null;
+
+  const technicalBaseColor =
+    headerBaseScore >= 75 ? "#22c55e" : headerBaseScore >= 50 ? "#f59e0b" : "#ef4444";
+  const adjustedScoreColor =
+    headerAdjustedScore >= 75 ? "#22c55e" : headerAdjustedScore >= 50 ? "#f59e0b" : "#ef4444";
 
   return (
     <>
@@ -1162,22 +1434,23 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
         </View>
         <View style={styles.signalHeaderRight}>
           <SignalBadge signal={signal.signal} />
-          <View style={{ alignItems: "flex-end", marginTop: 6 }}>
-            <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Raw Technical</Text>
-            <Text style={[styles.scoreCircleText, {
-              color: (signal.raw_technical_score ?? c.total_score) >= 75 ? "#22c55e"
-                : (signal.raw_technical_score ?? c.total_score) >= 50 ? "#f59e0b"
-                : "#ef4444",
-            }]}>
-              {signal.raw_technical_score ?? c.total_score}
-              <Text style={{ fontSize: 12, color: colors.textMuted }}>/100</Text>
-            </Text>
-            {signal.risk_adjusted_score != null
-              && signal.risk_adjusted_score !== signal.raw_technical_score && (
-              <Text style={[{ fontSize: 11, color: colors.textMuted, marginTop: 2 }]}>
-                Adj: <Text style={{ color: "#f59e0b" }}>{signal.risk_adjusted_score}</Text>
+          <View style={styles.headerMetricsRow}>
+            <View style={[styles.headerMetricCard, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.headerMetricLabel, { color: colors.textMuted }]}>Technical Base</Text>
+              <Text style={[styles.headerMetricValue, { color: technicalBaseColor }]}>
+                {headerBaseScore}
+                <Text style={[styles.headerMetricSuffix, { color: colors.textMuted }]}>/100</Text>
               </Text>
-            )}
+            </View>
+
+            <View style={[styles.headerMetricCard, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.headerMetricLabel, { color: colors.textMuted }]}>Adjusted Score</Text>
+              <Text style={[styles.headerMetricValue, { color: adjustedScoreColor }]}>
+                {headerAdjustedScore}
+                <Text style={[styles.headerMetricSuffix, { color: colors.textMuted }]}>/100</Text>
+              </Text>
+              <Text style={[styles.headerMetricFactor, { color: colors.textMuted }]}>×{headerAdjustmentFactor.toFixed(2)}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -1372,7 +1645,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
 
       {/* ── Four-score decision matrix ────────────────────────── */}
       <FourScoreCards
-        fourScores={c.four_scores ?? deriveBlockedFourScores(c, raw, signal)}
+        fourScores={resolvedFourScores}
         colors={colors}
       />
 
@@ -1394,8 +1667,9 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
               icon="📈"
               label="Trend Direction"
               hint="Is the stock consistently moving in the right direction?"
-              value={raw.trend}
+              value={trendAdjustedScore}
               colors={colors}
+              dualScores={{ adjusted: trendAdjustedScore, unadjusted: trendBaseScore }}
               onPress={() => setScoreModal("trend")}
             />
             <ScoreBar
@@ -1434,14 +1708,24 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
         )}
         <View style={[styles.totalRow, { borderTopColor: colors.borderColor }]}>
           <View>
-            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Combined Score</Text>
-            <Text style={[styles.totalHint, { color: colors.textMuted }]}>Need ≥ 75 for a BUY signal</Text>
+            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Combined Scores</Text>
+            <Text style={[styles.totalHint, { color: colors.textMuted }]}>Need ≥ 75 for BUY (Adjusted Directional)</Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={[styles.totalValue, {
-              color: combinedDisplayScore >= 75 ? "#22c55e" : combinedDisplayScore >= 50 ? "#f59e0b" : "#ef4444",
+              color: combinedAdjustedDirectionalScore >= 75 ? "#22c55e" : combinedAdjustedDirectionalScore >= 50 ? "#f59e0b" : "#ef4444",
             }]}>
-              {combinedDisplayScore} / 100
+              {combinedAdjustedDirectionalScore} / 100
+            </Text>
+            <Text style={[styles.totalValueCaption, { color: colors.textMuted }]}>Adjusted directional</Text>
+            <Text style={[styles.totalValueSecondary, {
+              color: combinedUnadjustedDirectionalScore >= 75
+                ? "#22c55e"
+                : combinedUnadjustedDirectionalScore >= 50
+                  ? "#f59e0b"
+                  : "#ef4444",
+            }]}>
+              No dir adjust: {combinedUnadjustedDirectionalScore} / 100
             </Text>
             {signal.score_breakdown && signal.score_breakdown.circuit_penalty_pct > 0 && (
               <Text style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>
@@ -1472,22 +1756,46 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
         subtitle="The engine adjusts its scoring based on the overall market mood"
         colors={colors}
       >
+        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+          Tap any metric to see how it is calculated and why it matters.
+        </Text>
         <View style={styles.regimeRow}>
-          <RegimeBadge regime={c.regime ?? "Neutral_Chop"} />
-          <Text style={[styles.regimeConf, { color: colors.textMuted }]}>
-            {fmtPct(c.regime_confidence)} sure
-          </Text>
+          <Pressable
+            onPress={() => setMarketHelpType("regime")}
+            accessibilityRole="button"
+            accessibilityLabel="Market regime helper"
+            accessibilityHint="Tap to learn how regime is calculated"
+          >
+            <RegimeBadge regime={c.regime ?? "Neutral_Chop"} />
+          </Pressable>
+          <Pressable
+            onPress={() => setMarketHelpType("regime")}
+            accessibilityRole="button"
+            accessibilityLabel="Regime confidence helper"
+            accessibilityHint="Tap to learn how confidence is used"
+          >
+            <Text style={[styles.regimeConf, { color: colors.textMuted }]}> 
+              {fmtPct(c.regime_confidence)} sure
+            </Text>
+          </Pressable>
         </View>
-        <Row
-          label="End-of-Day Buying Activity"
-          hint="High values (>1.8) suggest large investors are active — a positive sign"
-          value={
-            c.auction_intensity != null
-              ? `${c.auction_intensity.toFixed(2)}  ${c.auction_intensity > 1.8 ? "🔥 High" : c.auction_intensity < 1.0 ? "😴 Low" : "Normal"}`
-              : "—"
-          }
-          colors={colors}
-        />
+        <Pressable
+          onPress={() => setMarketHelpType("auction")}
+          accessibilityRole="button"
+          accessibilityLabel="End-of-day buying activity helper"
+          accessibilityHint="Tap to learn how auction intensity is calculated"
+        >
+          <Row
+            label="End-of-Day Buying Activity"
+            hint="High values (>1.8) suggest large investors are active — a positive sign"
+            value={
+              c.auction_intensity != null
+                ? `${c.auction_intensity.toFixed(2)}  ${c.auction_intensity > 1.8 ? "🔥 High" : c.auction_intensity < 1.0 ? "😴 Low" : "Normal"}`
+                : "—"
+            }
+            colors={colors}
+          />
+        </Pressable>
         <View style={styles.liqRow}>
           <LiqChip
             label="Daily Volume"
@@ -1499,6 +1807,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
                 : "—"
             }
             colors={colors}
+            onPress={() => setMarketHelpType("daily_volume")}
           />
           <LiqChip
             label="Buy/Sell Gap"
@@ -1510,6 +1819,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
                 : "—"
             }
             colors={colors}
+            onPress={() => setMarketHelpType("buy_sell_gap")}
           />
           <LiqChip
             label="Active Days"
@@ -1521,6 +1831,7 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
                 : "—"
             }
             colors={colors}
+            onPress={() => setMarketHelpType("active_days")}
           />
           <LiqChip
             label="Volume Check"
@@ -1532,9 +1843,18 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
                 : "—"
             }
             colors={colors}
+            onPress={() => setMarketHelpType("volume_check")}
           />
         </View>
       </SectionCard>
+
+      <MarketHelpModal
+        visible={marketHelpType !== null}
+        helpType={marketHelpType}
+        details={marketHelpDetails}
+        onClose={() => setMarketHelpType(null)}
+        colors={colors}
+      />
 
       {/* ── Position sizing ───────────────────────────────────── */}
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
@@ -1816,27 +2136,29 @@ function LiqChip({
   pass,
   value,
   colors,
+  onPress,
 }: {
   label: string;
   desc: string;
   pass: boolean;
   value: string;
   colors: ThemePalette;
+  onPress?: () => void;
 }) {
-  return (
-    <View
-      style={[
-        styles.liqChip,
-        {
-          backgroundColor: pass ? "#22c55e15" : "#ef444415",
-          borderColor: pass ? "#22c55e40" : "#ef444440",
-        },
-      ]}
-    >
+  const chipStyle = [
+    styles.liqChip,
+    {
+      backgroundColor: pass ? "#22c55e15" : "#ef444415",
+      borderColor: pass ? "#22c55e40" : "#ef444440",
+    },
+  ] as const;
+
+  const content = (
+    <>
       <View style={[styles.liqChipIcon, { backgroundColor: pass ? "#22c55e20" : "#ef444420" }]}>
         <FontAwesome name={pass ? "check" : "times"} size={10} color={pass ? "#22c55e" : "#ef4444"} />
       </View>
-      <View style={{ marginLeft: 8 }}>
+      <View style={{ marginLeft: 8, flex: 1 }}>
         <Text style={{ color: pass ? "#22c55e" : "#ef4444", fontSize: 13, fontWeight: "700", marginBottom: 2 }}>
           {label}
         </Text>
@@ -1844,8 +2166,24 @@ function LiqChip({
           {desc} • <Text style={{ color: colors.textSecondary, fontWeight: "600" }}>{value}</Text>
         </Text>
       </View>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} helper`}
+        accessibilityHint="Tap to learn how this liquidity check is calculated"
+        style={chipStyle}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={chipStyle}>{content}</View>;
 }
 
 // ── Alert humaniser ───────────────────────────────────────────────────
@@ -1909,6 +2247,23 @@ function humanizeDesc(d: string): string {
 }
 
 type ScoreType = "potential" | "timing" | "risk" | "overall";
+
+type MarketHelpType =
+  | "regime"
+  | "auction"
+  | "daily_volume"
+  | "buy_sell_gap"
+  | "active_days"
+  | "volume_check";
+
+type MarketHelpEntry = {
+  title: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  currentValue: string;
+  calculation: string;
+  threshold: string;
+  whyItMatters: string;
+};
 
 const SCORE_EXPLANATIONS: Record<ScoreType, {
   title: string;
@@ -2127,6 +2482,55 @@ function HelpModal({
   );
 }
 
+function MarketHelpModal({
+  visible,
+  helpType,
+  details,
+  onClose,
+  colors,
+}: {
+  visible: boolean;
+  helpType: MarketHelpType | null;
+  details: Record<MarketHelpType, MarketHelpEntry>;
+  onClose: () => void;
+  colors: ThemePalette;
+}) {
+  if (helpType === null) return null;
+  const meta = details[helpType];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={[styles.modalBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <View style={[styles.modalHead, { borderBottomColor: colors.borderColor }]}>
+            <Ionicons name={meta.icon} size={26} color={colors.accentSecondary} />
+            <Text style={[styles.modalTitle, { color: colors.textPrimary, flex: 1, marginLeft: 10 }]}>
+              {meta.title}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={10}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={{ padding: 16 }} showsVerticalScrollIndicator={false}>
+            <Text style={[styles.modalSectionLabel, { color: colors.textPrimary }]}>Current Value</Text>
+            <Text style={[styles.modalBodyText, { color: colors.textSecondary }]}>{meta.currentValue}</Text>
+
+            <Text style={[styles.modalSectionLabel, { color: colors.textPrimary }]}>How It's Calculated</Text>
+            <Text style={[styles.modalBodyText, { color: colors.textSecondary }]}>{meta.calculation}</Text>
+
+            <Text style={[styles.modalSectionLabel, { color: colors.textPrimary }]}>Pass/Fail Rule</Text>
+            <Text style={[styles.modalBodyText, { color: colors.textSecondary }]}>{meta.threshold}</Text>
+
+            <Text style={[styles.modalSectionLabel, { color: colors.textPrimary }]}>Why It Matters</Text>
+            <Text style={[styles.modalBodyText, { color: colors.textSecondary }]}>{meta.whyItMatters}</Text>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function FourScoreCards({ fourScores, colors }: { fourScores: FourScores; colors: ThemePalette }) {
   const [helpType, setHelpType] = useState<ScoreType | null>(null);
 
@@ -2181,7 +2585,9 @@ function FourScoreCards({ fourScores, colors }: { fourScores: FourScores; colors
 
         {/* Risk multiplier callout */}
         {(() => {
-          const mult = fourScores.overall?.risk_multiplier ?? 1;
+          const baseOverall = fourScores.overall?.base_score ?? fourScores.overall?.score ?? 0;
+          const adjustedOverall = fourScores.overall?.score ?? 0;
+          const mult = fourScores.overall?.adjustment_factor ?? fourScores.overall?.risk_multiplier ?? 1;
           const riskScore = fourScores.risk?.score ?? 0;
           const riskLvl = fourScores.risk?.risk_level ?? "Moderate Risk";
           const multColor = mult >= 0.95 ? "#16a34a" : mult >= 0.75 ? "#f59e0b" : "#ef4444";
@@ -2193,7 +2599,10 @@ function FourScoreCards({ fourScores, colors }: { fourScores: FourScores; colors
               {"  (”"}<Text style={{ color: multColor }}>{riskLvl}</Text>{"”)"}
             </Text>
             <Text style={[styles.multFormula, { color: colors.textMuted }]}>
-                Overall = Potential × 0.5 + Timing × 0.5
+              Base {baseOverall.toFixed(1)} × {mult.toFixed(2)} = Final {adjustedOverall.toFixed(1)}
+            </Text>
+            <Text style={[styles.multFormula, { color: colors.textMuted }]}> 
+              Base = Potential × 0.5 + Timing × 0.5
             </Text>
           </View>
         );
@@ -2314,10 +2723,22 @@ const styles = StyleSheet.create({
     borderRadius: 18, borderWidth: 1, padding: 20, marginBottom: 16,
   },
   signalHeaderLeft: { gap: 6, flex: 1 },
-  signalHeaderRight: { alignItems: "flex-end", gap: 6 },
+  signalHeaderRight: { alignItems: "flex-end", gap: 8, width: "42%" },
+  headerMetricsRow: { flexDirection: "row", gap: 8, justifyContent: "flex-end", width: "100%" },
+  headerMetricCard: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 112,
+    alignItems: "flex-end",
+  },
+  headerMetricLabel: { fontSize: 10, fontWeight: "600", marginBottom: 2 },
+  headerMetricValue: { fontSize: 26, fontWeight: "800", lineHeight: 30 },
+  headerMetricSuffix: { fontSize: 11, fontWeight: "700" },
+  headerMetricFactor: { fontSize: 10, fontWeight: "700", marginTop: 2 },
   stockCode: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5 },
   setupType: { fontSize: 14, fontWeight: "500" },
-  scoreCircleText: { fontSize: 24, fontWeight: "800" },
 
   metaBadge: {
     borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start",
@@ -2360,6 +2781,11 @@ const styles = StyleSheet.create({
   scoreBarLabel: { fontSize: 13, fontWeight: "700" },
   scoreBarHint: { fontSize: 11, marginTop: 2, lineHeight: 15 },
   scoreBarVal: { fontSize: 15, fontWeight: "800" },
+  scoreBarDualAdj: { fontSize: 10, fontWeight: "700", marginTop: -1 },
+  scoreBarDualBase: { fontSize: 10, fontWeight: "600", marginTop: 1 },
+  scoreBarDualLineRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, marginBottom: 4 },
+  scoreBarDualLineLabel: { fontSize: 10, fontWeight: "700" },
+  scoreBarDualLineValue: { fontSize: 12, fontWeight: "800" },
   scoreBarTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
   scoreBarFill: { height: 8, borderRadius: 4 },
 
@@ -2367,6 +2793,8 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 15, fontWeight: "700" },
   totalHint: { fontSize: 12, marginTop: 2 },
   totalValue: { fontSize: 24, fontWeight: "800" },
+  totalValueCaption: { fontSize: 11, fontWeight: "600", marginTop: 1 },
+  totalValueSecondary: { fontSize: 13, fontWeight: "700", marginTop: 4 },
 
   // Price Ladder
   ladderRow: {
@@ -2390,11 +2818,20 @@ const styles = StyleSheet.create({
   regimeConf: { fontSize: 13, fontWeight: "500" },
 
   // Liquidity chips
-  liqRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
+  liqRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 12,
+  },
   liqChip: {
     flexDirection: "row", alignItems: "center",
     borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10,
-    flexGrow: 1, minWidth: "45%", // Make chips grow and take more space
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "48%",
+    maxWidth: "48%",
   },
   liqChipIcon: {
     width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center"

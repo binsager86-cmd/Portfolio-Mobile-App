@@ -102,7 +102,24 @@ export interface KuwaitSignalSubScores {
   risk_reward: number;
 }
 
-export interface IndicatorBreakdownTrend {
+export interface TrendScoreDetail {
+  base_raw: number;
+  final_adjusted: number;
+  adjustment_factor: number;
+  multipliers: {
+    efficiency_ratio: number;
+    trend_age: number;
+    ema_stretch: number;
+    sector_lead_lag: number;
+  };
+  // Legacy fields kept for backward compatibility
+  raw_score?: number;
+  ema_alignment_pts?: number;
+  adx_pts?: number;
+  swing_structure_pts?: number;
+}
+
+export interface IndicatorBreakdownTrend extends TrendScoreDetail {
   ema_pts: number;
   ema_desc: string;
   adx_pts: number;
@@ -206,8 +223,13 @@ export interface FourScoreRisk {
   description: string;
 }
 
-export interface FourScoreOverall extends FourScoreComponent {
-  risk_multiplier: number;
+export interface FourScoreOverall {
+  base_score: number;
+  score: number;
+  adjustment_factor: number;
+  tier: FourScoreTier;
+  description: string;
+  risk_multiplier?: number;
 }
 
 export interface FourScorePositionAction {
@@ -313,6 +335,10 @@ export interface KuwaitSignal {
   raw_technical_score: number | null;
   /** Score after all penalties applied. null for NEUTRAL. */
   risk_adjusted_score: number | null;
+  /** Combined score using trend directional adjustment. */
+  combined_score_adjusted_directional?: number | null;
+  /** Companion combined score without trend directional adjustment. */
+  combined_score_unadjusted_directional?: number | null;
   /** Breakdown of how the final score was derived from penalties */
   score_breakdown: {
     raw_technical: number;
@@ -394,8 +420,11 @@ export interface TechnicalBatchRow {
   speed_momentum: number;
   buying_pressure: number;
   key_price_level: number;
+  /** Display/ranking fallback, aligned to combined_score_with_adjustment on new runs. */
   overall_score: number;
+  /** Combined score without directional trend adjustment. */
   raw_technical_score: number | null;
+  /** Combined score with directional trend adjustment. */
   risk_adjusted_score: number | null;
   error: string | null;
 }
@@ -448,16 +477,19 @@ export async function getTechnicalBatchRunById(runId: number, limit = 300): Prom
 
 /** Trigger technical scoring for the full Kuwait stock universe. */
 export async function runTechnicalBatchScan(params: RunTechnicalBatchParams = {}): Promise<RunTechnicalBatchResponse> {
+  const runInBackground = params.background ?? true;
   const { data } = await api.post<{ status: string; data: RunTechnicalBatchResponse }>(
     "/api/v1/trade-signals/technical-batch/run",
     null,
     {
       params: {
-        background: params.background ?? true,
+        background: runInBackground,
         segment: params.segment ?? "PREMIER",
         max_concurrency: params.max_concurrency ?? 4,
         limit: params.limit,
       },
+      // Foreground full-universe scan can take several minutes.
+      timeout: runInBackground ? undefined : 20 * 60 * 1000,
     },
   );
   return data.data;
