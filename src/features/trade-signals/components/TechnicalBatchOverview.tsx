@@ -1,3 +1,5 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
+
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo } from "react";

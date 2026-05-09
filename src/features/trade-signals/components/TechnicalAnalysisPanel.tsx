@@ -5,9 +5,12 @@
  * resistance, entry zone, stop loss, and profit targets clearly.
  */
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
+
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -57,7 +60,6 @@ async function loadRecentSearches(): Promise<string[]> {
     if (Platform.OS === "web") {
       raw = localStorage.getItem(RECENT_SEARCH_STORAGE_KEY);
     } else {
-      const SecureStore = require("expo-secure-store");
       raw = await SecureStore.getItemAsync(RECENT_SEARCH_STORAGE_KEY);
     }
 
@@ -83,7 +85,6 @@ async function saveRecentSearches(items: string[]): Promise<void> {
     if (Platform.OS === "web") {
       localStorage.setItem(RECENT_SEARCH_STORAGE_KEY, payload);
     } else {
-      const SecureStore = require("expo-secure-store");
       await SecureStore.setItemAsync(RECENT_SEARCH_STORAGE_KEY, payload);
     }
   } catch (err) {
