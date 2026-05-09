@@ -53,10 +53,12 @@ export function useOfflineSyncEngine() {
         conflictCount,
       });
 
-      queryClient.invalidateQueries({ queryKey: ["portfolio"] });
-      queryClient.invalidateQueries({ queryKey: ["news"] });
-      queryClient.invalidateQueries({ queryKey: ["holdings"] });
-      queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return key === "portfolio" || key === "news" || key === "holdings" || key === "portfolio-overview";
+        },
+      });
     } catch {
       const meta = OfflineCache.getMeta();
       OfflineCache.updateMeta({

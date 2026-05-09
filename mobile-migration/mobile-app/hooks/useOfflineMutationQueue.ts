@@ -19,7 +19,10 @@ export function useOfflineMutation<TData, TVariables extends Record<string, unkn
       return result;
     } catch (error) {
       const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+      const isRetryableServer = status === 408 || status === 429 || status === 503;
       const isNetworkFailure =
+        isRetryableServer ||
         axiosError.response === undefined ||
         axiosError.code === "ERR_NETWORK" ||
         axiosError.message === "Network Error";

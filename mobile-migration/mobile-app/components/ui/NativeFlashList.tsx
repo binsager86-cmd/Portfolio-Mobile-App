@@ -85,7 +85,7 @@ export function NativeFlashList<T>({
   return (
     <FlashList<T>
       data={data}
-      renderItem={renderItem}
+      renderItem={renderItem as (info: { item: T; index: number }) => React.ReactElement}
       keyExtractor={keyExtractor}
       estimatedItemSize={estimatedItemSize}
       getItemType={getItemType}

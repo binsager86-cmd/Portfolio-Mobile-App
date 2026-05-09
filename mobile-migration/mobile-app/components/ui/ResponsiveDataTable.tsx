@@ -80,7 +80,7 @@ export function ResponsiveDataTable<T>({
       data={data}
       keyExtractor={keyExtractor ?? ((item, i) => String((item as { id?: string | number }).id ?? i))}
       estimatedItemSize={84}
-      renderItem={renderCardItem}
+      renderItem={renderCardItem as (info: { item: T }) => React.ReactElement}
     />
   );
 }

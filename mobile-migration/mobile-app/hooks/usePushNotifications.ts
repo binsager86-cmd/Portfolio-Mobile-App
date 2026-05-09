@@ -30,7 +30,7 @@ export function usePushNotifications(): void {
         name: "Portfolio News",
         importance: Notifications.AndroidImportance.HIGH,
         sound: "default",
-      }).catch(() => {});
+      }).catch((err) => { if (__DEV__) console.warn("[Push] Channel setup failed:", err); });
     }
 
     const routeFromData = (payload: Record<string, unknown> | undefined) => {
@@ -42,8 +42,8 @@ export function usePushNotifications(): void {
         try {
           router.push(`/(tabs)/news/${String(newsId)}` as never);
           return;
-        } catch {
-          // fall through
+        } catch (err) {
+          if (__DEV__) console.warn("[Push] Deep link to news item failed:", err);
         }
       }
 
@@ -51,16 +51,16 @@ export function usePushNotifications(): void {
         try {
           router.push("/(tabs)/news" as never);
           return;
-        } catch {
-          // no-op
+        } catch (err) {
+          if (__DEV__) console.warn("[Push] Deep link to news failed:", err);
         }
       }
 
       if (type === "price_alert" || type === "portfolio_update") {
         try {
           router.push("/(tabs)" as never);
-        } catch {
-          // no-op
+        } catch (err) {
+          if (__DEV__) console.warn("[Push] Deep link to portfolio failed:", err);
         }
       }
     };
@@ -88,7 +88,7 @@ export function usePushNotifications(): void {
           | undefined;
         routeFromData(data);
       })
-      .catch(() => {});
+      .catch((err) => { if (__DEV__) console.warn("[Push] Initial response check failed:", err); });
 
     return () => {
       receivedSub.remove();

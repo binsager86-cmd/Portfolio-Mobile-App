@@ -7,7 +7,7 @@ export function useAppTheme() {
   const scheme = useColorScheme();
   const isDark = scheme === "dark";
   const base = isDark ? MD3DarkTheme : MD3LightTheme;
-  const c = isDark ? tokens.dark : {};
+  const c: Partial<typeof tokens.dark> = isDark ? tokens.dark : {};
 
   const colors = {
     ...base.colors,

@@ -797,7 +797,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
                       <Text style={{ fontSize: 12, color: textColor, fontWeight: "600" }}>
                         {isSup ? "▲ Support" : "▼ Resistance"}{lv.volume_cluster ? "  📦" : ""}
                       </Text>
-                      <Text style={{ fontSize: 11, color: colors.subText, marginTop: 1 }}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
                         {lv.type}
                       </Text>
                     </View>
@@ -805,7 +805,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
                       <Text style={{ fontSize: 13, color: textColor, fontWeight: "700" }}>
                         {lv.price.toFixed(1)}
                       </Text>
-                      <Text style={{ fontSize: 10, color: colors.subText }}>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>
                         {strengthDots}  {lv.strength}
                       </Text>
                     </View>

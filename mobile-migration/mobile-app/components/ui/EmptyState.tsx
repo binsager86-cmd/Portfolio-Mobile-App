@@ -23,7 +23,7 @@ export function EmptyState({
       <MaterialCommunityIcons
         name={icon}
         size={48}
-        color={tokens.colors.textSecondary}
+        color={tokens.colors.onSurfaceVariant}
       />
       <Text variant="titleMedium" style={styles.title}>{title}</Text>
       {description ? (
@@ -43,12 +43,12 @@ const styles = StyleSheet.create({
   },
   title: {
     marginTop: tokens.spacing.sm,
-    color: tokens.colors.text,
+    color: tokens.colors.onSurface,
     textAlign: "center",
   },
   desc: {
     marginTop: tokens.spacing.xs,
-    color: tokens.colors.textSecondary,
+    color: tokens.colors.onSurfaceVariant,
     textAlign: "center",
   },
 });

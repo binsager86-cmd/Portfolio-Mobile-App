@@ -50,9 +50,9 @@ export const initSentry = () => {
       Sentry.reactNavigationIntegration(),
       Sentry.replayIntegration(),
     ],
-    beforeSend(event) {
+    beforeSend(event: Record<string, any>) {
       if (event.exception?.values?.[0]?.stacktrace?.frames) {
-        event.exception.values[0].stacktrace.frames = event.exception.values[0].stacktrace.frames.map((f) => ({
+        event.exception.values[0].stacktrace.frames = event.exception.values[0].stacktrace.frames.map((f: Record<string, any>) => ({
           ...f,
           filename: f.filename?.replace(/\/var\/folders\/.+\//, ""),
         }));

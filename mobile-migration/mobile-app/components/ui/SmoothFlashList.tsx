@@ -79,7 +79,7 @@ export function SmoothFlashList<T>({
     >
       <FlashList<T>
         data={data}
-        renderItem={memoRender}
+        renderItem={memoRender as (info: { item: T; index: number }) => React.ReactElement}
         keyExtractor={memoKey}
         estimatedItemSize={estimatedItemSize}
         getItemType={getItemType}

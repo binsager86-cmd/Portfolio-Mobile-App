@@ -60,8 +60,10 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       stop_loss_fils: 450,
       tp1_fils: 475,
       tp2_fils: 495,
+      tp3_fils: 510,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
+      tp_methods: null,
     },
     risk_metrics: {
       risk_per_share_fils: 12.5,
@@ -73,6 +75,7 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: 0.72,
       p_tp2_before_sl: 0.48,
+      p_tp3_before_sl: 0.28,
       confidence_interval_95: [0.58, 0.84],
       expected_return_r_multiple: 0.44,
       calibration_method: "bootstrap",
@@ -104,6 +107,15 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       support_levels: [445, 440],
       resistance_levels: [480, 490],
       vwap: 463,
+      rich_sr: null,
+      volume_profile: null,
+    },
+    entry_trigger: {
+      action: "HOLD",
+      trigger: "none",
+      pullback: { triggered: false, reason: "No pullback detected" },
+      breakout: { triggered: false, reason: "No breakout detected" },
+      accumulation: { state: "absent", obv_slope_pct: 0, cmf: 0 },
     },
     alerts: [],
     metadata: {
@@ -124,8 +136,10 @@ function makeNeutralSignal(): KuwaitSignal {
       stop_loss_fils: null,
       tp1_fils: null,
       tp2_fils: null,
+      tp3_fils: null,
       tick_alignment: "N/A",
       preferred_order_type: "NONE",
+      tp_methods: null,
     },
     risk_metrics: {
       risk_per_share_fils: null,
@@ -137,6 +151,7 @@ function makeNeutralSignal(): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: null,
       p_tp2_before_sl: null,
+      p_tp3_before_sl: null,
       confidence_interval_95: null,
       expected_return_r_multiple: null,
       calibration_method: "N/A",
@@ -152,8 +167,10 @@ function makeSellSignal(): KuwaitSignal {
       stop_loss_fils: 470,        // SL is ABOVE entry for SELL
       tp1_fils: 445,              // TP is BELOW entry for SELL
       tp2_fils: 430,
+      tp3_fils: 415,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
+      tp_methods: null,
     },
   });
 }

@@ -275,7 +275,7 @@ function StockPickerDropdown({
         accessibilityLabel={value || "Select stock"}
         accessibilityState={{ expanded: open }}
         onPress={handleOpen}
-        style={({ hovered }: { hovered?: boolean }) => [
+        style={({ hovered }: { pressed: boolean; hovered?: boolean }) => [
           spk.trigger,
           {
             borderColor: open ? colors.accentPrimary : colors.borderColor,

@@ -10,6 +10,7 @@
  * max-content width, navigation mode, and touch-target sizing.
  */
 
+import { useMemo } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 
 // ── Breakpoints ─────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ export function useResponsive(): ResponsiveInfo {
   // Hamburger: shown whenever there's no persistent sidebar.
   const showHamburger = !showSidebar;
 
-  return {
+  return useMemo<ResponsiveInfo>(() => ({
     width,
     height,
     bp,
@@ -125,5 +126,5 @@ export function useResponsive(): ResponsiveInfo {
     touchTarget: isDesktop ? 36 : 44,
     spacing: SPACING[bp],
     fonts: FONTS[bp],
-  };
+  }), [width, height, bp, isPhone, isTablet, isDesktop, showSidebar, showHamburger]);
 }

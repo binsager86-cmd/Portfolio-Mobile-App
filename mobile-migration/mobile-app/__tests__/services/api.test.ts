@@ -247,17 +247,17 @@ describe("API Service", () => {
       const mockData: Partial<TransactionListResponse> = {
         transactions: [],
         count: 0,
-        pagination: { page: 1, per_page: 50, total_pages: 1, total_items: 0 },
+        pagination: { page: 1, page_size: 50, total_pages: 1, total_items: 0 },
       };
 
       jest.spyOn(api, "get").mockResolvedValueOnce({
         data: { status: "ok", data: mockData },
       });
 
-      const result = await getTransactions({ page: 1, per_page: 50 });
+      const result = await getTransactions({ page: 1, page_size: 50 });
 
       expect(api.get).toHaveBeenCalledWith("/api/v1/portfolio/transactions", {
-        params: { page: 1, per_page: 50 },
+        params: { page: 1, page_size: 50 },
       });
       expect(result).toEqual(mockData);
     });
