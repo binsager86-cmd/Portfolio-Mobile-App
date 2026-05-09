@@ -39,6 +39,11 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "
 
 const TOTAL_STEPS = 3;
 
+function firstParam(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 export default function AddTransactionScreen() {
@@ -47,23 +52,31 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const params = useLocalSearchParams<{ symbol?: string; portfolio?: string; editId?: string }>();
-  const isEditMode = !!params.editId;
+  const params = useLocalSearchParams<{
+    symbol?: string | string[];
+    portfolio?: string | string[];
+    editId?: string | string[];
+    createKey?: string | string[];
+  }>();
 
-  const [step, setStep] = useState(1);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [stockSearchText, setStockSearchText] = useState(params.symbol ?? "");
-  const [selectedRefStock, setSelectedRefStock] = useState<StockListEntry | null>(null);
+  const symbolParam = firstParam(params.symbol) ?? "";
+  const portfolioParam = firstParam(params.portfolio);
+  const editIdParam = firstParam(params.editId);
+  const createKeyParam = firstParam(params.createKey);
+  const normalizedPortfolio: (typeof PORTFOLIOS)[number] =
+    portfolioParam === "KFH" || portfolioParam === "BBYN" || portfolioParam === "USA"
+      ? portfolioParam
+      : "KFH";
+  const editTxnId =
+    editIdParam && /^\d+$/.test(editIdParam)
+      ? Number(editIdParam)
+      : undefined;
+  const isEditMode = editTxnId != null;
 
-  // ── Fetch existing transaction in edit mode ────────────────────
-  const { data: editTxn, isLoading: isLoadingEdit } = useTransaction(params.editId);
-  const { data: stocksData } = useStocks();
-
-  const methods = useForm<TxnFormValues>({
-    resolver: zodResolver(txnSchema),
-    defaultValues: {
-      portfolio: (params.portfolio as (typeof PORTFOLIOS)[number]) ?? "KFH",
-      stock_symbol: params.symbol ?? "",
+  const createDefaults = useMemo<TxnFormValues>(
+    () => ({
+      portfolio: normalizedPortfolio,
+      stock_symbol: symbolParam,
       txn_date: todayISO(),
       txn_type: "Buy",
       shares: undefined as unknown as number,
@@ -78,10 +91,38 @@ export default function AddTransactionScreen() {
       broker: "",
       reference: "",
       notes: "",
-    },
+    }),
+    [normalizedPortfolio, symbolParam],
+  );
+
+  const [step, setStep] = useState(1);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [stockSearchText, setStockSearchText] = useState(symbolParam);
+  const [selectedRefStock, setSelectedRefStock] = useState<StockListEntry | null>(null);
+
+  // ── Fetch existing transaction in edit mode ────────────────────
+  const { data: editTxn, isLoading: isLoadingEdit } = useTransaction(
+    editTxnId != null ? String(editTxnId) : undefined,
+  );
+  const { data: stocksData } = useStocks();
+
+  const methods = useForm<TxnFormValues>({
+    resolver: zodResolver(txnSchema),
+    defaultValues: createDefaults,
   });
 
   const { handleSubmit, reset, watch, trigger } = methods;
+
+  // Reset create-mode wizard when a fresh createKey arrives.
+  // Hidden tab screens can stay mounted, so we reset explicitly.
+  useEffect(() => {
+    if (isEditMode) return;
+    reset(createDefaults);
+    setStep(1);
+    setShowAdvanced(false);
+    setSelectedRefStock(null);
+    setStockSearchText(createDefaults.stock_symbol ?? "");
+  }, [createDefaults, createKeyParam, isEditMode, reset]);
 
   // ── Pre-fill form in edit mode ────────────────────────────────
   useEffect(() => {
@@ -127,6 +168,11 @@ export default function AddTransactionScreen() {
   }, [refStocksData, stockSearchText]);
 
   const navigateToTransactions = () => {
+    setStep(1);
+    setShowAdvanced(false);
+    setSelectedRefStock(null);
+    setStockSearchText(createDefaults.stock_symbol ?? "");
+    if (!isEditMode) reset(createDefaults);
     toast.success(isEditMode ? "Transaction updated successfully" : "Transaction saved successfully");
     router.replace("/(tabs)/transactions");
   };
@@ -170,8 +216,8 @@ export default function AddTransactionScreen() {
         // Stock might already exist (race condition / duplicate) — continue
       }
     }
-    if (isEditMode) {
-      updateMutation.mutate({ txnId: Number(params.editId), payload: toPayload(values) });
+    if (isEditMode && editTxnId != null) {
+      updateMutation.mutate({ txnId: editTxnId, payload: toPayload(values) });
     } else {
       createMutation.mutate(toPayload(values));
     }

@@ -79,6 +79,22 @@ export function scoreLabel(score: number): string {
   return "Avoid";
 }
 
+/**
+ * Derive fiscal quarter from period_end_date when fiscal_quarter is not
+ * explicitly stored in the DB.  Standard calendar-year mapping:
+ *   March (03)    → Q1
+ *   June  (06)    → Q2
+ *   September (09)→ Q3
+ *   December (12) → null  (full-year / annual)
+ */
+export function inferQuarterFromDate(periodEndDate: string): number | null {
+  const month = parseInt(periodEndDate.slice(5, 7), 10);
+  if (month === 3) return 1;
+  if (month === 6) return 2;
+  if (month === 9) return 3;
+  return null; // December or other → treat as annual
+}
+
 // ── CFA-level fallback calculations for valuation metrics ────────────
 
 /** Extract a numeric line-item from a statement by matching canonical codes. */
@@ -153,10 +169,16 @@ export function enrichMetricsWithFallbacks(
   const computed: StockMetric[] = [];
   let syntheticId = -1;
 
-  // Group annual statements by fiscal_year → statement_type
+  // Group annual statements by fiscal_year → statement_type.
+  // Skip statements that are explicitly quarterly (fiscal_quarter != null) OR
+  // whose period_end_date implies a mid-year quarter (June → Q2, September → Q3).
+  // March and December are kept because they represent common fiscal-year ends
+  // (Kuwait companies often use Dec 31 or Mar 31 as their year-end).
   const stmtByYear = new Map<number, Map<string, FinancialStatement>>();
   for (const s of statements) {
-    if (s.fiscal_quarter != null) continue; // annual only
+    if (s.fiscal_quarter != null) continue; // explicitly quarterly
+    const endMonth = parseInt(s.period_end_date.slice(5, 7), 10);
+    if (endMonth === 6 || endMonth === 9) continue; // inferred Q2/Q3 — clearly non-annual
     if (!stmtByYear.has(s.fiscal_year)) stmtByYear.set(s.fiscal_year, new Map());
     stmtByYear.get(s.fiscal_year)!.set(s.statement_type, s);
   }
@@ -416,10 +438,16 @@ export function enrichMetricsWithFallbacks(
   return [...normalized, ...computed];
 }
 
+ 
 export const INTERPRETATION_SCALE = [
+  // eslint-disable-next-line custom-styles/no-hardcoded-styles
   { min: 85, max: 100, label: "Exceptional investment candidate", color: "#16a34a" },
+  // eslint-disable-next-line custom-styles/no-hardcoded-styles
   { min: 70, max: 84, label: "Strong", color: "#22c55e" },
+  // eslint-disable-next-line custom-styles/no-hardcoded-styles
   { min: 55, max: 69, label: "Acceptable / neutral", color: "#f59e0b" },
+  // eslint-disable-next-line custom-styles/no-hardcoded-styles
   { min: 40, max: 54, label: "Weak", color: "#f97316" },
+  // eslint-disable-next-line custom-styles/no-hardcoded-styles
   { min: 0, max: 39, label: "Avoid unless special situation", color: "#ef4444" },
 ] as const;

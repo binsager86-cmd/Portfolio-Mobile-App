@@ -17,9 +17,11 @@ import { useThemeStore } from "@/services/themeStore";
 import type { ThemePalette } from "@/constants/theme";
 import { FSignalsPanel } from "@/src/features/trade-signals/components/FSignalsPanel";
 import { TechnicalAnalysisPanel } from "@/src/features/trade-signals/components/TechnicalAnalysisPanel";
+import { TechnicalBatchOverview } from "@/src/features/trade-signals/components/TechnicalBatchOverview";
 import { WhaleRadarPanel } from "@/src/features/trade-signals/components/WhaleRadarPanel";
 
 type SubTabKey = "fsignals" | "technical" | "whaleRadar";
+type TechnicalSubTabKey = "batch" | "engine";
 
 interface SubTab {
   key: SubTabKey;
@@ -38,6 +40,7 @@ export default function TradeSignalsScreen() {
   const { colors } = useThemeStore();
   const { t } = useTranslation();
   const [tab, setTab] = useState<SubTabKey>("fsignals");
+  const [technicalSubTab, setTechnicalSubTab] = useState<TechnicalSubTabKey>("batch");
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -73,7 +76,10 @@ export default function TradeSignalsScreen() {
             return (
               <Pressable
                 key={s.key}
-                onPress={() => setTab(s.key)}
+                onPress={() => {
+                  setTab(s.key);
+                  if (s.key === "technical") setTechnicalSubTab("batch");
+                }}
                 style={[
                   styles.tabBtn,
                   active && { backgroundColor: colors.accentPrimary + "12" },
@@ -108,7 +114,74 @@ export default function TradeSignalsScreen() {
       )}
       {tab === "technical" && (
         <View style={{ flex: 1 }}>
-          <TechnicalAnalysisPanel colors={colors} />
+          <View
+            style={[
+              styles.technicalSubTabs,
+              { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
+            ]}
+          >
+            <Pressable
+              onPress={() => setTechnicalSubTab("batch")}
+              style={[
+                styles.technicalSubBtn,
+                {
+                  backgroundColor:
+                    technicalSubTab === "batch"
+                      ? colors.accentPrimary + "16"
+                      : "transparent",
+                },
+              ]}
+            >
+              <FontAwesome
+                name="table"
+                size={12}
+                color={technicalSubTab === "batch" ? colors.accentPrimary : colors.textMuted}
+              />
+              <Text
+                style={{
+                  color: technicalSubTab === "batch" ? colors.accentPrimary : colors.textSecondary,
+                  fontWeight: "700",
+                  fontSize: 12,
+                }}
+              >
+                {t("tradeSignals.technicalDaily", "Daily Scores")}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setTechnicalSubTab("engine")}
+              style={[
+                styles.technicalSubBtn,
+                {
+                  backgroundColor:
+                    technicalSubTab === "engine"
+                      ? colors.accentPrimary + "16"
+                      : "transparent",
+                },
+              ]}
+            >
+              <FontAwesome
+                name="line-chart"
+                size={12}
+                color={technicalSubTab === "engine" ? colors.accentPrimary : colors.textMuted}
+              />
+              <Text
+                style={{
+                  color: technicalSubTab === "engine" ? colors.accentPrimary : colors.textSecondary,
+                  fontWeight: "700",
+                  fontSize: 12,
+                }}
+              >
+                {t("tradeSignals.technicalEngine", "Signal Engine")}
+              </Text>
+            </Pressable>
+          </View>
+
+          {technicalSubTab === "batch" ? (
+            <TechnicalBatchOverview colors={colors} />
+          ) : (
+            <TechnicalAnalysisPanel colors={colors} />
+          )}
         </View>
       )}
       {tab === "whaleRadar" && (
@@ -171,6 +244,22 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
     borderRadius: 8,
     marginVertical: 4,
+  },
+  technicalSubTabs: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  technicalSubBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
   },
   content: { padding: 16, paddingBottom: 80 },
   placeholder: {

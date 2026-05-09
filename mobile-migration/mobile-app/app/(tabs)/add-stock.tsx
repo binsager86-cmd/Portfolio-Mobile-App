@@ -159,7 +159,7 @@ export default function AddStockScreen() {
         if (window.confirm(msg)) {
           router.replace({
             pathname: "/(tabs)/add-transaction",
-            params: { symbol: data.symbol, portfolio },
+            params: { symbol: data.symbol, portfolio, editId: "", createKey: String(Date.now()) },
           } as Href);
         } else {
           router.back();
@@ -172,7 +172,7 @@ export default function AddStockScreen() {
             onPress: () =>
               router.replace({
                 pathname: "/(tabs)/add-transaction",
-                params: { symbol: data.symbol, portfolio },
+                params: { symbol: data.symbol, portfolio, editId: "", createKey: String(Date.now()) },
               } as Href),
           },
         ]);

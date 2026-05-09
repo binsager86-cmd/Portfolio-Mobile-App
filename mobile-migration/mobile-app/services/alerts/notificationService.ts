@@ -15,16 +15,8 @@ import {
 } from "./alertRules";
 
 // ── Configure notification behavior ─────────────────────────────────
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// NOTE: setNotificationHandler is set at module level in app/_layout.tsx.
+// This file handles local (scheduled) notifications only.
 
 // ── Permission ───────────────────────────────────────────────────────
 

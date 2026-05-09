@@ -9,7 +9,7 @@ import * as Application from 'expo-application';
 import * as Linking from 'expo-linking';
 import { Alert, Platform } from 'react-native';
 
-import { api } from '@/services/api/client';
+import api from '@/services/api/client';
 
 interface VersionCheck {
   min_version: string;

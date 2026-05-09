@@ -6,11 +6,12 @@ import {
 } from "@react-navigation/native";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { I18nManager, Platform, View } from "react-native";
+import { AppState, I18nManager, Platform, View } from "react-native";
 import { PaperProvider } from "react-native-paper";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -37,6 +38,21 @@ import { registerForPushNotificationsAsync } from "@/services/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { useAppTheme } from "@/theme";
+
+// ── Critical: set notification handler at module load time ───────────
+// Must be called synchronously before any component renders so notifications
+// delivered when the app is backgrounded / cold-started are handled correctly.
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export {
     ErrorBoundary
@@ -116,6 +132,18 @@ function RootLayoutNav() {
   useSessionGuard();
   usePushNotifications();
 
+  // Clear badge count when the user opens the app (foreground)
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    Notifications.setBadgeCountAsync(0).catch(() => {});
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        Notifications.setBadgeCountAsync(0).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // ── Google Analytics: track page views on route changes (web) ──
   usePageViewTracking();
 
@@ -161,13 +189,28 @@ function RootLayoutNav() {
             returnedState &&
             expectedState === returnedState
           ) {
-            // Await the full sign-in flow — this sets token + loading:false
-            const ok = await googleSignIn(accessToken);
+            // Retry the backend exchange up to 3 attempts total.
+            // The server may be cold-starting on DigitalOcean (spin-up adds
+            // 15-25s), causing the first attempt to hit the backend's internal
+            // Google-verification timeout and return a 401. A warm retry
+            // almost always succeeds, avoiding a needless round-trip back
+            // through the Google consent screen.
+            let ok = false;
+            for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+              if (attempt > 0) {
+                // Wait before retry: 2 s after 1st failure, 4 s after 2nd.
+                await new Promise<void>((resolve) => {
+                  setTimeout(resolve, attempt * 2000);
+                });
+              }
+              ok = await googleSignIn(accessToken);
+            }
             if (ok) {
               return; // skip hydration — googleSignIn already set session
             }
-            // If OAuth exchange fails, continue with normal hydration so
-            // the app never stays on a blank waiting state.
+            // All retries exhausted — fall through to normal hydration.
+            // The error is already stored in authStore; the login screen
+            // will surface it so the user understands what happened.
           }
           if (__DEV__ && accessToken) {
             console.warn("[OAuth] Discarded callback: state mismatch or no pending request.");

@@ -57,7 +57,7 @@ export function NativeFlashList<T>({
   data,
   renderItem,
   keyExtractor,
-  estimatedItemSize,
+  estimatedItemSize = 80,
   isLoading = false,
   isEmpty = false,
   onRefresh,
@@ -72,6 +72,7 @@ export function NativeFlashList<T>({
 }: NativeFlashListProps<T>) {
   const { colors } = useThemeStore();
   const haptics = useHaptics();
+  const FlashListAny = FlashList as unknown as React.ComponentType<Record<string, unknown>>;
 
   const handleRefresh = useCallback(async () => {
     if (!onRefresh) return;
@@ -83,11 +84,10 @@ export function NativeFlashList<T>({
   if (isLoading || isEmpty) return null;
 
   return (
-    <FlashList<T>
+    <FlashListAny
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      estimatedItemSize={estimatedItemSize}
       getItemType={getItemType}
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
@@ -111,6 +111,7 @@ export function NativeFlashList<T>({
         ) : undefined
       }
       // Scroll behaviour
+      estimatedItemSize={estimatedItemSize}
       showsVerticalScrollIndicator={false}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.15}

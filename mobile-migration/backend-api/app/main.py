@@ -103,6 +103,25 @@ async def lifespan(app: FastAPI):
         except Exception as alembic_err:
             logger.warning("⚠️  Alembic upgrade failed (DB may be pre-stamped): %s", alembic_err)
 
+        # ── Ensure core tables exist for legacy/stamped databases ──
+        # Some local DBs can be stamped to head without all table DDL actually
+        # present (for example after manual DB swaps). This idempotent schema
+        # initializer backfills missing tables like user_settings so runtime
+        # endpoints do not fail with OperationalError.
+        try:
+            from app.core.schema import ensure_all_tables
+            ensure_all_tables()
+            logger.info("✅  Core schema ensured (idempotent)")
+        except Exception as schema_err:
+            logger.warning("⚠️  Core schema ensure failed: %s", schema_err)
+
+        # ── Additive migration: portfolios.currency (missing in early prod DBs) ──
+        try:
+            from app.core.database import add_column_if_missing
+            add_column_if_missing("portfolios", "currency", "VARCHAR(10) NOT NULL DEFAULT 'KWD'")
+        except Exception as e:
+            logger.warning("portfolios.currency migration skipped: %s", e)
+
         # ── Additive migration: news_articles.content_hash for dedupe fallback ──
         try:
             from app.core.database import add_column_if_missing, exec_sql
@@ -215,7 +234,9 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 # ── Security Middleware ──────────────────────────────────────────────
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
-
+# ── Compression Middleware ────────────────────────────────────────────
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=512)
 # ── Observability Middleware ─────────────────────────────────────────
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(RequestTimingMiddleware)

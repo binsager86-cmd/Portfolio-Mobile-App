@@ -43,6 +43,7 @@ export function ResponsiveDataTable<T>({
   }
 
   const visibleCols = columns;
+  const FlashListAny = FlashList as unknown as React.ComponentType<Record<string, unknown>>;
 
   // Memoised to avoid creating a new function reference on every parent render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,11 +77,11 @@ export function ResponsiveDataTable<T>({
   );
 
   return (
-    <FlashList
+    <FlashListAny
       data={data}
-      keyExtractor={keyExtractor ?? ((item, i) => String((item as { id?: string | number }).id ?? i))}
-      estimatedItemSize={84}
+      keyExtractor={keyExtractor ?? ((item: T, i: number) => String((item as { id?: string | number }).id ?? i))}
       renderItem={renderCardItem}
+      estimatedItemSize={80}
     />
   );
 }

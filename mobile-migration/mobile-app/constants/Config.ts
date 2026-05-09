@@ -35,6 +35,17 @@ const ENV_API_URL_IOS =
 const LOCAL_WEB_API = "http://127.0.0.1:8004";
 const LOCAL_ANDROID_EMULATOR_API = "http://10.0.2.2:8004";
 
+function isAndroidPhysicalDevice(): boolean {
+  if (Platform.OS !== "android") return false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Device = require("expo-device");
+    return Boolean(Device?.isDevice);
+  } catch {
+    return false;
+  }
+}
+
 function inferNativeDevApiUrl(): string | null {
   // Expo Go / dev client usually exposes hostUri like "192.168.1.5:8081".
   try {
@@ -58,6 +69,27 @@ function inferNativeDevApiUrl(): string | null {
   } catch {
     return null;
   }
+}
+
+function resolveAndroidApiUrl(): string {
+  const inferred = inferNativeDevApiUrl();
+
+  if (ENV_API_URL_ANDROID && ENV_API_URL_ANDROID !== "") {
+    const configured = ENV_API_URL_ANDROID.trim();
+    const looksLikeEmulatorLoopback =
+      configured.includes("10.0.2.2") ||
+      configured.includes("localhost:") ||
+      configured.includes("127.0.0.1:");
+
+    // Expo Go on a real phone cannot reach emulator loopback addresses.
+    if (isAndroidPhysicalDevice() && looksLikeEmulatorLoopback && inferred) {
+      return inferred;
+    }
+
+    return configured;
+  }
+
+  return inferred ?? LOCAL_ANDROID_EMULATOR_API;
 }
 
 /**
@@ -85,9 +117,7 @@ export const API_BASE_URL: string =
           ? LOCAL_WEB_API      // Dev web: localhost backend
           : ""                 // Production web: relative paths (same domain)
       : Platform.OS === "android"
-        ? (ENV_API_URL_ANDROID && ENV_API_URL_ANDROID !== "")
-          ? ENV_API_URL_ANDROID
-          : inferNativeDevApiUrl() ?? LOCAL_ANDROID_EMULATOR_API
+        ? resolveAndroidApiUrl()
         : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
           ? ENV_API_URL_IOS
           : inferNativeDevApiUrl() ?? LOCAL_WEB_API;

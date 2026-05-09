@@ -9,7 +9,7 @@ import React from "react";
 import { Image } from "react-native";
 
 // Same asset that powers the iOS/Android app icon and the splash screen.
-import logoSource from "@/assets/images/icon.png";
+const logoSource = require("../assets/images/icon.png");
 
 export interface LogoProps {
   /** Width/height in points. Defaults to 96. */

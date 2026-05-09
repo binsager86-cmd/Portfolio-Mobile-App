@@ -6,6 +6,22 @@ type SentryModule = {
   replayIntegration: () => unknown;
 };
 
+type SentryFrame = {
+  filename?: string;
+  [key: string]: unknown;
+};
+
+type SentryEvent = {
+  exception?: {
+    values?: Array<{
+      stacktrace?: {
+        frames?: SentryFrame[];
+      };
+    }>;
+  };
+  [key: string]: unknown;
+};
+
 let sentryModule: SentryModule | null = null;
 
 function loadSentryModule(): SentryModule | null {
@@ -50,9 +66,9 @@ export const initSentry = () => {
       Sentry.reactNavigationIntegration(),
       Sentry.replayIntegration(),
     ],
-    beforeSend(event) {
+    beforeSend(event: SentryEvent) {
       if (event.exception?.values?.[0]?.stacktrace?.frames) {
-        event.exception.values[0].stacktrace.frames = event.exception.values[0].stacktrace.frames.map((f) => ({
+        event.exception.values[0].stacktrace.frames = event.exception.values[0].stacktrace.frames.map((f: SentryFrame) => ({
           ...f,
           filename: f.filename?.replace(/\/var\/folders\/.+\//, ""),
         }));

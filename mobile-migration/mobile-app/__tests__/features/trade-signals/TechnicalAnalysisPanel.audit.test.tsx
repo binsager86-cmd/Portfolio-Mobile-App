@@ -10,7 +10,7 @@
  *  6. BUY signal — full UI sections rendered
  *  7. SELL signal — TP card uses orange colour (not green)
  *  8. Alert humanisation — every known alert key maps to plain English
- *  9. Quick-pick tickers — all 7 chips rendered
+ *  9. Recent searches — appears after search submit
  * 10. "Five factors" subtitle (regression — was "Six")
  * 11. Loading / error states
  * 12. Distance summary bar values
@@ -38,7 +38,7 @@ jest.mock("@tanstack/react-query", () => {
 });
 
 import { useQuery } from "@tanstack/react-query";
-import { getKuwaitSignal } from "@/services/api/analytics/tradeSignals";
+import { getKuwaitSignal as _getKuwaitSignal } from "@/services/api/analytics/tradeSignals";
 import { TechnicalAnalysisPanel } from "@/src/features/trade-signals/components/TechnicalAnalysisPanel";
 
 const mockUseQuery = useQuery as jest.Mock;
@@ -49,7 +49,7 @@ const colors = DarkTheme;
 // ── Signal factories ──────────────────────────────────────────────────
 
 function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
-  return {
+  return ({
     timestamp: "2026-05-03T12:00:00Z",
     stock_code: "NBK",
     segment: "PREMIER",
@@ -60,6 +60,8 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       stop_loss_fils: 450,
       tp1_fils: 475,
       tp2_fils: 495,
+      tp3_fils: 510,
+      tp_methods: null,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
     },
@@ -73,6 +75,7 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: 0.72,
       p_tp2_before_sl: 0.48,
+      p_tp3_before_sl: 0.31,
       confidence_interval_95: [0.58, 0.84],
       expected_return_r_multiple: 0.44,
       calibration_method: "bootstrap",
@@ -113,7 +116,7 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       statistical_confidence: 0.91,
     },
     ...overrides,
-  };
+  } as unknown) as KuwaitSignal;
 }
 
 function makeNeutralSignal(): KuwaitSignal {
@@ -124,6 +127,8 @@ function makeNeutralSignal(): KuwaitSignal {
       stop_loss_fils: null,
       tp1_fils: null,
       tp2_fils: null,
+      tp3_fils: null,
+      tp_methods: null,
       tick_alignment: "N/A",
       preferred_order_type: "NONE",
     },
@@ -137,6 +142,7 @@ function makeNeutralSignal(): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: null,
       p_tp2_before_sl: null,
+      p_tp3_before_sl: null,
       confidence_interval_95: null,
       expected_return_r_multiple: null,
       calibration_method: "N/A",
@@ -152,6 +158,8 @@ function makeSellSignal(): KuwaitSignal {
       stop_loss_fils: 470,        // SL is ABOVE entry for SELL
       tp1_fils: 445,              // TP is BELOW entry for SELL
       tp2_fils: 430,
+      tp3_fils: 420,
+      tp_methods: null,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
     },
@@ -160,7 +168,7 @@ function makeSellSignal(): KuwaitSignal {
 
 // ── Render helper ─────────────────────────────────────────────────────
 
-function renderPanel(signalOverride?: Partial<KuwaitSignal> | null) {
+function _renderPanel(signalOverride?: Partial<KuwaitSignal> | null) {
   if (signalOverride === null) {
     // null = simulate loading state
     mockUseQuery.mockReturnValue({ data: undefined, isLoading: true, isError: false });
@@ -510,24 +518,35 @@ describe("Alert humanisation", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 9. QUICK-PICK TICKERS
+// 9. RECENT SEARCHES
 // ─────────────────────────────────────────────────────────────────────
 
-describe("Quick-pick tickers", () => {
+describe("Recent searches", () => {
   beforeEach(() => {
     mockUseQuery.mockReturnValue({ data: undefined, isLoading: false, isError: false });
   });
 
-  const expectedTickers = ["NBK", "KFH", "ZAIN", "MABANEE", "BURG", "CBK", "AGILITY"];
-
-  it.each(expectedTickers)("renders %s chip", (ticker) => {
+  it("shows empty recent-search hint initially", () => {
     render(<TechnicalAnalysisPanel colors={colors} />);
-    expect(screen.getByText(ticker)).toBeTruthy();
+    expect(screen.getByText(/Recent searches will appear here/i)).toBeTruthy();
   });
 
-  it("renders exactly 7 quick-pick chips", () => {
+  it("adds searched symbol to recent chips", () => {
     render(<TechnicalAnalysisPanel colors={colors} />);
-    expectedTickers.forEach((t) => expect(screen.getByText(t)).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Enter ticker/i);
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    expect(screen.getByText("NBK")).toBeTruthy();
+  });
+
+  it("keeps recent searches unique", () => {
+    render(<TechnicalAnalysisPanel colors={colors} />);
+    const input = screen.getByPlaceholderText(/Enter ticker/i);
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    fireEvent.changeText(input, "NBK");
+    fireEvent(input, "submitEditing");
+    expect(screen.getAllByText("NBK")).toHaveLength(1);
   });
 });
 
