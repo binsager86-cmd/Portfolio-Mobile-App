@@ -31,6 +31,9 @@ from app.services.signal_engine.config.model_params import (
     MIN_BARS_FOR_SIGNAL,
     REGIME_BULL,
     SIGNAL_MAX_TOTAL_SELL,
+    SIGNAL_MIN_P_TP1_BUY,
+    SIGNAL_MIN_P_TP1_SELL,
+    SIGNAL_MIN_P_TP1_STRONG_BUY,
     SIGNAL_MIN_RR,
     SIGNAL_MIN_TOTAL_SCORE,
     SIGNAL_MIN_TREND_RAW_PCT,
@@ -47,6 +50,7 @@ from app.services.signal_engine.models.regime.transition_monitor import (
 from app.services.signal_engine.models.risk.confluence_decay import adjust_confidence_for_delay
 from app.services.signal_engine.models.risk.cvar_calculator import calculate_cvar
 from app.services.signal_engine.models.risk.position_sizer import calculate_position_size
+from app.services.signal_engine.models.technical.entry_trigger import evaluate_entry_trigger
 from app.services.signal_engine.models.technical.momentum_score import compute_momentum_score
 from app.services.signal_engine.models.technical.support_resistance import (
     compute_entry_stop_tp,
@@ -225,10 +229,12 @@ def generate_kuwait_signal(
         logger.exception("compute_tp_methods failed")
         tp_methods = {}
 
-    # Merge multi-method TPs into levels (tp3 + override tp1/tp2 if available)
+    # Merge multi-method TPs into levels and recompute RR using the actual served TP1.
+    # Without this recompute, the gate below would test the original simple-RR TP1 while
+    # the user is shown the (possibly tighter) multi-method TP1 — letting through "BUY"
+    # signals whose effective RR has dropped under SIGNAL_MIN_RR.
     if tp_methods:
         levels["tp3"] = tp_methods.get("tp3")
-        # Prefer multi-method TPs over simple RR targets when available
         if tp_methods.get("tp1"):
             levels["tp1"] = tp_methods["tp1"]
         if tp_methods.get("tp2"):
@@ -241,6 +247,17 @@ def generate_kuwait_signal(
             "tp2_confluence": tp_methods.get("tp2_confluence"),
             "tp3_confluence": tp_methods.get("tp3_confluence"),
         }
+        new_entry = levels.get("entry_mid")
+        new_stop = levels.get("stop_loss")
+        new_tp1 = levels.get("tp1")
+        if new_entry and new_stop and new_tp1:
+            new_risk = abs(new_entry - new_stop)
+            new_reward = abs(new_tp1 - new_entry)
+            if new_risk > 0:
+                levels["risk_per_share"] = round(new_risk, 1)
+                levels["risk_reward_ratio"] = round(new_reward / new_risk, 2)
+
+    rr = levels.get("risk_reward_ratio") or 0.0  # post-override RR feeds the gate
 
     # ── 7. Risk/Reward score (0-100 raw → 0-15 weighted) ─────────────────────
     rr_raw = max(0, min(100, int(((rr - 1.0) / 3.0) * 100)))
@@ -264,9 +281,61 @@ def generate_kuwait_signal(
     }
     total_score = sum(sub_weighted.values())
 
-    # ── 10. Final signal determination with hard gates ────────────────────────
+    # ── 10. Circuit-breaker score haircut (BEFORE classification) ────────────
+    # Applied here so the displayed score equals the score the gate evaluates.
+    if len(rows) >= 2:
+        prev_close = float(rows[-2].get("close") or 0.0)
+        alerts.extend(_circuit_breaker_alerts(rows, prev_close))
+        close_now = float(rows[-1].get("close") or 0.0)
+        if close_now > 0 and prev_close > 0:
+            upper = prev_close * (1.0 + CIRCUIT_UPPER_PCT)
+            lower = prev_close * (1.0 + CIRCUIT_LOWER_PCT)
+            near_upper = (upper - close_now) / close_now <= CIRCUIT_BUFFER_PCT
+            near_lower = (close_now - lower) / close_now <= CIRCUIT_BUFFER_PCT
+            if near_upper or near_lower:
+                total_score = int(total_score * 0.70)
+
+    # ── 11. CVaR ──────────────────────────────────────────────────────────────
+    cvar_result = calculate_cvar(rows, adtv_kd=adtv_kd)
+
+    # ── 12. Probability calibration ───────────────────────────────────────────
+    # The calibrator's score→win-rate table is in BUY-polarity (high score → high p).
+    # For a SELL setup, low total_score is the *good* signal, so we look up the
+    # mirrored quality score so p_tp1 is meaningful for shorts too.
+    calib_score = total_score if direction != "SELL" else max(0, 100 - total_score)
+    prob_result = calibrate_probabilities(
+        total_score=calib_score,
+        regime=regime,
+        recent_performance=recent_performance or {},
+    )
+
+    # ── 13. Auction confidence adjustment to probabilities ───────────────────
+    raw_p_tp1 = prob_result.get("p_tp1_before_sl") or 0.0
+    raw_p_tp2 = prob_result.get("p_tp2_before_sl") or 0.0
+    prob_result["p_tp1_before_sl"] = round(min(0.95, raw_p_tp1 * auction_adj), 3)
+    prob_result["p_tp2_before_sl"] = round(min(0.90, raw_p_tp2 * auction_adj), 3)
+
+    # ── 14. Confidence decay ──────────────────────────────────────────────────
+    prob_result = adjust_confidence_for_delay(prob_result, delay_hours)
+    if prob_result.get("decay_factor") == 0.0:
+        alerts.append(
+            "Signal invalidated: ≥ 72 hours since generation — require new confirmation candle"
+        )
+
+    # ── 15. Position sizing (single call with post-decay win_prob) ────────────
+    position_result = calculate_position_size(
+        account_equity=account_equity,
+        entry_price=levels.get("entry_mid") or 0.0,
+        stop_loss=levels.get("stop_loss") or 0.0,
+        adtv_kd=adtv_kd,
+        win_probability=prob_result.get("p_tp1_before_sl"),
+        cvar_reduction=cvar_result.get("position_size_reduction") or 1.0,
+    )
+
+    # ── 16. Final signal determination — score AND probability gates ──────────
     trend_pct = trend_raw
     vol_pct = volume_raw
+    post_decay_p_tp1 = prob_result.get("p_tp1_before_sl") or 0.0
 
     resistance_within_1_5r = False
     if nearest_resistance and levels.get("entry_mid") and levels.get("risk_per_share"):
@@ -281,16 +350,23 @@ def generate_kuwait_signal(
         and rr >= SIGNAL_MIN_RR
         and liquidity_passed
         and not resistance_within_1_5r
+        and post_decay_p_tp1 >= SIGNAL_MIN_P_TP1_BUY
     )
     sell_gates = (
         total_score <= SIGNAL_MAX_TOTAL_SELL
         and trend_pct <= (100.0 - SIGNAL_MIN_TREND_RAW_PCT)
         and vol_pct <= (100.0 - SIGNAL_MIN_VOLFLOW_RAW_PCT)
         and liquidity_passed
+        and post_decay_p_tp1 >= SIGNAL_MIN_P_TP1_SELL
     )
 
     if direction == "BUY" and buy_gates:
-        final_signal = "STRONG_BUY" if total_score >= SIGNAL_STRONG_BUY_SCORE else "BUY"
+        final_signal = (
+            "STRONG_BUY"
+            if total_score >= SIGNAL_STRONG_BUY_SCORE
+               and post_decay_p_tp1 >= SIGNAL_MIN_P_TP1_STRONG_BUY
+            else "BUY"
+        )
     elif direction == "SELL" and sell_gates:
         final_signal = "SELL"
     else:
@@ -299,73 +375,26 @@ def generate_kuwait_signal(
     if resistance_within_1_5r and direction == "BUY":
         alerts.append("Major resistance detected within 1.5R — BUY signal blocked")
 
-    # ── 11. Circuit-breaker check ─────────────────────────────────────────────
-    if len(rows) >= 2:
-        prev_close = float(rows[-2].get("close") or 0.0)
-        alerts.extend(_circuit_breaker_alerts(rows, prev_close))
-        # Reduce confidence if near circuit limit
-        close = float(rows[-1].get("close") or 0.0)
-        upper = prev_close * (1.0 + CIRCUIT_UPPER_PCT)
-        lower = prev_close * (1.0 + CIRCUIT_LOWER_PCT)
-        if close > 0:
-            if (upper - close) / close <= CIRCUIT_BUFFER_PCT:
-                total_score = int(total_score * 0.70)
-            if (close - lower) / close <= CIRCUIT_BUFFER_PCT:
-                total_score = int(total_score * 0.70)
+    # ── 16b. Entry trigger evaluation ─────────────────────────────────────
+    if final_signal in ("BUY", "STRONG_BUY"):
+        score_tier = "Strong Buy" if final_signal == "STRONG_BUY" else "Buy"
+        entry_trigger = evaluate_entry_trigger(rows, score_tier)
+    else:
+        entry_trigger = {"action": "HOLD", "trigger": "none",
+                         "pullback": {"triggered": False, "reason": "signal_not_buy"},
+                         "breakout": {"triggered": False, "reason": "signal_not_buy"},
+                         "accumulation": {"state": "absent", "obv_slope_pct": None, "cmf": None}}
 
-    # ── 12. CVaR and position sizing ─────────────────────────────────────────
-    cvar_result = calculate_cvar(rows, adtv_kd=adtv_kd)
-    position_result = calculate_position_size(
-        account_equity=account_equity,
-        entry_price=levels.get("entry_mid") or 0.0,
-        stop_loss=levels.get("stop_loss") or 0.0,
-        adtv_kd=adtv_kd,
-        win_probability=None,      # populated after calibration below
-        cvar_reduction=cvar_result.get("position_size_reduction") or 1.0,
-    )
-
-    # ── 13. Probability calibration ───────────────────────────────────────────
-    prob_result = calibrate_probabilities(
-        total_score=total_score,
-        regime=regime,
-        recent_performance=recent_performance or {},
-    )
-
-    # Re-run position sizing now that we have win_probability
-    position_result = calculate_position_size(
-        account_equity=account_equity,
-        entry_price=levels.get("entry_mid") or 0.0,
-        stop_loss=levels.get("stop_loss") or 0.0,
-        adtv_kd=adtv_kd,
-        win_probability=prob_result.get("p_tp1_before_sl"),
-        cvar_reduction=cvar_result.get("position_size_reduction") or 1.0,
-    )
-
-    # ── 14. Apply auction confidence adjustment to probabilities ─────────────
-    p_tp1 = prob_result.get("p_tp1_before_sl") or 0.0
-    p_tp2 = prob_result.get("p_tp2_before_sl") or 0.0
-    adj_p_tp1 = round(min(0.95, p_tp1 * auction_adj), 3)
-    adj_p_tp2 = round(min(0.90, p_tp2 * auction_adj), 3)
-    prob_result["p_tp1_before_sl"] = adj_p_tp1
-    prob_result["p_tp2_before_sl"] = adj_p_tp2
-
-    # ── 15. Confidence decay ──────────────────────────────────────────────────
-    prob_result = adjust_confidence_for_delay(prob_result, delay_hours)
-
-    if prob_result.get("decay_factor") == 0.0:
-        final_signal = "NEUTRAL"
-        alerts.append("Signal invalidated: ≥ 72 hours since generation — require new confirmation candle")
-
-    # ── 16. Setup type classification ─────────────────────────────────────────
+    # ── 17. Setup type classification ─────────────────────────────────────────
     setup_type = classify_setup_type(rows, final_signal, trend_raw, momentum_raw, sr_details)
 
-    # ── 17. Resistance / psychological level alerts ───────────────────────────
+    # ── 18. Resistance / psychological level alerts ───────────────────────────
     if nearest_resistance and levels.get("tp2") and nearest_resistance <= (levels["tp2"] * 1.02):
         alerts.append(f"Psychological resistance near TP2 ({nearest_resistance:.1f} fils) — monitor TP2 execution")
     if nearest_support and direction == "BUY":
         alerts.append(f"Key support at {nearest_support:.1f} fils confirms entry zone")
 
-    # ── 18. Assemble final output ─────────────────────────────────────────────
+    # ── 19. Assemble final output ─────────────────────────────────────────────
     risk_merged = {**position_result, **cvar_result}
     confluence = {
         "total_score": total_score,
@@ -429,6 +458,7 @@ def generate_kuwait_signal(
         confluence=confluence,
         alerts=alerts,
         data_as_of=data_as_of,
+        entry_trigger=entry_trigger,
     )
 
 
@@ -463,4 +493,8 @@ def _neutral_signal(
         },
         alerts=[f"No signal: {reason}"],
         data_as_of=data_as_of,
+        entry_trigger={"action": "HOLD", "trigger": "none",
+                       "pullback": {"triggered": False, "reason": reason},
+                       "breakout": {"triggered": False, "reason": reason},
+                       "accumulation": {"state": "absent", "obv_slope_pct": None, "cmf": None}},
     )

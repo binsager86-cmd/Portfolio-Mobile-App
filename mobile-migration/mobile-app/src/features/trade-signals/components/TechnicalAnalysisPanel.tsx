@@ -21,6 +21,7 @@ import {
 import type { ThemePalette } from "@/constants/theme";
 import {
   getKuwaitSignal,
+  type KuwaitEntryTrigger,
   type KuwaitSignal,
   type KuwaitSignalSubScores,
 } from "@/services/api/analytics/tradeSignals";
@@ -164,6 +165,82 @@ function RegimeBadge({ regime }: { regime: string }) {
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       <Text style={[styles.badgeText, { color }]}>{humanRegime(regime)}</Text>
+    </View>
+  );
+}
+
+// ── Entry Trigger Card ───────────────────────────────────────────────
+const TRIGGER_CONFIG: Record<string, { bg: string; border: string; color: string; icon: string; label: string; hint: string }> = {
+  ENTER: {
+    bg: "#16a34a18", border: "#16a34a", color: "#16a34a",
+    icon: "check-circle", label: "ENTER NOW",
+    hint: "Entry timing confirmed — place your order.",
+  },
+  WATCH: {
+    bg: "#f59e0b18", border: "#f59e0b", color: "#f59e0b",
+    icon: "eye", label: "WATCH",
+    hint: "Accumulation building — wait for a pullback or breakout candle before entering.",
+  },
+  HOLD: {
+    bg: "#94a3b818", border: "#94a3b8", color: "#94a3b8",
+    icon: "clock-o", label: "HOLD — NOT YET",
+    hint: "No entry trigger detected. Wait for price action confirmation before buying.",
+  },
+};
+
+function EntryTriggerCard({
+  trigger,
+  colors,
+}: {
+  trigger: KuwaitEntryTrigger;
+  colors: ThemePalette;
+}) {
+  const cfg = TRIGGER_CONFIG[trigger.action] ?? TRIGGER_CONFIG.HOLD;
+
+  const triggerDetail =
+    trigger.trigger === "pullback"
+      ? "Pullback to EMA-20 with bullish confirmation candle"
+      : trigger.trigger === "breakout"
+        ? "Breakout from tight range on strong volume"
+        : trigger.trigger === "accumulation_only"
+          ? "Institutional accumulation detected (OBV + CMF)"
+          : "No micro-structure trigger";
+
+  const accumState = trigger.accumulation?.state;
+  const accumLabel =
+    accumState === "active" ? "Active" : accumState === "building" ? "Building" : "None";
+  const accumColor =
+    accumState === "active" ? "#22c55e" : accumState === "building" ? "#f59e0b" : "#94a3b8";
+
+  return (
+    <View style={[styles.card, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <FontAwesome name={cfg.icon as any} size={18} color={cfg.color} />
+        <Text style={{ fontSize: 15, fontWeight: "800", color: cfg.color, letterSpacing: 0.5 }}>
+          {cfg.label}
+        </Text>
+      </View>
+      <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8, lineHeight: 15 }}>
+        {cfg.hint}
+      </Text>
+      <View style={[styles.divider, { borderTopColor: cfg.border + "30" }]} />
+      <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: "600", marginBottom: 4 }}>
+        Trigger: {triggerDetail}
+      </Text>
+      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: trigger.pullback?.triggered ? "#22c55e" : "#94a3b840" }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Pullback</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: trigger.breakout?.triggered ? "#22c55e" : "#94a3b840" }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Breakout</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accumColor }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Accumulation: {accumLabel}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -556,7 +633,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           <View style={{ alignItems: "flex-end", marginTop: 6 }}>
             <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Overall Score</Text>
             <Text style={[styles.scoreCircleText, {
-              color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
+              color: c.total_score >= 70 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
             }]}>
               {c.total_score}
               <Text style={{ fontSize: 12, color: colors.textMuted }}>/100</Text>
@@ -564,6 +641,11 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           </View>
         </View>
       </View>
+
+      {/* ── Entry Trigger ──────────────────────────────────────── */}
+      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY") && signal.entry_trigger && (
+        <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
+      )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && <PriceLadder signal={signal} colors={colors} />}
@@ -667,7 +749,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
         <SectionCard
           title="🎲 Probability — What Are the Chances?"
-          subtitle="How likely is this trade to work? Estimated from thousands of simulated outcomes."
+          subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
           colors={colors}
         >
           <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
@@ -779,10 +861,10 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
         <View style={[styles.totalRow, { borderTopColor: colors.borderColor }]}>
           <View>
             <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Combined Score</Text>
-            <Text style={[styles.totalHint, { color: colors.textMuted }]}>Need ≥ 75 for a BUY signal</Text>
+            <Text style={[styles.totalHint, { color: colors.textMuted }]}>Need ≥ 70 for BUY · ≥ 85 for STRONG BUY</Text>
           </View>
           <Text style={[styles.totalValue, {
-            color: c.total_score >= 75 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
+            color: c.total_score >= 70 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
           }]}>
             {c.total_score} / 100
           </Text>
@@ -1072,7 +1154,7 @@ function WinChancesBlock({
           Likely Win Rate Range
         </Text>
         <Text style={[styles.winChancesHint, { color: colors.textMuted }]}>
-          The engine ran 10,000 simulations. In most cases, the actual chance of hitting Target 1 falls somewhere in this range.
+          95% confidence interval around the calibrated win rate (Wilson approximation). Tightens as more live trades accumulate.
         </Text>
       </View>
       <View style={[styles.tpDividerV, { backgroundColor: colors.borderColor, height: 60 }]} />
@@ -1093,7 +1175,7 @@ function WinChancesBlock({
           Avg Expected Gain per Share
         </Text>
         <Text style={[styles.winChancesHint, { color: colors.textMuted }]}>
-          On average, across all simulated outcomes, this is how much you gain or lose per share you buy.
+          Expected value per share given the calibrated win rate, TP1 reward, and stop-loss risk.
         </Text>
       </View>
     </View>

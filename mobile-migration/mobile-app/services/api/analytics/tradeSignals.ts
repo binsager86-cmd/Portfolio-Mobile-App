@@ -169,6 +169,25 @@ export interface KuwaitVolumeProfile {
   lvn_levels: number[];
 }
 
+export interface KuwaitEntryTriggerDetector {
+  triggered: boolean;
+  reason: string;
+}
+
+export interface KuwaitAccumulationState {
+  state: "active" | "building" | "absent";
+  obv_slope_pct: number | null;
+  cmf: number | null;
+}
+
+export interface KuwaitEntryTrigger {
+  action: "ENTER" | "WATCH" | "HOLD";
+  trigger: "pullback" | "breakout" | "accumulation_only" | "none";
+  pullback: KuwaitEntryTriggerDetector;
+  breakout: KuwaitEntryTriggerDetector;
+  accumulation: KuwaitAccumulationState;
+}
+
 export interface KuwaitSignal {
   timestamp: string;
   stock_code: string;
@@ -179,6 +198,7 @@ export interface KuwaitSignal {
   risk_metrics: KuwaitSignalRisk;
   probabilities: KuwaitSignalProbabilities;
   confluence_details: KuwaitSignalConfluence;
+  entry_trigger: KuwaitEntryTrigger;
   alerts: string[];
   metadata: {
     model_version: string;

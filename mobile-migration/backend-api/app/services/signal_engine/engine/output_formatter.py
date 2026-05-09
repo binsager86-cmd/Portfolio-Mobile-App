@@ -24,6 +24,7 @@ def format_signal(
     alerts: list[str],
     data_as_of: str,
     walk_forward_window: str = "N/A — live mode",
+    entry_trigger: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the canonical signal output dict.
 
@@ -82,6 +83,12 @@ def format_signal(
             "vwap": confluence.get("vwap"),
             "rich_sr": confluence.get("rich_sr"),
             "volume_profile": confluence.get("volume_profile"),
+        },
+        "entry_trigger": entry_trigger or {
+            "action": "HOLD", "trigger": "none",
+            "pullback": {"triggered": False, "reason": "not_evaluated"},
+            "breakout": {"triggered": False, "reason": "not_evaluated"},
+            "accumulation": {"state": "absent", "obv_slope_pct": None, "cmf": None},
         },
         "alerts": alerts,
         "metadata": {
