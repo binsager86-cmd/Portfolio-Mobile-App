@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "react-native-paper";
 
-import { legacyColorAliases, tokens } from "@/theme/tokens";
+import { tokens } from "@/theme/tokens";
 
 interface EmptyStateProps {
   title: string;
@@ -23,7 +23,7 @@ export function EmptyState({
       <MaterialCommunityIcons
         name={icon}
         size={48}
-        color={legacyColorAliases.textSecondary}
+        color={tokens.colors.onSurfaceVariant}
       />
       <Text variant="titleMedium" style={styles.title}>{title}</Text>
       {description ? (
@@ -43,12 +43,12 @@ const styles = StyleSheet.create({
   },
   title: {
     marginTop: tokens.spacing.sm,
-    color: legacyColorAliases.text,
+    color: tokens.colors.onSurface,
     textAlign: "center",
   },
   desc: {
     marginTop: tokens.spacing.xs,
-    color: legacyColorAliases.textSecondary,
+    color: tokens.colors.onSurfaceVariant,
     textAlign: "center",
   },
 });

@@ -7,19 +7,19 @@ export function useAppTheme() {
   const scheme = useColorScheme();
   const isDark = scheme === "dark";
   const base = isDark ? MD3DarkTheme : MD3LightTheme;
-  const c = isDark ? tokens.dark : undefined;
+  const c: Partial<typeof tokens.dark> = isDark ? tokens.dark : {};
 
   const colors = {
     ...base.colors,
     primary: tokens.colors.primary,
-    primaryContainer: c?.primaryContainer ?? tokens.colors.primaryContainer,
-    background: c?.background ?? tokens.colors.background,
-    surface: c?.surface ?? tokens.colors.surface,
-    surfaceVariant: c?.surfaceVariant ?? tokens.colors.surfaceVariant,
-    onSurface: c?.onSurface ?? tokens.colors.onSurface,
-    onSurfaceVariant: c?.onSurfaceVariant ?? tokens.colors.onSurfaceVariant,
+    primaryContainer: c.primaryContainer || tokens.colors.primaryContainer,
+    background: c.background || tokens.colors.background,
+    surface: c.surface || tokens.colors.surface,
+    surfaceVariant: c.surfaceVariant || tokens.colors.surfaceVariant,
+    onSurface: c.onSurface || tokens.colors.onSurface,
+    onSurfaceVariant: c.onSurfaceVariant || tokens.colors.onSurfaceVariant,
     error: tokens.colors.error,
-    outline: c?.border ?? tokens.colors.border,
+    outline: c.border || tokens.colors.border,
   };
 
   return {

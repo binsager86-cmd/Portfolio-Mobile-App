@@ -139,6 +139,52 @@ async function fetchWithTimeout(
   }
 }
 
+async function refreshAndValidate(
+  storedRefresh: string,
+  set: (partial: Partial<AuthState>) => void,
+  logTag: string,
+): Promise<void> {
+  const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: storedRefresh }),
+  });
+  if (!refreshResp.ok) throw new Error(`Refresh failed (${refreshResp.status})`);
+  const refreshJson = await refreshResp.json();
+  const newAccess: string = refreshJson.access_token;
+  const newRefresh: string | undefined = refreshJson.refresh_token;
+  await setToken(newAccess);
+  if (newRefresh) await setRefreshToken(newRefresh);
+  const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${newAccess}` },
+  });
+  if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`);
+  const meJson = await meResp.json();
+  const me = meJson.data ?? meJson;
+  if (__DEV__) console.info(`[hydrate] Refresh succeeded${logTag}, user:`, me.username);
+  set({
+    token: newAccess,
+    refreshToken: newRefresh ?? storedRefresh,
+    userId: me.user_id,
+    username: me.username,
+    name: me.name ?? null,
+    isAdmin: me.is_admin ?? false,
+    isLoading: false,
+  });
+}
+
+async function clearSession(set: (partial: Partial<AuthState>) => void): Promise<void> {
+  await Promise.all([removeToken(), removeRefreshToken()]);
+  set({
+    token: null,
+    refreshToken: null,
+    userId: null,
+    username: null,
+    name: null,
+    isLoading: false,
+  });
+}
+
 // ── Store ───────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -203,105 +249,29 @@ export const useAuthStore = create<AuthState>((set) => ({
         } catch (err) {
           if (__DEV__) console.info("[hydrate] Access token invalid, attempting refresh:", err);
 
-          // Access token expired — try silent refresh before logging out
           if (storedRefresh) {
             try {
-              const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refresh_token: storedRefresh }),
-              });
-              if (!refreshResp.ok) throw new Error(`Refresh failed (${refreshResp.status})`, { cause: err });
-              const refreshJson = await refreshResp.json();
-              const newAccess: string = refreshJson.access_token;
-              const newRefresh: string | undefined = refreshJson.refresh_token;
-
-              // Persist new tokens
-              await setToken(newAccess);
-              if (newRefresh) await setRefreshToken(newRefresh);
-
-              // Validate the new access token
-              const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
-                headers: { Authorization: `Bearer ${newAccess}` },
-              });
-              if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`, { cause: err });
-              const meJson = await meResp.json();
-              const me = meJson.data ?? meJson;
-              if (__DEV__) console.info("[hydrate] Refresh succeeded, user:", me.username);
-              set({
-                token: newAccess,
-                refreshToken: newRefresh ?? storedRefresh,
-                userId: me.user_id,
-                username: me.username,
-                name: me.name ?? null,
-                isAdmin: me.is_admin ?? false,
-                isLoading: false,
-              });
-              return; // Success — don't fall through to logout
+              await refreshAndValidate(storedRefresh, set, "");
+              return;
             } catch (refreshErr) {
               if (__DEV__) console.info("[hydrate] Refresh also failed:", refreshErr);
             }
           }
 
-          // Both access and refresh tokens are invalid — force login
-          await Promise.all([removeToken(), removeRefreshToken()]);
-          set({
-            token: null,
-            refreshToken: null,
-            userId: null,
-            username: null,
-            name: null,
-            isLoading: false,
-          });
+          await clearSession(set);
         }
         } // end if (!tokenExpired)
 
-        // ── Token was already expired — skip /me, go straight to refresh ──
         if (tokenExpired) {
           if (storedRefresh) {
             try {
-              const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refresh_token: storedRefresh }),
-              });
-              if (!refreshResp.ok) throw new Error(`Refresh failed (${refreshResp.status})`);
-              const refreshJson = await refreshResp.json();
-              const newAccess: string = refreshJson.access_token;
-              const newRefresh: string | undefined = refreshJson.refresh_token;
-              await setToken(newAccess);
-              if (newRefresh) await setRefreshToken(newRefresh);
-              const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
-                headers: { Authorization: `Bearer ${newAccess}` },
-              });
-              if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`);
-              const meJson = await meResp.json();
-              const me = meJson.data ?? meJson;
-              if (__DEV__) console.info("[hydrate] Refresh succeeded (expired token path), user:", me.username);
-              set({
-                token: newAccess,
-                refreshToken: newRefresh ?? storedRefresh,
-                userId: me.user_id,
-                username: me.username,
-                name: me.name ?? null,
-                isAdmin: me.is_admin ?? false,
-                isLoading: false,
-              });
+              await refreshAndValidate(storedRefresh, set, " (expired token path)");
               return;
             } catch (refreshErr) {
               if (__DEV__) console.info("[hydrate] Refresh failed (expired token path):", refreshErr);
             }
           }
-          // Expired token + no refresh or refresh failed — force login
-          await Promise.all([removeToken(), removeRefreshToken()]);
-          set({
-            token: null,
-            refreshToken: null,
-            userId: null,
-            username: null,
-            name: null,
-            isLoading: false,
-          });
+          await clearSession(set);
         }
       } else {
         if (__DEV__) console.info("[hydrate] No stored token, showing login");

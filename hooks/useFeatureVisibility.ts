@@ -12,14 +12,11 @@ export function useFeatureVisibility() {
     [expertiseLevel],
   );
 
-  return useMemo(
-    () => ({
-      expertiseLevel,
-      isNormal: expertiseLevel === "normal",
-      isIntermediate: expertiseLevel === "intermediate",
-      isAdvanced: expertiseLevel === "advanced",
-      hasAccess,
-    }),
-    [expertiseLevel, hasAccess],
-  );
+  return useMemo(() => ({
+    expertiseLevel,
+    isNormal: expertiseLevel === "normal",
+    isIntermediate: expertiseLevel === "intermediate",
+    isAdvanced: expertiseLevel === "advanced",
+    hasAccess,
+  }), [expertiseLevel, hasAccess]);
 }
