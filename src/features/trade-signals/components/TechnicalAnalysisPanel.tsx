@@ -19,8 +19,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  type StyleProp,
   Text,
   TextInput,
+  type ViewStyle,
   View,
 } from "react-native";
 
@@ -40,6 +42,7 @@ import {
 
 const RECENT_SEARCH_STORAGE_KEY = "ta_recent_searches";
 const MAX_RECENT_SEARCHES = 7;
+type PercentWidth = `${number}%`;
 
 // ── Helper formatters ─────────────────────────────────────────────────
 function fmtFils(v: number | null | undefined): string {
@@ -176,7 +179,7 @@ function ScoreBar({
   const safeValue = Number.isFinite(value) ? value : 0;
   const pctRaw = safeValue / max;
   const pct = Number.isFinite(pctRaw) ? Math.min(1, Math.max(0, pctRaw)) : 0;
-  const widthPct = `${Math.max(0, Math.min(100, pct * 100)).toFixed(1)}%`;
+  const widthPct = `${Math.max(0, Math.min(100, pct * 100)).toFixed(1)}%` as PercentWidth;
   const barColor =
     pct >= 0.7 ? "#22c55e" : pct >= 0.5 ? "#f59e0b" : "#ef4444";
   const grade =
@@ -185,8 +188,8 @@ function ScoreBar({
   const unadjustedDual = Number.isFinite(dualScores?.unadjusted) ? dualScores!.unadjusted : safeValue;
   const adjustedPct = Math.max(0, Math.min(1, adjustedDual / max));
   const unadjustedPct = Math.max(0, Math.min(1, unadjustedDual / max));
-  const adjustedWidthPct = `${(adjustedPct * 100).toFixed(1)}%`;
-  const unadjustedWidthPct = `${(unadjustedPct * 100).toFixed(1)}%`;
+  const adjustedWidthPct = `${(adjustedPct * 100).toFixed(1)}%` as PercentWidth;
+  const unadjustedWidthPct = `${(unadjustedPct * 100).toFixed(1)}%` as PercentWidth;
   const adjustedBarColor =
     adjustedPct >= 0.7 ? "#22c55e" : adjustedPct >= 0.5 ? "#f59e0b" : "#ef4444";
   const unadjustedBarColor =
@@ -517,8 +520,9 @@ function buildRRItems(signal: KuwaitSignal, c: KuwaitSignalConfluence): Breakdow
   const spread = c.liquidity_details?.spread_proxy_pct ?? 0;
   const circuit = c.circuit_breaker?.nearest_circuit_pct ?? 5;
   // ATR% from execution data (risk_per_share / entry_mid * 100) or fallback
-  const entryMid = signal.execution?.entry_zone_fils
-    ? (signal.execution.entry_zone_fils[0] + signal.execution.entry_zone_fils[1]) / 2
+  const entryZone = signal.execution?.entry_zone_fils;
+  const entryMid = entryZone?.[0] != null && entryZone?.[1] != null
+    ? (entryZone[0] + entryZone[1]) / 2
     : 0;
   const riskPerShare = signal.risk_metrics?.risk_per_share_fils ?? 0;
   const atrPct = entryMid > 0 && riskPerShare > 0 ? (riskPerShare / entryMid) * 100 : 2.0;
@@ -2246,13 +2250,13 @@ function LiqChip({
   colors: ThemePalette;
   onPress?: () => void;
 }) {
-  const chipStyle = [
+  const chipStyle: StyleProp<ViewStyle> = [
     styles.liqChip,
     {
       backgroundColor: pass ? "#22c55e15" : "#ef444415",
       borderColor: pass ? "#22c55e40" : "#ef444440",
     },
-  ] as const;
+  ];
 
   const content = (
     <>

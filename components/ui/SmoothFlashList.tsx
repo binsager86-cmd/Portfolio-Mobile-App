@@ -16,7 +16,7 @@ interface SmoothFlashListProps<T> {
   renderItem: ({ item, index }: { item: T; index: number }) => React.ReactElement;
   keyExtractor: (item: T, index: number) => string;
   isLoading: boolean;
-  estimatedItemSize: number;
+  estimatedItemSize?: number;
   getItemType?: (item: T) => string;
   ListHeaderComponent?: React.ComponentType | React.ReactElement | null;
   ListEmptyComponent?: React.ComponentType | React.ReactElement | null;
@@ -31,7 +31,7 @@ export function SmoothFlashList<T>({
   renderItem,
   keyExtractor,
   isLoading,
-  estimatedItemSize,
+  estimatedItemSize = 80,
   getItemType,
   ListHeaderComponent,
   ListEmptyComponent,
@@ -41,6 +41,7 @@ export function SmoothFlashList<T>({
   onEndReached,
 }: SmoothFlashListProps<T>) {
   const velocity = useSharedValue(0);
+  const FlashListAny = FlashList as unknown as React.ComponentType<Record<string, unknown>>;
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -77,15 +78,15 @@ export function SmoothFlashList<T>({
       contentContainerStyle={styles.scrollContainer}
       refreshControl={refreshControl}
     >
-      <FlashList<T>
+      <FlashListAny
         data={data}
         renderItem={memoRender}
         keyExtractor={memoKey}
-        estimatedItemSize={estimatedItemSize}
         getItemType={getItemType}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
+        estimatedItemSize={estimatedItemSize}
         contentContainerStyle={[styles.list, contentContainerStyle]}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.15}

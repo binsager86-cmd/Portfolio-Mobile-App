@@ -25,7 +25,9 @@ const LED_RED = "#ff4444";
 // All notification channels — mirrors backend channelId values.
 // Each channel maps to a category the user can individually mute in
 // Android Settings → App notifications.
-const ANDROID_CHANNELS: Notifications.NotificationChannelInput[] = [
+type AndroidChannelWithId = Notifications.NotificationChannelInput & { id: string };
+
+const ANDROID_CHANNELS: AndroidChannelWithId[] = [
   {
     id: "news",
     name: "Market News",
@@ -96,7 +98,8 @@ export function usePushNotifications(): void {
     // individually control each category from Android Settings.
     if (Platform.OS === "android") {
       for (const ch of ANDROID_CHANNELS) {
-        Notifications.setNotificationChannelAsync(ch.id, ch).catch(() => {});
+        const { id, ...channel } = ch;
+        Notifications.setNotificationChannelAsync(id, channel).catch(() => {});
       }
     }
 

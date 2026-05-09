@@ -49,7 +49,7 @@ const colors = DarkTheme;
 // ── Signal factories ──────────────────────────────────────────────────
 
 function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
-  return {
+  return ({
     timestamp: "2026-05-03T12:00:00Z",
     stock_code: "NBK",
     segment: "PREMIER",
@@ -60,6 +60,8 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       stop_loss_fils: 450,
       tp1_fils: 475,
       tp2_fils: 495,
+      tp3_fils: 510,
+      tp_methods: null,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
     },
@@ -73,6 +75,7 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: 0.72,
       p_tp2_before_sl: 0.48,
+      p_tp3_before_sl: 0.31,
       confidence_interval_95: [0.58, 0.84],
       expected_return_r_multiple: 0.44,
       calibration_method: "bootstrap",
@@ -113,7 +116,7 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       statistical_confidence: 0.91,
     },
     ...overrides,
-  };
+  } as unknown) as KuwaitSignal;
 }
 
 function makeNeutralSignal(): KuwaitSignal {
@@ -124,6 +127,8 @@ function makeNeutralSignal(): KuwaitSignal {
       stop_loss_fils: null,
       tp1_fils: null,
       tp2_fils: null,
+      tp3_fils: null,
+      tp_methods: null,
       tick_alignment: "N/A",
       preferred_order_type: "NONE",
     },
@@ -137,6 +142,7 @@ function makeNeutralSignal(): KuwaitSignal {
     probabilities: {
       p_tp1_before_sl: null,
       p_tp2_before_sl: null,
+      p_tp3_before_sl: null,
       confidence_interval_95: null,
       expected_return_r_multiple: null,
       calibration_method: "N/A",
@@ -152,6 +158,8 @@ function makeSellSignal(): KuwaitSignal {
       stop_loss_fils: 470,        // SL is ABOVE entry for SELL
       tp1_fils: 445,              // TP is BELOW entry for SELL
       tp2_fils: 430,
+      tp3_fils: 420,
+      tp_methods: null,
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
     },

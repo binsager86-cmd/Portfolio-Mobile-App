@@ -21,7 +21,16 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { fmtNum, formatCurrency } from "@/lib/currency";
 import { todayISO } from "@/lib/dateUtils";
 import { showErrorAlert } from "@/lib/errorHandling";
-import { exportHoldingsExcel, type Holding } from "@/services/api";
+import {
+  exportHoldingsExcel,
+  getTransactions,
+  type Holding,
+  type TransactionRecord,
+} from "@/services/api";
+import {
+  getExitSignal,
+  type PositionMonitor,
+} from "@/services/api/analytics/tradeSignals";
 import { useThemeStore } from "@/services/themeStore";
 import { getApiErrorMessage } from "@/src/features/fundamental-analysis/types";
 import {
@@ -39,10 +48,11 @@ import {
   cleanCompanyName,
   useHoldingsView,
 } from "@/src/features/holdings/hooks/useHoldingsView";
+import { PositionMonitorCard } from "@/src/features/portfolio/components/PositionMonitorCard";
 import { donutStyles, s } from "@/src/features/holdings/styles";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type Href, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -177,6 +187,162 @@ const HoldingListRow = React.memo(function HoldingListRow({
   );
 });
 
+const KUWAIT_TRADING_DAYS = new Set(["Sun", "Mon", "Tue", "Wed", "Thu"]);
+const KUWAIT_OPEN_MINUTES = 9 * 60 + 30;
+const KUWAIT_CLOSE_MINUTES = 12 * 60 + 30;
+
+function isKuwaitMarketHours(date = new Date()): boolean {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kuwait",
+    weekday: "short",
+  }).format(date);
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kuwait",
+      hour: "2-digit",
+      hour12: false,
+    }).format(date),
+  );
+  const minute = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kuwait",
+      minute: "2-digit",
+    }).format(date),
+  );
+
+  if (!KUWAIT_TRADING_DAYS.has(weekday) || Number.isNaN(hour) || Number.isNaN(minute)) {
+    return false;
+  }
+
+  const mins = hour * 60 + minute;
+  return mins >= KUWAIT_OPEN_MINUTES && mins <= KUWAIT_CLOSE_MINUTES;
+}
+
+function resolvePortfolioForHolding(holding: Holding): "KFH" | "BBYN" | "USA" {
+  const rawPortfolio = ((holding as Holding & { portfolio?: string }).portfolio ?? "").toUpperCase();
+  if (rawPortfolio === "KFH" || rawPortfolio === "BBYN" || rawPortfolio === "USA") {
+    return rawPortfolio;
+  }
+  if ((holding.currency ?? "").toUpperCase() === "USD") {
+    return "USA";
+  }
+  return "KFH";
+}
+
+function parseIsoDateOnly(value: string | null | undefined): Date | null {
+  const raw = String(value ?? "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return null;
+  }
+  const [yy, mm, dd] = raw.split("-").map((part) => Number(part));
+  if (!Number.isFinite(yy) || !Number.isFinite(mm) || !Number.isFinite(dd)) {
+    return null;
+  }
+  const parsed = new Date(Date.UTC(yy, mm - 1, dd));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function countKuwaitTradingBars(startUtc: Date, endUtc: Date): number {
+  if (startUtc.getTime() > endUtc.getTime()) {
+    return 0;
+  }
+
+  const cursor = new Date(startUtc.getTime());
+  let bars = 0;
+  while (cursor.getTime() <= endUtc.getTime()) {
+    const day = cursor.getUTCDay();
+    if (day !== 5 && day !== 6) {
+      bars += 1;
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return bars;
+}
+
+function estimateBarsHeldForPosition(
+  symbol: string,
+  portfolio: "KFH" | "BBYN" | "USA",
+  transactions: TransactionRecord[],
+): number {
+  const targetSymbol = symbol.trim().toUpperCase();
+  const positionTxns = transactions
+    .filter((txn) => {
+      const txnSymbol = String(txn.stock_symbol ?? "").trim().toUpperCase();
+      const txnPortfolio = String(txn.portfolio ?? "").trim().toUpperCase();
+      return txnSymbol === targetSymbol && txnPortfolio === portfolio && !txn.is_deleted;
+    })
+    .sort((a, b) => {
+      const aDate = parseIsoDateOnly(a.txn_date)?.getTime() ?? 0;
+      const bDate = parseIsoDateOnly(b.txn_date)?.getTime() ?? 0;
+      if (aDate !== bDate) {
+        return aDate - bDate;
+      }
+      return Number(a.id) - Number(b.id);
+    });
+
+  if (positionTxns.length === 0) {
+    return 6;
+  }
+
+  let openShares = 0;
+  let lotStart: Date | null = null;
+
+  for (const txn of positionTxns) {
+    const txnDate = parseIsoDateOnly(txn.txn_date);
+    if (!txnDate) {
+      continue;
+    }
+
+    const type = String(txn.txn_type ?? "").trim().toUpperCase();
+    const shares = Math.max(0, Number(txn.shares ?? 0));
+    const bonusShares = Math.max(0, Number(txn.bonus_shares ?? 0));
+    const isSell = type.includes("SELL");
+    const isBuy = type.includes("BUY");
+
+    let shareDelta = 0;
+    if (isBuy) {
+      shareDelta += shares;
+    }
+    if (isSell) {
+      shareDelta -= shares;
+    }
+    if (!isSell) {
+      shareDelta += bonusShares;
+    }
+
+    if (shareDelta > 0 && openShares <= 0) {
+      lotStart = txnDate;
+    }
+
+    openShares = Math.max(0, openShares + shareDelta);
+    if (openShares <= 0) {
+      lotStart = null;
+    }
+  }
+
+  if (!lotStart) {
+    return 6;
+  }
+
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return Math.max(0, countKuwaitTradingBars(lotStart, todayUtc));
+}
+
+async function getAllTransactionsForMonitor(): Promise<TransactionRecord[]> {
+  const pageSize = 100;
+  const first = await getTransactions({ page: 1, page_size: pageSize });
+  const all = [...first.transactions];
+  const totalPages = Number(first.pagination?.total_pages ?? 1);
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await getTransactions({ page, page_size: pageSize });
+    all.push(...next.transactions);
+  }
+
+  return all;
+}
+
 // ── Main screen ─────────────────────────────────────────────────────
 
 export default function HoldingsScreen() {
@@ -233,6 +399,201 @@ export default function HoldingsScreen() {
       <HoldingListRow item={item} colors={colors} viewMode={viewMode} onPress={setSelectedHolding} />
     ),
     [colors, viewMode],
+  );
+
+  const monitoredHoldings = useMemo(
+    () => sortedHoldings.filter((holding) => Number(holding.shares_qty ?? 0) > 0),
+    [sortedHoldings],
+  );
+
+  const transactionsQuery = useQuery({
+    queryKey: ["portfolio", "transactions", "holdings-monitor"],
+    queryFn: getAllTransactionsForMonitor,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const barsHeldByPosition = useMemo(() => {
+    const barsMap = new Map<string, number>();
+    const txns = transactionsQuery.data ?? [];
+
+    for (const holding of monitoredHoldings) {
+      const portfolio = resolvePortfolioForHolding(holding);
+      const key = `${holding.symbol.toUpperCase()}::${portfolio}`;
+      if (barsMap.has(key)) {
+        continue;
+      }
+      barsMap.set(
+        key,
+        estimateBarsHeldForPosition(holding.symbol, portfolio, txns),
+      );
+    }
+
+    return barsMap;
+  }, [monitoredHoldings, transactionsQuery.data]);
+
+  const exitSignalQueries = useQueries({
+    queries: monitoredHoldings.map((holding) => {
+      const entryPrice = Number(holding.avg_cost ?? 0);
+      const exchange = (holding.currency ?? "").toUpperCase() === "USD" ? "USA" : "KSE";
+      const portfolio = resolvePortfolioForHolding(holding);
+      const positionKey = `${holding.symbol.toUpperCase()}::${portfolio}`;
+      const barsHeld = barsHeldByPosition.get(positionKey) ?? 6;
+      return {
+        queryKey: ["exit-signal", holding.symbol, portfolio, entryPrice, exchange, barsHeld],
+        queryFn: () =>
+          getExitSignal(holding.symbol, {
+            entry_price: entryPrice,
+            bars_held: barsHeld,
+            exchange,
+          }),
+        enabled: entryPrice > 0 && holding.symbol.trim().length > 0,
+        staleTime: 60_000,
+        refetchInterval: () => (isKuwaitMarketHours() ? 5 * 60_000 : false),
+        refetchIntervalInBackground: true,
+        retry: 1,
+      };
+    }),
+  });
+
+  const positionMonitors = useMemo<PositionMonitor[]>(
+    () =>
+      monitoredHoldings
+        .map((holding, index) => {
+          const exitSignal = exitSignalQueries[index]?.data;
+          if (!exitSignal) return null;
+          return {
+            symbol: holding.symbol,
+            shares: Number(holding.shares_qty ?? 0),
+            entry_price: Number(holding.avg_cost ?? 0),
+            current_price: Number(holding.market_price ?? 0),
+            pnl_pct: Number(holding.pnl_pct ?? 0),
+            exit_signal: exitSignal,
+          };
+        })
+        .filter((item): item is PositionMonitor => item !== null),
+    [monitoredHoldings, exitSignalQueries],
+  );
+
+  const holdingBySymbol = useMemo(
+    () => new Map(monitoredHoldings.map((holding) => [holding.symbol, holding])),
+    [monitoredHoldings],
+  );
+
+  const monitorLoading =
+    monitoredHoldings.length > 0 && (
+      transactionsQuery.isLoading ||
+      exitSignalQueries.some((query) => query.isLoading || query.isFetching)
+    );
+  const monitorErrors = exitSignalQueries.some((query) => query.isError);
+
+  const openSellTicket = useCallback(
+    (holding: Holding) => {
+      const portfolio = resolvePortfolioForHolding(holding);
+      router.push(
+        {
+          pathname: "/(tabs)/add-transaction",
+          params: {
+            symbol: holding.symbol,
+            portfolio,
+            editId: "",
+            createKey: String(Date.now()),
+          },
+        } as Href,
+      );
+    },
+    [router],
+  );
+
+  const launchSellFlow = useCallback(
+    (holding: Holding, trimPct?: number) => {
+      if (trimPct == null) {
+        openSellTicket(holding);
+        return;
+      }
+
+      const title = "Trim Position";
+      const message = `Suggested trim for ${holding.symbol}: ${Math.round(trimPct)}%. Open sell ticket?`;
+
+      if (
+        Platform.OS === "web" &&
+        typeof globalThis !== "undefined" &&
+        typeof globalThis.confirm === "function"
+      ) {
+        const confirmed = globalThis.confirm(`${title}\n\n${message}`);
+        if (confirmed) {
+          openSellTicket(holding);
+        }
+        return;
+      }
+
+      Alert.alert(title, message, [
+        { text: t("common.cancel", "Cancel"), style: "cancel" },
+        {
+          text: "Open Sell Ticket",
+          onPress: () => openSellTicket(holding),
+        },
+      ]);
+    },
+    [openSellTicket, t],
+  );
+
+  const monitorSection = useMemo(
+    () => (
+      <View
+        style={[
+          phoneStyles.monitorSection,
+          {
+            marginHorizontal: spacing.pagePx,
+            backgroundColor: colors.bgCard,
+            borderColor: colors.borderColor,
+          },
+        ]}
+      >
+        <View style={phoneStyles.monitorHeader}>
+          <Text style={[phoneStyles.monitorTitle, { color: colors.textPrimary }]}>Position Monitor</Text>
+          {monitorLoading ? (
+            <Text style={[phoneStyles.monitorStatus, { color: colors.textMuted }]}>Refreshing...</Text>
+          ) : null}
+        </View>
+
+        {positionMonitors.length === 0 && !monitorLoading ? (
+          <Text style={[phoneStyles.monitorEmpty, { color: colors.textMuted }]}>No active exit alerts.</Text>
+        ) : null}
+
+        {positionMonitors.map((monitor) => {
+          const holding = holdingBySymbol.get(monitor.symbol);
+          if (!holding) return null;
+          return (
+            <PositionMonitorCard
+              key={`${monitor.symbol}-${monitor.exit_signal.timestamp}`}
+              symbol={monitor.symbol}
+              pnlPct={monitor.pnl_pct}
+              exitSignal={monitor.exit_signal}
+              onTrim={(pct) => launchSellFlow(holding, pct)}
+              onExit={() => launchSellFlow(holding)}
+            />
+          );
+        })}
+
+        {monitorErrors ? (
+          <Text style={[phoneStyles.monitorError, { color: colors.danger }]}>Some exit signals are unavailable.</Text>
+        ) : null}
+      </View>
+    ),
+    [
+      colors.bgCard,
+      colors.borderColor,
+      colors.danger,
+      colors.textMuted,
+      colors.textPrimary,
+      holdingBySymbol,
+      launchSellFlow,
+      monitorErrors,
+      monitorLoading,
+      positionMonitors,
+      spacing.pagePx,
+    ],
   );
 
   const portfolios = [undefined, "KFH", "BBYN", "USA"];
@@ -297,6 +658,8 @@ export default function HoldingsScreen() {
                   spacing={spacing}
                   queryClient={queryClient}
                 />
+
+                {monitorSection}
 
                 <View style={[s.holdingsHeaderRow, { marginHorizontal: spacing.pagePx }]}>
                   <Text style={[s.holdingsTitle, { color: colors.textPrimary }]}>
@@ -437,6 +800,8 @@ export default function HoldingsScreen() {
             spacing={spacing}
             queryClient={queryClient}
           />
+
+          {monitorSection}
 
           {/* Holdings header + Export */}
           <View style={[s.holdingsHeaderRow, { marginHorizontal: spacing.pagePx }]}>
@@ -855,6 +1220,37 @@ const phoneStyles = StyleSheet.create({
     marginTop: tokens.spacing.sm,
     padding: tokens.spacing.lg,
     alignItems: "center",
+  },
+  monitorSection: {
+    borderWidth: 1,
+    borderRadius: tokens.radii.lg,
+    paddingHorizontal: tokens.spacing.md,
+    paddingTop: tokens.spacing.md,
+    paddingBottom: tokens.spacing.sm,
+    marginBottom: tokens.spacing.md,
+  },
+  monitorHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: tokens.spacing.sm,
+  },
+  monitorTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  monitorStatus: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  monitorEmpty: {
+    fontSize: 12,
+    marginBottom: tokens.spacing.sm,
+  },
+  monitorError: {
+    fontSize: 12,
+    marginTop: tokens.spacing.xs,
+    marginBottom: tokens.spacing.sm,
   },
 });
 

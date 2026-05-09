@@ -65,6 +65,7 @@ import type { ThemePalette } from "@/constants/theme";
 /* ────────────────────────────────────────────────────────────────── */
 
 type SubTab = "stocks" | "statements" | "comparison" | "metrics" | "growth" | "score" | "valuations";
+type GrowthEntry = { period: string; prev_period: string; growth: number };
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ComponentProps<typeof FontAwesome>["name"] }[] = [
   { key: "stocks",      label: "Stocks",      icon: "th-list" },
@@ -1513,7 +1514,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
 function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const { data, isLoading, refetch, isFetching } = useGrowthAnalysis(stockId);
 
-  const growth = data?.growth ?? {};
+  const growth: Record<string, GrowthEntry[]> = data?.growth ?? {};
   const labels = Object.keys(growth);
 
   const exportTables = useCallback((): TableData[] => {
@@ -1831,7 +1832,10 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
   const { data, isLoading, refetch, isFetching } = useValuations(stockId);
 
   const grahamMut = useMutation({
-    mutationFn: () => runGrahamValuation(stockId, { eps: parseFloat(eps), book_value_per_share: parseFloat(bvps) }),
+    mutationFn: () => runGrahamValuation(
+      stockId,
+      ({ eps: parseFloat(eps), book_value_per_share: parseFloat(bvps) } as unknown) as Parameters<typeof runGrahamValuation>[1],
+    ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["analysis-valuations", stockId] }),
   });
   const dcfMut = useMutation({

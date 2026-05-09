@@ -30,7 +30,6 @@ import {
   type KuwaitSignal,
 } from "@/services/api/analytics/tradeSignals";
 import { useThemeStore } from "@/services/themeStore";
-import type { ThemePalette } from "@/constants/theme";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -56,8 +55,8 @@ function buildOrderBookSnapshot(signal: KuwaitSignal): OrderBookSnapshot | null 
 
   // Synthetic levels centred around entry zone mid
   const basePx =
-    signal.execution_details.entry_zone_fils[0] != null
-      ? (signal.execution_details.entry_zone_fils[0]! + signal.execution_details.entry_zone_fils[1]!) / 2
+    signal.execution.entry_zone_fils[0] != null
+      ? (signal.execution.entry_zone_fils[0]! + signal.execution.entry_zone_fils[1]!) / 2
       : 100;
 
   const makeLevels = (
@@ -83,8 +82,7 @@ function buildOrderBookSnapshot(signal: KuwaitSignal): OrderBookSnapshot | null 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function TechnicalAnalysisTab({ stock, onTrade }: Props) {
-  const { theme } = useThemeStore();
-  const colors = theme as ThemePalette;
+  const { colors } = useThemeStore();
 
   const [refreshing, setRefreshing] = useState(false);
 

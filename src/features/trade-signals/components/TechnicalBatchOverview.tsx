@@ -2,7 +2,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 
@@ -40,6 +40,231 @@ function scoreColor(score: number, colors: ThemePalette): string {
 function scoreCellColor(score: number | null | undefined, colors: ThemePalette): string {
   if (!Number.isFinite(score)) return colors.textMuted;
   return scoreColor(Number(score), colors);
+}
+
+const ACTION_PRIORITY: Record<"EXECUTE" | "HOLD" | "WATCH" | "AVOID" | "FLAG", number> = {
+  EXECUTE: 0,
+  HOLD: 1,
+  WATCH: 2,
+  AVOID: 3,
+  FLAG: 4,
+};
+
+type ActionName = keyof typeof ACTION_PRIORITY;
+
+function normalizeAction(value: string | null | undefined): keyof typeof ACTION_PRIORITY | null {
+  const normalized = String(value || "").toUpperCase();
+  if (normalized === "EXECUTE" || normalized === "HOLD" || normalized === "WATCH" || normalized === "AVOID" || normalized === "FLAG") {
+    return normalized;
+  }
+  return null;
+}
+
+function deriveActionFromRow(row: TechnicalBatchRow): {
+  action: ActionName | null;
+  note: string | null;
+  gap: number | null;
+  priority: number | null;
+} {
+  const explicitAction = normalizeAction(row.action_recommendation);
+  const explicitNote = String(row.action_note || "").trim();
+  const explicitPriority = Number.isFinite(row.action_priority) ? Number(row.action_priority) : null;
+  const gap = scoreGap(row);
+
+  if (explicitAction) {
+    return {
+      action: explicitAction,
+      note: explicitNote || null,
+      gap,
+      priority: explicitPriority ?? ACTION_PRIORITY[explicitAction],
+    };
+  }
+
+  if (row.error) {
+    return { action: null, note: null, gap, priority: null };
+  }
+
+  const adjusted = adjustedOverallScore(row);
+  if (!Number.isFinite(adjusted) || !Number.isFinite(gap)) {
+    return { action: null, note: null, gap, priority: null };
+  }
+
+  const adjustedScore = Number(adjusted);
+  const scoreGapValue = Number(gap);
+  const trend = Number.isFinite(row.trend_directional) ? Number(row.trend_directional) : 0;
+
+  if (scoreGapValue < 0 && trend < 30) {
+    return {
+      action: "FLAG",
+      note: `Negative gap ${scoreGapValue} with trend ${trend} < 30; review factor logic.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.FLAG,
+    };
+  }
+
+  if (scoreGapValue < 0) {
+    if (adjustedScore < 55) {
+      return {
+        action: "AVOID",
+        note: `Negative gap ${scoreGapValue} but adjusted ${adjustedScore} < 55.`,
+        gap: scoreGapValue,
+        priority: ACTION_PRIORITY.AVOID,
+      };
+    }
+
+    if (trend >= 50 && adjustedScore >= 65) {
+      return {
+        action: "EXECUTE",
+        note: `Negative gap ${scoreGapValue} with trend ${trend} and adjusted ${adjustedScore}; qualified execute.`,
+        gap: scoreGapValue,
+        priority: ACTION_PRIORITY.EXECUTE,
+      };
+    }
+
+    return {
+      action: "HOLD",
+      note: `Negative gap ${scoreGapValue} without trend>=50 and adjusted>=65; downgraded to hold.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.HOLD,
+    };
+  }
+
+  if (scoreGapValue >= 0 && scoreGapValue <= 5 && adjustedScore >= 68) {
+    return {
+      action: "EXECUTE",
+      note: `Gap +${scoreGapValue} with adjusted ${adjustedScore} in execute band.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.EXECUTE,
+    };
+  }
+
+  if ((scoreGapValue >= 6 && scoreGapValue <= 10) || (scoreGapValue >= 0 && scoreGapValue <= 5 && adjustedScore >= 60 && adjustedScore <= 67)) {
+    return {
+      action: "HOLD",
+      note: `Gap +${scoreGapValue} with adjusted ${adjustedScore} in hold band.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.HOLD,
+    };
+  }
+
+  if (scoreGapValue >= 11 && scoreGapValue <= 15) {
+    return {
+      action: "WATCH",
+      note: `Gap +${scoreGapValue} in watch band.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.WATCH,
+    };
+  }
+
+  if (scoreGapValue >= 16 || (adjustedScore < 55 && scoreGapValue >= 0)) {
+    return {
+      action: "AVOID",
+      note: `Gap +${scoreGapValue} with adjusted ${adjustedScore} in avoid band.`,
+      gap: scoreGapValue,
+      priority: ACTION_PRIORITY.AVOID,
+    };
+  }
+
+  return {
+    action: "AVOID",
+    note: `Gap +${scoreGapValue} with adjusted ${adjustedScore} outside action bands.`,
+    gap: scoreGapValue,
+    priority: ACTION_PRIORITY.AVOID,
+  };
+}
+
+function scoreGap(row: TechnicalBatchRow): number | null {
+  if (Number.isFinite(row.score_gap)) return Number(row.score_gap);
+  const base = baseOverallScore(row);
+  const adjusted = adjustedOverallScore(row);
+  if (!Number.isFinite(base) || !Number.isFinite(adjusted)) return null;
+  return Number(base) - Number(adjusted);
+}
+
+function formatGap(gap: number | null): string {
+  if (!Number.isFinite(gap)) return "-";
+  const value = Number(gap);
+  return value >= 0 ? `+${value}` : `${value}`;
+}
+
+function truncateActionNote(note: string | null | undefined, maxLength = 58): string {
+  const value = String(note || "").trim();
+  if (!value) return "-";
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}...`;
+}
+
+function gapColor(gap: number | null, colors: ThemePalette): string {
+  if (!Number.isFinite(gap)) return colors.textMuted;
+  if (Number(gap) < 0) return colors.success;
+  if (Number(gap) <= 10) return colors.warning;
+  return colors.danger;
+}
+
+function actionChipColors(action: keyof typeof ACTION_PRIORITY, colors: ThemePalette): { bg: string; fg: string } {
+  if (action === "EXECUTE") {
+    return { bg: colors.successBg, fg: colors.successText };
+  }
+  if (action === "HOLD") {
+    return { bg: colors.warningBg, fg: colors.warningText };
+  }
+  if (action === "WATCH") {
+    return { bg: colors.bgInput, fg: colors.textSecondary };
+  }
+  if (action === "AVOID") {
+    return { bg: colors.dangerBg, fg: colors.dangerText };
+  }
+  return { bg: colors.dangerBg, fg: colors.dangerText };
+}
+
+function actionPriority(row: TechnicalBatchRow): number {
+  const derived = deriveActionFromRow(row);
+  if (Number.isFinite(derived.priority)) return Number(derived.priority);
+  return 99;
+}
+
+function sortTechnicalRows(rows: TechnicalBatchRow[]): TechnicalBatchRow[] {
+  return [...rows].sort((a, b) => {
+    const priorityDelta = actionPriority(a) - actionPriority(b);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    const bucket = actionPriority(a);
+    const adjA = sortableScore(adjustedOverallScore(a));
+    const adjB = sortableScore(adjustedOverallScore(b));
+    const baseA = sortableScore(baseOverallScore(a));
+    const baseB = sortableScore(baseOverallScore(b));
+    const gapA = Number.isFinite(scoreGap(a)) ? Number(scoreGap(a)) : Number.POSITIVE_INFINITY;
+    const gapB = Number.isFinite(scoreGap(b)) ? Number(scoreGap(b)) : Number.POSITIVE_INFINITY;
+
+    if (bucket === ACTION_PRIORITY.EXECUTE) {
+      if (adjA !== adjB) return adjB - adjA;
+      if (gapA !== gapB) return gapA - gapB;
+      if (a.trend_directional !== b.trend_directional) return b.trend_directional - a.trend_directional;
+      return a.symbol.localeCompare(b.symbol);
+    }
+
+    if (bucket === ACTION_PRIORITY.HOLD) {
+      if (adjA !== adjB) return adjB - adjA;
+      if (a.buying_pressure !== b.buying_pressure) return b.buying_pressure - a.buying_pressure;
+      if (a.trend_directional !== b.trend_directional) return b.trend_directional - a.trend_directional;
+      return a.symbol.localeCompare(b.symbol);
+    }
+
+    if (bucket === ACTION_PRIORITY.WATCH) {
+      if (a.speed_momentum !== b.speed_momentum) return b.speed_momentum - a.speed_momentum;
+      if (a.trend_directional !== b.trend_directional) return b.trend_directional - a.trend_directional;
+      return a.symbol.localeCompare(b.symbol);
+    }
+
+    if (bucket === ACTION_PRIORITY.AVOID || bucket === ACTION_PRIORITY.FLAG) {
+      if (gapA !== gapB) return gapA - gapB;
+      if (a.trend_directional !== b.trend_directional) return b.trend_directional - a.trend_directional;
+      return a.symbol.localeCompare(b.symbol);
+    }
+
+    if (baseA !== baseB) return baseB - baseA;
+    return a.symbol.localeCompare(b.symbol);
+  });
 }
 
 function statusChipColors(status: string, colors: ThemePalette): { bg: string; fg: string } {
@@ -71,8 +296,8 @@ function baseOverallScore(row: TechnicalBatchRow): number | null {
 
 function adjustedOverallScore(row: TechnicalBatchRow): number | null {
   if (row.risk_adjusted_score != null) return row.risk_adjusted_score;
-  if (row.overall_score != null) return row.overall_score;
   if (row.raw_technical_score != null) return row.raw_technical_score;
+  if (row.overall_score != null) return row.overall_score;
   return null;
 }
 
@@ -86,7 +311,10 @@ function buildLayout(windowWidth: number) {
   const metricWidth = wide ? 148 : medium ? 138 : 130;
   const baseOverallWidth = wide ? 170 : medium ? 158 : 148;
   const adjustedOverallWidth = wide ? 176 : medium ? 164 : 154;
-  const minTableWidth = rankWidth + companyWidth + metricWidth * 4 + baseOverallWidth + adjustedOverallWidth + 16;
+  const gapWidth = wide ? 100 : medium ? 94 : 88;
+  const actionWidth = wide ? 136 : medium ? 126 : 118;
+  const actionNoteWidth = wide ? 300 : medium ? 270 : 240;
+  const minTableWidth = rankWidth + companyWidth + metricWidth * 4 + baseOverallWidth + adjustedOverallWidth + gapWidth + actionWidth + actionNoteWidth + 16;
 
   return {
     rankWidth,
@@ -94,6 +322,9 @@ function buildLayout(windowWidth: number) {
     metricWidth,
     baseOverallWidth,
     adjustedOverallWidth,
+    gapWidth,
+    actionWidth,
+    actionNoteWidth,
     tableWidth: Math.max(contentWidth, minTableWidth),
     titleSize: wide ? 24 : medium ? 22 : 20,
     subtitleSize: wide ? 15 : 14,
@@ -115,12 +346,10 @@ async function exportTechnicalRowsToExcel(
   runId: number | null | undefined,
 ): Promise<void> {
   try {
-    const ordered = [...rows].sort(
-      (a, b) =>
-        sortableScore(baseOverallScore(b)) -
-        sortableScore(baseOverallScore(a)),
-    );
-    const data = ordered.map((row, index) => ({
+    const ordered = [...rows];
+    const data = ordered.map((row, index) => {
+      const derived = deriveActionFromRow(row);
+      return {
       "#": index + 1,
       COMPANY: row.company_name || row.symbol,
       SYMBOL: row.symbol,
@@ -130,11 +359,15 @@ async function exportTechnicalRowsToExcel(
       KEY_PRICE_LEVEL: row.key_price_level,
       COMBINED_SCORE_NO_ADJUSTMENT: baseOverallScore(row),
       COMBINED_SCORE_WITH_ADJUSTMENT: adjustedOverallScore(row),
+      GAP: derived.gap,
+      ACTION: derived.action || "-",
+      ACTION_NOTE: row.action_note || derived.note || "-",
       SIGNAL: row.signal || "-",
       REASON: row.reason || "-",
       STATUS: row.error ? "ERROR" : "OK",
       ERROR: row.error || "",
-    }));
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(data);
     ws["!cols"] = [
@@ -147,6 +380,9 @@ async function exportTechnicalRowsToExcel(
       { wch: 15 },
       { wch: 30 },
       { wch: 32 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 46 },
       { wch: 12 },
       { wch: 28 },
       { wch: 10 },
@@ -226,6 +462,9 @@ function TableHeader({
       <Text style={[styles.hMetric, { width: layout.metricWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Key Price Level</Text>
       <Text style={[styles.hOverall, { width: layout.baseOverallWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Combined (No Dir Adjust)</Text>
       <Text style={[styles.hOverall, { width: layout.adjustedOverallWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Combined (Dir Adjust)</Text>
+      <Text style={[styles.hGap, { width: layout.gapWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Gap</Text>
+      <Text style={[styles.hAction, { width: layout.actionWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Action</Text>
+      <Text style={[styles.hActionNote, { width: layout.actionNoteWidth, color: colors.textSecondary, fontSize: layout.sectionLabelSize }]}>Action Note</Text>
     </View>
   );
 }
@@ -235,15 +474,27 @@ function TableRow({
   colors,
   index,
   layout,
+  openActionNoteSymbol,
+  onToggleActionNote,
 }: {
   row: TechnicalBatchRow;
   colors: ThemePalette;
   index: number;
   layout: ReturnType<typeof buildLayout>;
+  openActionNoteSymbol: string | null;
+  onToggleActionNote: (symbol: string) => void;
 }) {
   const zebra = index % 2 === 0 ? "transparent" : colors.bgPrimary;
   const baseScore = baseOverallScore(row);
   const adjustedScore = adjustedOverallScore(row);
+  const derivedAction = deriveActionFromRow(row);
+  const gap = derivedAction.gap;
+  const action = derivedAction.action;
+  const fullActionNote = String(row.action_note || derivedAction.note || "").trim();
+  const hasActionNote = fullActionNote.length > 0;
+  const isActionNoteOpen = hasActionNote && openActionNoteSymbol === row.symbol;
+  const actionNotePreview = truncateActionNote(fullActionNote);
+  const actionColors = action ? actionChipColors(action, colors) : null;
   const overallBaseTone = scoreCellColor(baseScore, colors);
   const overallAdjustedTone = scoreCellColor(adjustedScore, colors);
 
@@ -255,6 +506,7 @@ function TableRow({
           minHeight: layout.rowHeight,
           borderBottomColor: colors.borderColor,
           backgroundColor: zebra,
+          zIndex: isActionNoteOpen ? 30 : 1,
         },
       ]}
     >
@@ -298,6 +550,59 @@ function TableRow({
       <Text style={[styles.overallCell, { width: layout.adjustedOverallWidth, fontSize: layout.overallSize, color: overallAdjustedTone }]}>
         {scoreText(adjustedScore)}
       </Text>
+
+      <Text style={[styles.gapCell, { width: layout.gapWidth, color: gapColor(gap, colors), fontSize: layout.bodySize }]}>
+        {formatGap(gap)}
+      </Text>
+
+      <View style={[styles.actionCell, { width: layout.actionWidth }]}> 
+        {action && actionColors ? (
+          <View style={[styles.actionPill, { backgroundColor: actionColors.bg }]}> 
+            <Text style={[styles.actionPillText, { color: actionColors.fg }]}>{action}</Text>
+          </View>
+        ) : (
+          <Text style={[styles.actionFallback, { color: colors.textMuted }]}>{row.error ? "ERROR" : "-"}</Text>
+        )}
+      </View>
+
+      <View style={[styles.actionNoteCell, { width: layout.actionNoteWidth }]}> 
+        {hasActionNote ? (
+          <Pressable
+            onPress={() => onToggleActionNote(row.symbol)}
+            accessibilityRole="button"
+            accessibilityLabel={`Action note for ${row.symbol}`}
+            style={styles.actionNoteTrigger}
+          >
+            <Text numberOfLines={1} style={[styles.actionNoteText, { color: colors.textSecondary }]}>
+              {actionNotePreview}
+            </Text>
+            <FontAwesome name="info-circle" size={12} color={colors.textMuted} />
+          </Pressable>
+        ) : (
+          <Text style={[styles.actionNoteEmpty, { color: colors.textMuted }]}>-</Text>
+        )}
+
+        {isActionNoteOpen ? (
+          <View
+            style={[
+              styles.actionNotePopover,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: colors.borderColor,
+              },
+            ]}
+          >
+            <Text style={[styles.actionNotePopoverTitle, { color: colors.textPrimary }]}>{row.symbol} Action Note</Text>
+            <Text style={[styles.actionNotePopoverText, { color: colors.textSecondary }]}>{fullActionNote}</Text>
+            <Pressable
+              onPress={() => onToggleActionNote(row.symbol)}
+              style={[styles.actionNoteCloseBtn, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}
+            >
+              <Text style={[styles.actionNoteCloseText, { color: colors.textPrimary }]}>Close</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -328,6 +633,7 @@ function MetaStat({
 export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
+  const [openActionNoteSymbol, setOpenActionNoteSymbol] = useState<string | null>(null);
 
   const latestQ = useQuery({
     queryKey: ["trade-signals", "technical-batch", "latest"],
@@ -356,14 +662,13 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
   const rows = latestQ.data?.rows ?? [];
   const layout = useMemo(() => buildLayout(width), [width]);
   const sortedRows = useMemo(
-    () =>
-      [...rows].sort(
-        (a, b) =>
-          sortableScore(baseOverallScore(b)) -
-          sortableScore(baseOverallScore(a)),
-      ),
+    () => sortTechnicalRows(rows),
     [rows],
   );
+
+  const toggleActionNote = (symbol: string) => {
+    setOpenActionNoteSymbol((current) => (current === symbol ? null : symbol));
+  };
   const isRunning = String(run?.status || "").toLowerCase() === "running";
   const chip = statusChipColors(run?.status || "unknown", colors);
 
@@ -512,6 +817,8 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
                       colors={colors}
                       index={index}
                       layout={layout}
+                      openActionNoteSymbol={openActionNoteSymbol}
+                      onToggleActionNote={toggleActionNote}
                     />
                   ))}
                 </ScrollView>
@@ -807,6 +1114,31 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textAlign: "right",
   },
+  hGap: {
+    width: 88,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "right",
+  },
+  hAction: {
+    width: 118,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
+  hActionNote: {
+    width: 240,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "left",
+    paddingLeft: 10,
+  },
   metricCell: {
     width: 128,
     fontSize: 13,
@@ -819,5 +1151,92 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     textAlign: "right",
+  },
+  gapCell: {
+    width: 88,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  actionCell: {
+    width: 118,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 8,
+  },
+  actionPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  actionPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  actionFallback: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  actionNoteCell: {
+    width: 240,
+    paddingLeft: 10,
+    justifyContent: "center",
+    position: "relative",
+    zIndex: 40,
+  },
+  actionNoteTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 28,
+  },
+  actionNoteText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  actionNoteEmpty: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  actionNotePopover: {
+    position: "absolute",
+    right: 0,
+    top: 34,
+    width: 320,
+    maxWidth: 320,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  actionNotePopoverTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  actionNotePopoverText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+  },
+  actionNoteCloseBtn: {
+    alignSelf: "flex-end",
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  actionNoteCloseText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

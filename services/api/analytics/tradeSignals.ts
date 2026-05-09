@@ -447,12 +447,19 @@ export interface TechnicalBatchRow {
   speed_momentum: number;
   buying_pressure: number;
   key_price_level: number;
-  /** Display/ranking fallback, aligned to combined_score_with_adjustment on new runs. */
-  overall_score: number;
+  /** Legacy display/ranking fallback, aligned to combined_score_with_adjustment on new runs. */
+  overall_score: number | null;
   /** Combined score without directional trend adjustment. */
   raw_technical_score: number | null;
   /** Combined score with directional trend adjustment. */
   risk_adjusted_score: number | null;
+  /** Gap = combined score without directional adjustment - with directional adjustment. */
+  score_gap?: number | null;
+  /** Derived action from score gap and adjusted thresholds. */
+  action_recommendation?: "EXECUTE" | "HOLD" | "WATCH" | "AVOID" | "FLAG" | null;
+  /** Human-readable rule explanation for the action recommendation. */
+  action_note?: string | null;
+  action_priority?: number | null;
   error: string | null;
 }
 
@@ -517,6 +524,59 @@ export async function runTechnicalBatchScan(params: RunTechnicalBatchParams = {}
       },
       // Foreground full-universe scan can take several minutes.
       timeout: runInBackground ? undefined : 20 * 60 * 1000,
+    },
+  );
+  return data.data;
+}
+
+export type ExitAction = "HOLD" | "TRIM" | "EXIT";
+export type ExitUrgency = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface ExitSignal {
+  symbol: string;
+  action: ExitAction;
+  urgency: ExitUrgency;
+  reasons: string[];
+  current_price: number;
+  entry_price: number;
+  pnl_pct: number;
+  trailing_stop: number;
+  distance_to_stop_pct: number;
+  momentum_exhaustion_score: number;
+  distribution_detected: boolean;
+  parabolic_extension: boolean;
+  near_circuit: boolean;
+  suggested_trim_pct: number;
+  timestamp: string;
+}
+
+export interface PositionMonitor {
+  symbol: string;
+  shares: number;
+  entry_price: number;
+  current_price: number;
+  pnl_pct: number;
+  exit_signal: ExitSignal;
+}
+
+export interface ExitSignalParams {
+  entry_price: number;
+  bars_held?: number;
+  exchange?: string;
+  country?: string;
+}
+
+/** Fetch exit monitoring signal for an open position. */
+export async function getExitSignal(symbol: string, params: ExitSignalParams): Promise<ExitSignal> {
+  const { data } = await api.get<{ status: string; data: ExitSignal }>(
+    `/api/v1/positions/${encodeURIComponent(symbol)}/exit-signal`,
+    {
+      params: {
+        entry_price: params.entry_price,
+        bars_held: params.bars_held ?? 0,
+        exchange: params.exchange ?? "KSE",
+        country: params.country,
+      },
     },
   );
   return data.data;
