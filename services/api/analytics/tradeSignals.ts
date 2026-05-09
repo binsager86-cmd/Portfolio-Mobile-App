@@ -323,11 +323,37 @@ export interface KuwaitVolumeProfile {
   lvn_levels: number[];
 }
 
+export interface KuwaitEntryTriggerDetector {
+  triggered: boolean;
+  reason: string;
+  strength: number;
+}
+
+export interface KuwaitAccumulationState {
+  state: "active" | "building" | "absent";
+  obv_slope_pct: number | null;
+  cmf: number | null;
+}
+
+export interface KuwaitEntryTrigger {
+  action: "ENTER" | "WATCH" | "HOLD";
+  trigger: "pullback" | "breakout" | "accumulation_only" | "none";
+  pullback: KuwaitEntryTriggerDetector;
+  breakout: KuwaitEntryTriggerDetector;
+  accumulation: KuwaitAccumulationState;
+  triggered: boolean;
+  trigger_type: "pullback" | "breakout" | null;
+  trigger_strength: number;
+  accumulation_state: "active" | "building" | "absent";
+  recommended_state: "BUY" | "WATCH" | "HOLD" | string;
+  details: Record<string, unknown>;
+}
+
 export interface KuwaitSignal {
   timestamp: string;
   stock_code: string;
   segment: string;
-  signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL";
+  signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL" | "WATCH" | "HOLD";
   setup_type: string;
 
   // ── Score transparency ─────────────────────────────────────────────────
@@ -362,6 +388,7 @@ export interface KuwaitSignal {
   failed_gates: string[];
   details: Record<string, unknown>;
   technical_scores_debug: Record<string, number> | null;
+  entry_trigger: KuwaitEntryTrigger;
 
   execution: KuwaitSignalExecution;
   risk_metrics: KuwaitSignalRisk;

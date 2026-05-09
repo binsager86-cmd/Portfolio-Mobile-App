@@ -33,6 +33,7 @@ import type {
 import type { ThemePalette } from "@/constants/theme";
 import {
   getKuwaitSignal,
+  type KuwaitEntryTrigger,
   type KuwaitSignal,
   type KuwaitSignalSubScores,
 } from "@/services/api/analytics/tradeSignals";
@@ -624,12 +625,14 @@ function getScoreModalProps(
 }
 
 // ── Signal badge ──────────────────────────────────────────────────────
-function SignalBadge({ signal }: { signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL" }) {
+function SignalBadge({ signal }: { signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL" | "WATCH" | "HOLD" }) {
   const config = {
     STRONG_BUY: { bg: "#16a34a30", color: "#16a34a", text: "⭐ STRONG BUY" },
     BUY:        { bg: "#22c55e18", color: "#22c55e", text: "BUY SIGNAL" },
     SELL:       { bg: "#ef444418", color: "#ef4444", text: "SELL SIGNAL" },
     NEUTRAL:    { bg: "#94a3b818", color: "#94a3b8", text: "NO SIGNAL" },
+    WATCH:      { bg: "#f59e0b20", color: "#b45309", text: "WATCH SETUP" },
+    HOLD:       { bg: "#64748b20", color: "#475569", text: "HOLD / WAIT" },
   }[signal];
   return (
     <View style={[styles.badge, { backgroundColor: config.bg }]}>
@@ -647,6 +650,99 @@ function RegimeBadge({ regime }: { regime: string }) {
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       <Text style={[styles.badgeText, { color }]}>{humanRegime(regime)}</Text>
+    </View>
+  );
+}
+
+const TRIGGER_CONFIG: Record<
+  string,
+  { bg: string; border: string; color: string; icon: string; label: string; hint: string }
+> = {
+  ENTER: {
+    bg: "#16a34a18",
+    border: "#16a34a",
+    color: "#16a34a",
+    icon: "check-circle",
+    label: "ENTER NOW",
+    hint: "Entry timing confirmed on the latest bar.",
+  },
+  WATCH: {
+    bg: "#f59e0b18",
+    border: "#f59e0b",
+    color: "#b45309",
+    icon: "eye",
+    label: "WATCH",
+    hint: "Setup is valid but timing trigger has not fired yet.",
+  },
+  HOLD: {
+    bg: "#94a3b818",
+    border: "#94a3b8",
+    color: "#64748b",
+    icon: "clock-o",
+    label: "HOLD",
+    hint: "No entry trigger and no accumulation signal.",
+  },
+};
+
+function EntryTriggerCard({ trigger, colors }: { trigger: KuwaitEntryTrigger; colors: ThemePalette }) {
+  const cfg = TRIGGER_CONFIG[trigger.action] ?? TRIGGER_CONFIG.HOLD;
+
+  const triggerDetail =
+    trigger.trigger === "pullback"
+      ? "Pullback continuation trigger"
+      : trigger.trigger === "breakout"
+        ? "Breakout trigger"
+        : trigger.trigger === "accumulation_only"
+          ? "Accumulation detected without trigger"
+          : "No trigger fired";
+
+  const accumulationState = trigger.accumulation?.state;
+  const accumulationLabel =
+    accumulationState === "active"
+      ? "Active"
+      : accumulationState === "building"
+        ? "Building"
+        : "Absent";
+  const accumulationColor =
+    accumulationState === "active"
+      ? "#22c55e"
+      : accumulationState === "building"
+        ? "#f59e0b"
+        : "#94a3b8";
+
+  return (
+    <View style={[styles.card, { backgroundColor: cfg.bg, borderColor: cfg.border }]}> 
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <FontAwesome name={cfg.icon as any} size={18} color={cfg.color} />
+        <Text style={{ fontSize: 15, fontWeight: "800", color: cfg.color, letterSpacing: 0.4 }}>
+          {cfg.label}
+        </Text>
+      </View>
+
+      <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8, lineHeight: 15 }}>
+        {cfg.hint}
+      </Text>
+
+      <View style={[styles.divider, { borderTopColor: cfg.border + "30" }]} />
+
+      <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: "600", marginBottom: 4 }}>
+        Trigger: {triggerDetail}
+      </Text>
+
+      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: trigger.pullback?.triggered ? "#22c55e" : "#94a3b840" }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Pullback</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: trigger.breakout?.triggered ? "#22c55e" : "#94a3b840" }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Breakout</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accumulationColor }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Accumulation: {accumulationLabel}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -1472,6 +1568,10 @@ export function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors:
             </Text>
           )}
         </View>
+      )}
+
+      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "WATCH" || signal.signal === "HOLD") && signal.entry_trigger && (
+        <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
