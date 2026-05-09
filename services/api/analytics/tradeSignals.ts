@@ -227,6 +227,108 @@ export async function getKuwaitSignal(params: KuwaitSignalParams): Promise<Kuwai
   return data.data;
 }
 
+// ── Technical Batch (Daily Scores) ─────────────────────────────────────────
+
+export interface TechnicalBatchRun {
+  id: number;
+  started_at: number | null;
+  finished_at: number | null;
+  status: "running" | "completed" | "failed" | string;
+  triggered_by: string;
+  requested_by_user_id: number | null;
+  segment: string;
+  total_symbols: number;
+  processed_symbols: number;
+  success_count: number;
+  failed_count: number;
+  message: string | null;
+}
+
+export interface TechnicalBatchRow {
+  symbol: string;
+  company_name: string | null;
+  segment: string | null;
+  signal: string | null;
+  reason: string | null;
+  trend_directional: number;
+  speed_momentum: number;
+  buying_pressure: number;
+  key_price_level: number;
+  overall_score: number | null;
+  raw_technical_score: number | null;
+  risk_adjusted_score: number | null;
+  score_gap?: number | null;
+  action_recommendation?: "EXECUTE" | "HOLD" | "WATCH" | "AVOID" | "FLAG" | null;
+  action_note?: string | null;
+  action_priority?: number | null;
+  error: string | null;
+}
+
+export interface TechnicalBatchSnapshot {
+  run: TechnicalBatchRun | null;
+  rows: TechnicalBatchRow[];
+}
+
+export interface RunTechnicalBatchParams {
+  background?: boolean;
+  segment?: string;
+  max_concurrency?: number;
+  limit?: number;
+}
+
+export interface RunTechnicalBatchResponse {
+  accepted: boolean;
+  already_running: boolean;
+  run: TechnicalBatchRun | null;
+  summary?: {
+    run_id: number;
+    status: string;
+    total_symbols: number;
+    processed_symbols: number;
+    success_count: number;
+    failed_count: number;
+    message: string;
+  };
+  message: string;
+}
+
+/** Fetch latest daily technical batch run snapshot. */
+export async function getTechnicalBatchLatest(limit = 300): Promise<TechnicalBatchSnapshot> {
+  const { data } = await api.get<{ status: string; data: TechnicalBatchSnapshot }>(
+    "/api/v1/trade-signals/technical-batch/latest",
+    { params: { limit } },
+  );
+  return data.data;
+}
+
+/** Fetch a specific technical batch run snapshot. */
+export async function getTechnicalBatchRunById(runId: number, limit = 300): Promise<TechnicalBatchSnapshot> {
+  const { data } = await api.get<{ status: string; data: TechnicalBatchSnapshot }>(
+    `/api/v1/trade-signals/technical-batch/${runId}`,
+    { params: { limit } },
+  );
+  return data.data;
+}
+
+/** Trigger technical scoring for the full Kuwait stock universe. */
+export async function runTechnicalBatchScan(params: RunTechnicalBatchParams = {}): Promise<RunTechnicalBatchResponse> {
+  const runInBackground = params.background ?? true;
+  const { data } = await api.post<{ status: string; data: RunTechnicalBatchResponse }>(
+    "/api/v1/trade-signals/technical-batch/run",
+    null,
+    {
+      params: {
+        background: runInBackground,
+        segment: params.segment ?? "PREMIER",
+        max_concurrency: params.max_concurrency ?? 4,
+        limit: params.limit,
+      },
+      timeout: runInBackground ? undefined : 20 * 60 * 1000,
+    },
+  );
+  return data.data;
+}
+
 // ── Exit Signal (used by Holdings position monitor) ─────────────────────────
 
 export interface ExitSignalParams {
