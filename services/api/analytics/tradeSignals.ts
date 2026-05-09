@@ -226,3 +226,91 @@ export async function getKuwaitSignal(params: KuwaitSignalParams): Promise<Kuwai
   );
   return data.data;
 }
+
+// ── Exit Signal (used by Holdings position monitor) ─────────────────────────
+
+export interface ExitSignalParams {
+  entry_price: number;
+  bars_held: number;
+  exchange?: string;
+}
+
+export interface ExitSignal {
+  timestamp: string;
+  action: "HOLD" | "TRIM" | "EXIT";
+  confidence: number | null;
+  suggested_trim_pct: number | null;
+  reason: string;
+  notes: string[];
+}
+
+export interface PositionMonitor {
+  symbol: string;
+  shares: number;
+  entry_price: number;
+  current_price: number;
+  pnl_pct: number;
+  exit_signal: ExitSignal;
+}
+
+function fallbackExitSignal(reason: string): ExitSignal {
+  return {
+    timestamp: new Date().toISOString(),
+    action: "HOLD",
+    confidence: null,
+    suggested_trim_pct: null,
+    reason,
+    notes: [],
+  };
+}
+
+function mapKuwaitSignalToExitSignal(signal: KuwaitSignal): ExitSignal {
+  const raw = String(signal.signal ?? "NEUTRAL").toUpperCase();
+  const action: ExitSignal["action"] =
+    raw === "SELL" ? "EXIT" : raw === "NEUTRAL" ? "TRIM" : "HOLD";
+
+  const confidenceScore = Number(signal.confluence_details?.total_score ?? NaN);
+  const confidence = Number.isFinite(confidenceScore)
+    ? Math.max(0, Math.min(100, Math.round(confidenceScore)))
+    : null;
+
+  const suggestedTrim = action === "TRIM" ? 25 : null;
+  const notes = Array.isArray(signal.alerts) ? signal.alerts.filter(Boolean) : [];
+  const reason = notes[0] ?? `Signal ${raw} from technical model`;
+
+  return {
+    timestamp: signal.timestamp ?? new Date().toISOString(),
+    action,
+    confidence,
+    suggested_trim_pct: suggestedTrim,
+    reason,
+    notes,
+  };
+}
+
+/**
+ * Fetch an exit signal for holdings monitor.
+ *
+ * 1) Try dedicated backend endpoint when available.
+ * 2) Fallback to Kuwait signal mapping.
+ * 3) Never throw for monitor-only UI; return HOLD fallback instead.
+ */
+export async function getExitSignal(symbol: string, params: ExitSignalParams): Promise<ExitSignal> {
+  try {
+    const { data } = await api.get<{ status: string; data: ExitSignal }>(
+      "/api/v1/trade-signals/exit-signal",
+      { params: { symbol, ...params } },
+    );
+    return data.data;
+  } catch {
+    try {
+      const signal = await getKuwaitSignal({
+        symbol,
+        exchange: params.exchange,
+      });
+      return mapKuwaitSignalToExitSignal(signal);
+    } catch {
+      return fallbackExitSignal("Exit signal is temporarily unavailable.");
+    }
+  }
+}
