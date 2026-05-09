@@ -37,7 +37,7 @@ export interface HoldingCardData {
   allocation?: number;
 }
 
-export function HoldingCard({ holding }: { holding: HoldingCardData }) {
+export const HoldingCard = React.memo(function HoldingCard({ holding }: { holding: HoldingCardData }) {
   const { colors, mode } = useThemeStore();
 
   // Compute derived values with memoization
@@ -212,7 +212,7 @@ export function HoldingCard({ holding }: { holding: HoldingCardData }) {
       </View>
     </LinearGradient>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

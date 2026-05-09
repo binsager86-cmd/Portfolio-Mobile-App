@@ -230,7 +230,7 @@ const cs = StyleSheet.create({
   overrideBadge: { paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginTop: 2 },
   editRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4, justifyContent: "flex-end" as const },
   editInput: { width: 80, height: 30, borderWidth: 1, borderRadius: 4, paddingHorizontal: 6, fontSize: 12 },
-  editBtn: { width: 26, height: 26, borderRadius: 4, justifyContent: "center" as const, alignItems: "center" as const },
+  editBtn: { width: 34, height: 34, borderRadius: 6, justifyContent: "center" as const, alignItems: "center" as const },
   totalCashRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: 2 },
   totalCashLabel: { fontSize: 13, fontWeight: "600" },
   totalCashValue: { fontSize: 16, fontWeight: "800" },
