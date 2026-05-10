@@ -2,6 +2,7 @@
  * Trade Signals API client.
  */
 
+import { isAxiosError } from "axios";
 import api from "../client";
 
 export type Quarter = "q1" | "q2" | "q3" | "q4";
@@ -218,13 +219,38 @@ export interface KuwaitSignalParams {
   total_trades?: number;
 }
 
+const SIGNAL_ENGINE_UNAVAILABLE_MESSAGE =
+  "Signal engine is temporarily unavailable. Please try again shortly.";
+
+function sanitizeSignalEngineError(err: unknown): unknown {
+  if (!isAxiosError(err)) return err;
+  const detail = err.response?.data?.detail;
+  if (typeof detail !== "string") return err;
+  const lower = detail.toLowerCase();
+  if (
+    lower.includes("importerror")
+    || lower.includes("cannot import name")
+    || lower.includes("module not found")
+    || lower.includes("/workspace/")
+  ) {
+    if (err.response?.data && typeof err.response.data === "object") {
+      (err.response.data as { detail?: string }).detail = SIGNAL_ENGINE_UNAVAILABLE_MESSAGE;
+    }
+  }
+  return err;
+}
+
 /** Fetch a Kuwait multi-factor technical signal from the signal engine. */
 export async function getKuwaitSignal(params: KuwaitSignalParams): Promise<KuwaitSignal> {
-  const { data } = await api.get<{ status: string; data: KuwaitSignal }>(
-    "/api/v1/trade-signals/kuwait-signal",
-    { params },
-  );
-  return data.data;
+  try {
+    const { data } = await api.get<{ status: string; data: KuwaitSignal }>(
+      "/api/v1/trade-signals/kuwait-signal",
+      { params },
+    );
+    return data.data;
+  } catch (err) {
+    throw sanitizeSignalEngineError(err);
+  }
 }
 
 // ── Technical Batch (Daily Scores) ─────────────────────────────────────────
