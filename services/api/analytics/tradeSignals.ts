@@ -237,7 +237,18 @@ function sanitizeSignalEngineError(err: unknown): unknown {
     lower.includes(pattern),
   );
   if (hasInternalErrorPattern) {
-    (err.response!.data as { detail?: string }).detail = SIGNAL_ENGINE_UNAVAILABLE_MESSAGE;
+    return {
+      ...err,
+      response: err.response
+        ? {
+          ...err.response,
+          data:
+            err.response.data && typeof err.response.data === "object"
+              ? { ...err.response.data, detail: SIGNAL_ENGINE_UNAVAILABLE_MESSAGE }
+              : err.response.data,
+        }
+        : err.response,
+    };
   }
   return err;
 }
