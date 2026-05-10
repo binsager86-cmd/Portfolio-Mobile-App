@@ -233,13 +233,11 @@ function sanitizeSignalEngineError(err: unknown): unknown {
   const detail = err.response?.data?.detail;
   if (typeof detail !== "string") return err;
   const lower = detail.toLowerCase();
-  const isInternalSignalEngineError = SIGNAL_ENGINE_INTERNAL_ERROR_PATTERNS.some((pattern) =>
+  const hasInternalErrorPattern = SIGNAL_ENGINE_INTERNAL_ERROR_PATTERNS.some((pattern) =>
     lower.includes(pattern),
   );
-  if (isInternalSignalEngineError) {
-    if (err.response?.data && typeof err.response.data === "object") {
-      (err.response.data as { detail?: string }).detail = SIGNAL_ENGINE_UNAVAILABLE_MESSAGE;
-    }
+  if (hasInternalErrorPattern) {
+    (err.response!.data as { detail?: string }).detail = SIGNAL_ENGINE_UNAVAILABLE_MESSAGE;
   }
   return err;
 }
