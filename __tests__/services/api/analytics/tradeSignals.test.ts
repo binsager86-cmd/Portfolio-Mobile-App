@@ -40,7 +40,7 @@ describe("tradeSignals error sanitization", () => {
     });
   });
 
-  it("preserves non-server validation details", () => {
+  it("preserves user-facing non-internal error details", () => {
     expect(sanitizeKuwaitSignalErrorDetail("Symbol not found.", 404)).toBe("Symbol not found.");
   });
 
