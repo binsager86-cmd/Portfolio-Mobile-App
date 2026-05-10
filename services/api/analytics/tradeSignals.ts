@@ -4,6 +4,69 @@
 
 import api from "../client";
 
+type SignalEngineErrorResponse = {
+  status?: number;
+  data?: {
+    detail?: string;
+    [key: string]: unknown;
+  };
+};
+
+type SignalEngineError = {
+  response?: SignalEngineErrorResponse;
+  message?: string;
+};
+
+export function sanitizeKuwaitSignalErrorDetail(detail?: string, status?: number): string | undefined {
+  const normalizedDetail = detail?.trim();
+  if (normalizedDetail) {
+    const lowerDetail = normalizedDetail.toLowerCase();
+    if (
+      lowerDetail.includes("importerror") ||
+      lowerDetail.includes("cannot import name") ||
+      lowerDetail.includes("signal_engine") ||
+      lowerDetail.includes("traceback")
+    ) {
+      return "Technical analysis is temporarily unavailable while the signal engine is being restored. Please try again shortly.";
+    }
+    return normalizedDetail;
+  }
+
+  if (status != null && status >= 500) {
+    return "Technical analysis is temporarily unavailable. Please try again shortly.";
+  }
+
+  return undefined;
+}
+
+function normalizeKuwaitSignalError(error: unknown): unknown {
+  if (!error || typeof error !== "object") {
+    return error;
+  }
+
+  const apiError = error as SignalEngineError;
+  const response = apiError.response;
+  if (!response) {
+    return error;
+  }
+
+  const sanitizedDetail = sanitizeKuwaitSignalErrorDetail(response.data?.detail, response.status);
+  if (!sanitizedDetail) {
+    return error;
+  }
+
+  return {
+    ...apiError,
+    response: {
+      ...response,
+      data: {
+        ...(response.data ?? {}),
+        detail: sanitizedDetail,
+      },
+    },
+  };
+}
+
 export type Quarter = "q1" | "q2" | "q3" | "q4";
 export type QuarterRow = Record<Quarter, number | null>;
 
@@ -220,11 +283,15 @@ export interface KuwaitSignalParams {
 
 /** Fetch a Kuwait multi-factor technical signal from the signal engine. */
 export async function getKuwaitSignal(params: KuwaitSignalParams): Promise<KuwaitSignal> {
-  const { data } = await api.get<{ status: string; data: KuwaitSignal }>(
-    "/api/v1/trade-signals/kuwait-signal",
-    { params },
-  );
-  return data.data;
+  try {
+    const { data } = await api.get<{ status: string; data: KuwaitSignal }>(
+      "/api/v1/trade-signals/kuwait-signal",
+      { params },
+    );
+    return data.data;
+  } catch (error) {
+    throw normalizeKuwaitSignalError(error);
+  }
 }
 
 // ── Technical Batch (Daily Scores) ─────────────────────────────────────────
