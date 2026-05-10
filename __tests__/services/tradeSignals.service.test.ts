@@ -45,7 +45,7 @@ describe("getKuwaitSignal", () => {
     };
     mockApiGet.mockRejectedValueOnce(axiosLikeError);
 
-    await expect(getKuwaitSignal({ symbol: "UNKNOWN" }))
+    await expect(getKuwaitSignal({ symbol: "UNKNOWN", exchange: "KSE", segment: "PREMIER" }))
       .rejects
       .toMatchObject({
         response: { data: { detail: "Symbol not found." } },

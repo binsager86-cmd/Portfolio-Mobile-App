@@ -221,18 +221,22 @@ export interface KuwaitSignalParams {
 
 const SIGNAL_ENGINE_UNAVAILABLE_MESSAGE =
   "Signal engine is temporarily unavailable. Please try again shortly.";
+const SIGNAL_ENGINE_INTERNAL_ERROR_PATTERNS = [
+  "importerror",
+  "cannot import name",
+  "module not found",
+  "/workspace/",
+] as const;
 
 function sanitizeSignalEngineError(err: unknown): unknown {
   if (!isAxiosError(err)) return err;
   const detail = err.response?.data?.detail;
   if (typeof detail !== "string") return err;
   const lower = detail.toLowerCase();
-  if (
-    lower.includes("importerror")
-    || lower.includes("cannot import name")
-    || lower.includes("module not found")
-    || lower.includes("/workspace/")
-  ) {
+  const isInternalSignalEngineError = SIGNAL_ENGINE_INTERNAL_ERROR_PATTERNS.some((pattern) =>
+    lower.includes(pattern),
+  );
+  if (isInternalSignalEngineError) {
     if (err.response?.data && typeof err.response.data === "object") {
       (err.response.data as { detail?: string }).detail = SIGNAL_ENGINE_UNAVAILABLE_MESSAGE;
     }
