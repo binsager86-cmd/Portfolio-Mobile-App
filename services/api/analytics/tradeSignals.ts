@@ -292,13 +292,112 @@ export interface RunTechnicalBatchResponse {
   message: string;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pickNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = toFiniteNumber(value);
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+function normalizeTechnicalBatchRow(row: TechnicalBatchRow): TechnicalBatchRow {
+  const raw = asRecord(row);
+  const factors = asRecord(raw.factors);
+  const subScores = asRecord(raw.sub_scores);
+  const rawSubScores = asRecord(raw.raw_sub_scores);
+  const confluenceDetails = asRecord(raw.confluence_details);
+  const confluenceSubScores = asRecord(confluenceDetails.sub_scores);
+  const confluenceRawSubScores = asRecord(confluenceDetails.raw_sub_scores);
+
+  const trendDirectional =
+    pickNumber(
+      raw.trend_directional,
+      raw.trendDirectional,
+      raw.directional_trend,
+      raw.trend,
+      factors.trend_directional,
+      factors.trend,
+      subScores.trend,
+      rawSubScores.trend,
+      confluenceSubScores.trend,
+      confluenceRawSubScores.trend,
+    ) ?? NaN;
+
+  const speedMomentum =
+    pickNumber(
+      raw.speed_momentum,
+      raw.speedMomentum,
+      raw.momentum_speed,
+      raw.momentum,
+      factors.speed_momentum,
+      factors.momentum,
+      subScores.momentum,
+      rawSubScores.momentum,
+      confluenceSubScores.momentum,
+      confluenceRawSubScores.momentum,
+    ) ?? NaN;
+
+  const buyingPressure =
+    pickNumber(
+      raw.buying_pressure,
+      raw.buyingPressure,
+      raw.volume_flow,
+      raw.buy_pressure,
+      factors.buying_pressure,
+      factors.volume_flow,
+      subScores.volume_flow,
+      rawSubScores.volume_flow,
+      confluenceSubScores.volume_flow,
+      confluenceRawSubScores.volume_flow,
+    ) ?? NaN;
+
+  const keyPriceLevel =
+    pickNumber(
+      raw.key_price_level,
+      raw.keyPriceLevel,
+      raw.key_levels,
+      raw.key_level,
+      raw.support_resistance,
+      factors.key_price_level,
+      factors.support_resistance,
+      subScores.support_resistance,
+      rawSubScores.support_resistance,
+      confluenceSubScores.support_resistance,
+      confluenceRawSubScores.support_resistance,
+    ) ?? NaN;
+
+  return {
+    ...row,
+    trend_directional: trendDirectional,
+    speed_momentum: speedMomentum,
+    buying_pressure: buyingPressure,
+    key_price_level: keyPriceLevel,
+    overall_score: pickNumber(raw.overall_score, raw.overallScore),
+    raw_technical_score: pickNumber(raw.raw_technical_score, raw.rawTechnicalScore),
+    risk_adjusted_score: pickNumber(raw.risk_adjusted_score, raw.riskAdjustedScore),
+    score_gap: pickNumber(raw.score_gap, raw.scoreGap),
+  };
+}
+
 /** Fetch latest daily technical batch run snapshot. */
 export async function getTechnicalBatchLatest(limit = 300): Promise<TechnicalBatchSnapshot> {
   const { data } = await api.get<{ status: string; data: TechnicalBatchSnapshot }>(
     "/api/v1/trade-signals/technical-batch/latest",
     { params: { limit } },
   );
-  return data.data;
+  return {
+    ...data.data,
+    rows: (data.data.rows ?? []).map((row) => normalizeTechnicalBatchRow(row)),
+  };
 }
 
 /** Fetch a specific technical batch run snapshot. */
@@ -307,7 +406,10 @@ export async function getTechnicalBatchRunById(runId: number, limit = 300): Prom
     `/api/v1/trade-signals/technical-batch/${runId}`,
     { params: { limit } },
   );
-  return data.data;
+  return {
+    ...data.data,
+    rows: (data.data.rows ?? []).map((row) => normalizeTechnicalBatchRow(row)),
+  };
 }
 
 /** Trigger technical scoring for the full Kuwait stock universe. */
