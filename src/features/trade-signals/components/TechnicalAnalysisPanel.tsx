@@ -99,12 +99,14 @@ function Row({
   );
 }
 
-// ── Score bar (beginner labelled) ────────────────────────────────────
+// ── Score bar (beginner labelled, tappable for breakdown) ───────────
 function ScoreBar({
   icon,
   label,
   hint,
   value,
+  adjustedValue,
+  detail,
   max = 100,
   colors,
 }: {
@@ -112,31 +114,100 @@ function ScoreBar({
   label: string;
   hint: string;
   value: number;
+  adjustedValue?: number;
+  detail?: string;
   max?: number;
   colors: ThemePalette;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const pct = Math.min(1, Math.max(0, value / max));
   const barColor =
     pct >= 0.7 ? "#22c55e" : pct >= 0.5 ? "#f59e0b" : "#ef4444";
   const grade =
     pct >= 0.7 ? "Strong" : pct >= 0.5 ? "Moderate" : "Weak";
+
+  const adjPct = adjustedValue != null ? Math.min(1, Math.max(0, adjustedValue / max)) : null;
+  const adjColor =
+    adjPct == null ? colors.textMuted
+      : adjPct >= 0.7 ? "#22c55e"
+      : adjPct >= 0.5 ? "#f59e0b"
+      : "#ef4444";
+  const adjGrade =
+    adjPct == null ? "—"
+      : adjPct >= 0.7 ? "Strong"
+      : adjPct >= 0.5 ? "Moderate"
+      : "Weak";
+
   return (
     <View style={{ marginBottom: 12 }}>
-      <View style={styles.scoreBarRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.scoreBarLabel, { color: colors.textPrimary }]}>
-            {icon}  {label}
-          </Text>
-          <Text style={[styles.scoreBarHint, { color: colors.textMuted }]}>{hint}</Text>
+      <Pressable
+        onPress={() => setExpanded((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} breakdown`}
+        style={styles.scoreBarPressable}
+      >
+        <View style={styles.scoreBarRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.scoreBarLabel, { color: colors.textPrimary }]}>
+              {icon}  {label}
+            </Text>
+            <Text style={[styles.scoreBarHint, { color: colors.textMuted }]}>{hint}</Text>
+          </View>
+          <View style={styles.scoreBarValRow}>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.scoreBarVal, { color: barColor }]}>{value}</Text>
+              <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
+            </View>
+            <FontAwesome
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={10}
+              color={colors.textMuted}
+            />
+          </View>
         </View>
-        <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.scoreBarVal, { color: barColor }]}>{value}</Text>
-          <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
+        <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
+          <View style={[styles.scoreBarFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
         </View>
-      </View>
-      <View style={[styles.scoreBarTrack, { backgroundColor: colors.borderColor }]}>
-        <View style={[styles.scoreBarFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
-      </View>
+      </Pressable>
+
+      {expanded && (
+        <View style={[styles.scoreBarExpanded, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
+          {/* Raw vs Adjusted comparison */}
+          <View style={styles.scoreBarBreakdownRow}>
+            <View style={styles.scoreBarBreakdownCol}>
+              <Text style={[styles.scoreBarBreakdownLabel, { color: colors.textMuted }]}>Raw Score</Text>
+              <Text style={[styles.scoreBarBreakdownVal, { color: barColor }]}>{value}</Text>
+              <Text style={[styles.scoreBarBreakdownGrade, { color: barColor }]}>{grade}</Text>
+              <View style={[styles.scoreBarMiniTrack, { backgroundColor: colors.borderColor }]}>
+                <View style={[styles.scoreBarMiniFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
+              </View>
+              <Text style={[styles.scoreBarBreakdownNote, { color: colors.textMuted }]}>Before regime adjustment</Text>
+            </View>
+
+            <View style={[styles.scoreBarBreakdownDivider, { backgroundColor: colors.borderColor }]} />
+
+            <View style={styles.scoreBarBreakdownCol}>
+              <Text style={[styles.scoreBarBreakdownLabel, { color: colors.textMuted }]}>Adjusted Score</Text>
+              <Text style={[styles.scoreBarBreakdownVal, { color: adjColor }]}>
+                {adjustedValue != null ? adjustedValue : "—"}
+              </Text>
+              <Text style={[styles.scoreBarBreakdownGrade, { color: adjColor }]}>{adjGrade}</Text>
+              {adjPct != null && (
+                <View style={[styles.scoreBarMiniTrack, { backgroundColor: colors.borderColor }]}>
+                  <View style={[styles.scoreBarMiniFill, { width: `${adjPct * 100}%`, backgroundColor: adjColor }]} />
+                </View>
+              )}
+              <Text style={[styles.scoreBarBreakdownNote, { color: colors.textMuted }]}>Used in final signal</Text>
+            </View>
+          </View>
+
+          {detail != null && (
+            <Text style={[styles.scoreBarBreakdownDetail, { color: colors.textSecondary, borderTopColor: colors.borderColor }]}>
+              {detail}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -609,6 +680,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
   const r = signal.risk_metrics;
   const p = signal.probabilities;
   const raw = c.raw_sub_scores as KuwaitSignalSubScores;
+  const adj = c.sub_scores as KuwaitSignalSubScores;
 
   const entryMid =
     e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
@@ -643,12 +715,12 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </View>
 
       {/* ── Entry Trigger ──────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY") && signal.entry_trigger && (
+      {signal.entry_trigger && (
         <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && <PriceLadder signal={signal} colors={colors} />}
+      <PriceLadder signal={signal} colors={colors} />
 
       {/* ── Execution levels ─────────────────────────────────── */}
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
@@ -713,29 +785,6 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
               colors={colors}
             />
           )}
-          <View style={[styles.divider, { borderTopColor: colors.borderColor }]} />
-          <Row
-            label="Max Loss per Share"
-            hint="If stop loss is hit, this is how many fils you lose per share"
-            value={fmtFils(r.risk_per_share_fils)}
-            valueColor="#ef444499"
-            colors={colors}
-          />
-          <Row
-            label="Profit vs Risk Ratio"
-            hint="For every 1 fil you risk, you could potentially make this much"
-            value={
-              r.risk_reward_ratio != null
-                ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
-                : "—"
-            }
-            valueColor={
-              (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
-                : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
-                : "#ef4444"
-            }
-            colors={colors}
-          />
           <Row
             label="Order Type"
             hint="Use a limit order so you get the exact price you want"
@@ -746,18 +795,16 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       )}
 
       {/* ── Win chances ──────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
-        <SectionCard
-          title="🎲 Probability — What Are the Chances?"
-          subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
-          colors={colors}
-        >
-          <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
-        </SectionCard>
-      )}
+      <SectionCard
+        title="🎲 Probability — What Are the Chances?"
+        subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
+        colors={colors}
+      >
+        <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
+      </SectionCard>
 
       {/* ── Rich S/R Map ─────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && signal.confluence_details.rich_sr && (
+      {signal.confluence_details.rich_sr && (
         (() => {
           const richSR = signal.confluence_details.rich_sr!;
           const allLevels = [
@@ -820,7 +867,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       {/* ── Signal strength breakdown ─────────────────────────── */}
       <SectionCard
         title="📈 Signal Strength Breakdown"
-        subtitle="Five factors are scored. All must align for a strong signal."
+        subtitle="Five factors are scored. Tap any factor to see raw vs regime-adjusted scores."
         colors={colors}
       >
         <ScoreBar
@@ -828,6 +875,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           label="Trend Direction"
           hint="Is the stock consistently moving in the right direction?"
           value={raw.trend}
+          adjustedValue={adj.trend}
+          detail="Measures EMA alignment, ADX trend strength, and price momentum direction. High values indicate a clear, sustained upward trend."
           colors={colors}
         />
         <ScoreBar
@@ -835,6 +884,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           label="Speed & Momentum"
           hint="How fast and strong is the current price move?"
           value={raw.momentum}
+          adjustedValue={adj.momentum}
+          detail="Combines RSI, MACD signal crossover, and rate-of-change. A high score means the price is accelerating with conviction."
           colors={colors}
         />
         <ScoreBar
@@ -842,6 +893,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           label="Buying Pressure"
           hint="Are large investors actively accumulating this stock?"
           value={raw.volume_flow}
+          adjustedValue={adj.volume_flow}
+          detail="Tracks On-Balance Volume (OBV), Chaikin Money Flow (CMF), and volume-weighted price trends to detect institutional accumulation."
           colors={colors}
         />
         <ScoreBar
@@ -849,6 +902,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           label="Key Price Levels"
           hint="Is the price near a strong support level with room to run?"
           value={raw.support_resistance}
+          adjustedValue={adj.support_resistance}
+          detail="Evaluates proximity to support/resistance levels from Fibonacci, pivot points, swing highs/lows, and volume clusters."
           colors={colors}
         />
         <ScoreBar
@@ -856,6 +911,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           label="Risk vs Reward"
           hint="Is the potential gain worth the risk being taken?"
           value={raw.risk_reward}
+          adjustedValue={adj.risk_reward}
+          detail="Assesses the risk/reward ratio based on stop-loss distance vs profit targets. A score ≥ 70 means the trade offers at least 2:1 reward-to-risk."
           colors={colors}
         />
         <View style={[styles.totalRow, { borderTopColor: colors.borderColor }]}>
@@ -942,42 +999,62 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </SectionCard>
 
       {/* ── Position sizing ───────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
-        <SectionCard
-          title="💰 How Much to Invest"
-          subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
+      <SectionCard
+        title="💰 Risk & Position Sizing"
+        subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
+        colors={colors}
+      >
+        <Row
+          label="Suggested Position Size"
+          hint="Percentage of your total account to allocate to this trade"
+          value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
           colors={colors}
-        >
-          <Row
-            label="Suggested Position Size"
-            hint="Percentage of your total account to allocate to this trade"
-            value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
-            colors={colors}
-          />
-          <Row
-            label="Worst-Case Daily Loss"
-            hint="Statistical worst single day loss — happens in about 5% of cases"
-            value={fmtFils(r.cvar_95_fils)}
-            valueColor="#ef444499"
-            colors={colors}
-          />
-          <Row
-            label="Ease of Trading (Liquidity)"
-            hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
-            value={
-              r.liquidity_adjustment_factor != null
-                ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
-                : "—"
-            }
-            valueColor={
-              (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
-                : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
-                : "#ef4444"
-            }
-            colors={colors}
-          />
-        </SectionCard>
-      )}
+        />
+        <Row
+          label="Profit vs Risk Ratio"
+          hint="For every 1 fil you risk, you could potentially make this much"
+          value={
+            r.risk_reward_ratio != null
+              ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
+              : "—"
+          }
+          valueColor={
+            (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
+              : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
+              : "#ef4444"
+          }
+          colors={colors}
+        />
+        <Row
+          label="Max Loss per Share"
+          hint="If stop loss is hit, this is how many fils you lose per share"
+          value={fmtFils(r.risk_per_share_fils)}
+          valueColor="#ef444499"
+          colors={colors}
+        />
+        <Row
+          label="Worst-Case Daily Loss"
+          hint="Statistical worst single day loss — happens in about 5% of cases"
+          value={fmtFils(r.cvar_95_fils)}
+          valueColor="#ef444499"
+          colors={colors}
+        />
+        <Row
+          label="Ease of Trading (Liquidity)"
+          hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
+          value={
+            r.liquidity_adjustment_factor != null
+              ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
+              : "—"
+          }
+          valueColor={
+            (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
+              : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
+              : "#ef4444"
+          }
+          colors={colors}
+        />
+      </SectionCard>
 
       {/* ── Alerts ───────────────────────────────────────────── */}
       {signal.alerts.length > 0 && (
@@ -1314,12 +1391,29 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 6 },
 
   // Score bar
+  scoreBarPressable: { borderRadius: 6 },
   scoreBarRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4, alignItems: "flex-start" },
+  scoreBarValRow: { alignItems: "flex-end", flexDirection: "row", gap: 8, alignSelf: "center" },
   scoreBarLabel: { fontSize: 12, fontWeight: "700" },
   scoreBarHint: { fontSize: 10, marginTop: 1, lineHeight: 13 },
   scoreBarVal: { fontSize: 14, fontWeight: "800" },
   scoreBarTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   scoreBarFill: { height: 6, borderRadius: 3 },
+  scoreBarExpanded: {
+    borderRadius: 8, borderWidth: 1, padding: 10, marginTop: 6,
+  },
+  scoreBarBreakdownRow: { flexDirection: "row", gap: 8 },
+  scoreBarBreakdownCol: { flex: 1, alignItems: "center", gap: 3 },
+  scoreBarBreakdownDivider: { width: 1, alignSelf: "stretch", opacity: 0.5 },
+  scoreBarBreakdownLabel: { fontSize: 9, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4 },
+  scoreBarBreakdownVal: { fontSize: 20, fontWeight: "800" },
+  scoreBarBreakdownGrade: { fontSize: 9, fontWeight: "700" },
+  scoreBarMiniTrack: { height: 4, borderRadius: 2, overflow: "hidden", width: "100%", marginTop: 2 },
+  scoreBarMiniFill: { height: 4, borderRadius: 2 },
+  scoreBarBreakdownNote: { fontSize: 9, textAlign: "center", marginTop: 2 },
+  scoreBarBreakdownDetail: {
+    fontSize: 10, lineHeight: 14, marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth,
+  },
 
   totalRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, marginTop: 8, borderTopWidth: 1, alignItems: "center" },
   totalLabel: { fontSize: 13, fontWeight: "700" },
