@@ -304,7 +304,7 @@ function toFiniteNumber(value: unknown): number | null {
 function pickNumber(...values: unknown[]): number | null {
   for (const value of values) {
     const parsed = toFiniteNumber(value);
-    if (parsed != null) return parsed;
+    if (parsed !== null) return parsed;
   }
   return null;
 }
