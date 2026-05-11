@@ -673,7 +673,11 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
   const chip = statusChipColors(run?.status || "unknown", colors);
 
   return (
-    <View style={[styles.wrapper, { backgroundColor: colors.bgPrimary }]}>
+    <ScrollView
+      style={[styles.wrapper, { backgroundColor: colors.bgPrimary }]}
+      contentContainerStyle={styles.wrapperContent}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={[styles.topCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <View style={styles.topHeader}>
           <View style={{ flex: 1 }}>
@@ -804,12 +808,7 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
             >
               <View style={[styles.tableInner, { width: layout.tableWidth }]}>
                 <TableHeader colors={colors} layout={layout} />
-                <ScrollView
-                  style={styles.tableVerticalScroll}
-                  contentContainerStyle={styles.tableVerticalContent}
-                  showsVerticalScrollIndicator
-                  nestedScrollEnabled
-                >
+                <View style={styles.tableRows}>
                   {sortedRows.map((row, index) => (
                     <TableRow
                       key={`${row.symbol}-${index}`}
@@ -821,19 +820,21 @@ export function TechnicalBatchOverview({ colors }: { colors: ThemePalette }) {
                       onToggleActionNote={toggleActionNote}
                     />
                   ))}
-                </ScrollView>
+                </View>
               </View>
             </ScrollView>
           </View>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
+  },
+  wrapperContent: {
     padding: 14,
     paddingBottom: 80,
     gap: 12,
@@ -987,7 +988,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   tableCard: {
-    flex: 1,
     borderWidth: 1,
     borderRadius: 18,
     overflow: "hidden",
@@ -999,22 +999,19 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tableScrollWrap: {
-    flex: 1,
+    width: "100%",
   },
   tableHorizontalScroll: {
-    flex: 1,
+    width: "100%",
   },
   tableHorizontalContent: {
-    minHeight: "100%",
+    flexGrow: 1,
   },
   tableInner: {
-    minHeight: "100%",
+    flexGrow: 1,
   },
-  tableVerticalScroll: {
-    flex: 1,
-  },
-  tableVerticalContent: {
-    minHeight: "100%",
+  tableRows: {
+    width: "100%",
   },
   loadingWrap: {
     minHeight: 180,
