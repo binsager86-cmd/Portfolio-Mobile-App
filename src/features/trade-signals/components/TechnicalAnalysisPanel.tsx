@@ -153,7 +153,7 @@ function ScoreBar({
             </Text>
             <Text style={[styles.scoreBarHint, { color: colors.textMuted }]}>{hint}</Text>
           </View>
-          <View style={{ alignItems: "flex-end", flexDirection: "row", gap: 8, alignSelf: "center" }}>
+          <View style={styles.scoreBarValRow}>
             <View style={{ alignItems: "flex-end" }}>
               <Text style={[styles.scoreBarVal, { color: barColor }]}>{value}</Text>
               <Text style={[{ fontSize: 9, color: barColor }]}>{grade}</Text>
@@ -1398,6 +1398,7 @@ const styles = StyleSheet.create({
   // Score bar
   scoreBarPressable: { borderRadius: 6 },
   scoreBarRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4, alignItems: "flex-start" },
+  scoreBarValRow: { alignItems: "flex-end", flexDirection: "row", gap: 8, alignSelf: "center" },
   scoreBarLabel: { fontSize: 12, fontWeight: "700" },
   scoreBarHint: { fontSize: 10, marginTop: 1, lineHeight: 13 },
   scoreBarVal: { fontSize: 14, fontWeight: "800" },
