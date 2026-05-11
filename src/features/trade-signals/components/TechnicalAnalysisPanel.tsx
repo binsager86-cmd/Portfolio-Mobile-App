@@ -715,12 +715,12 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </View>
 
       {/* ── Entry Trigger ──────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY") && signal.entry_trigger && (
+      {signal.entry_trigger && (
         <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && <PriceLadder signal={signal} colors={colors} />}
+      <PriceLadder signal={signal} colors={colors} />
 
       {/* ── Execution levels ─────────────────────────────────── */}
       {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
@@ -785,29 +785,6 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
               colors={colors}
             />
           )}
-          <View style={[styles.divider, { borderTopColor: colors.borderColor }]} />
-          <Row
-            label="Max Loss per Share"
-            hint="If stop loss is hit, this is how many fils you lose per share"
-            value={fmtFils(r.risk_per_share_fils)}
-            valueColor="#ef444499"
-            colors={colors}
-          />
-          <Row
-            label="Profit vs Risk Ratio"
-            hint="For every 1 fil you risk, you could potentially make this much"
-            value={
-              r.risk_reward_ratio != null
-                ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
-                : "—"
-            }
-            valueColor={
-              (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
-                : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
-                : "#ef4444"
-            }
-            colors={colors}
-          />
           <Row
             label="Order Type"
             hint="Use a limit order so you get the exact price you want"
@@ -818,18 +795,16 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       )}
 
       {/* ── Win chances ──────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
-        <SectionCard
-          title="🎲 Probability — What Are the Chances?"
-          subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
-          colors={colors}
-        >
-          <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
-        </SectionCard>
-      )}
+      <SectionCard
+        title="🎲 Probability — What Are the Chances?"
+        subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
+        colors={colors}
+      >
+        <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
+      </SectionCard>
 
       {/* ── Rich S/R Map ─────────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && signal.confluence_details.rich_sr && (
+      {signal.confluence_details.rich_sr && (
         (() => {
           const richSR = signal.confluence_details.rich_sr!;
           const allLevels = [
@@ -1024,42 +999,62 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </SectionCard>
 
       {/* ── Position sizing ───────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
-        <SectionCard
-          title="💰 How Much to Invest"
-          subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
+      <SectionCard
+        title="💰 Risk & Position Sizing"
+        subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
+        colors={colors}
+      >
+        <Row
+          label="Suggested Position Size"
+          hint="Percentage of your total account to allocate to this trade"
+          value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
           colors={colors}
-        >
-          <Row
-            label="Suggested Position Size"
-            hint="Percentage of your total account to allocate to this trade"
-            value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
-            colors={colors}
-          />
-          <Row
-            label="Worst-Case Daily Loss"
-            hint="Statistical worst single day loss — happens in about 5% of cases"
-            value={fmtFils(r.cvar_95_fils)}
-            valueColor="#ef444499"
-            colors={colors}
-          />
-          <Row
-            label="Ease of Trading (Liquidity)"
-            hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
-            value={
-              r.liquidity_adjustment_factor != null
-                ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
-                : "—"
-            }
-            valueColor={
-              (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
-                : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
-                : "#ef4444"
-            }
-            colors={colors}
-          />
-        </SectionCard>
-      )}
+        />
+        <Row
+          label="Profit vs Risk Ratio"
+          hint="For every 1 fil you risk, you could potentially make this much"
+          value={
+            r.risk_reward_ratio != null
+              ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
+              : "—"
+          }
+          valueColor={
+            (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
+              : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
+              : "#ef4444"
+          }
+          colors={colors}
+        />
+        <Row
+          label="Max Loss per Share"
+          hint="If stop loss is hit, this is how many fils you lose per share"
+          value={fmtFils(r.risk_per_share_fils)}
+          valueColor="#ef444499"
+          colors={colors}
+        />
+        <Row
+          label="Worst-Case Daily Loss"
+          hint="Statistical worst single day loss — happens in about 5% of cases"
+          value={fmtFils(r.cvar_95_fils)}
+          valueColor="#ef444499"
+          colors={colors}
+        />
+        <Row
+          label="Ease of Trading (Liquidity)"
+          hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
+          value={
+            r.liquidity_adjustment_factor != null
+              ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
+              : "—"
+          }
+          valueColor={
+            (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
+              : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
+              : "#ef4444"
+          }
+          colors={colors}
+        />
+      </SectionCard>
 
       {/* ── Alerts ───────────────────────────────────────────── */}
       {signal.alerts.length > 0 && (
