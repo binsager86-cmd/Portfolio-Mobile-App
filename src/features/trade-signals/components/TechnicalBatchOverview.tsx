@@ -296,8 +296,8 @@ function baseOverallScore(row: TechnicalBatchRow): number | null {
 
 function adjustedOverallScore(row: TechnicalBatchRow): number | null {
   if (row.risk_adjusted_score != null) return row.risk_adjusted_score;
-  if (row.raw_technical_score != null) return row.raw_technical_score;
   if (row.overall_score != null) return row.overall_score;
+  if (row.raw_technical_score != null) return row.raw_technical_score;
   return null;
 }
 
