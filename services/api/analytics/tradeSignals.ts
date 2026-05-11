@@ -293,7 +293,7 @@ export interface RunTechnicalBatchResponse {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function toFiniteNumber(value: unknown): number | null {
