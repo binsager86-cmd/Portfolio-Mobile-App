@@ -46,7 +46,7 @@ export function useGoogleSignIn() {
       }
       return await signInNative();
     } catch (err: unknown) {
-      console.error("[useGoogleSignIn] Error:", err);
+      if (__DEV__) console.error("[useGoogleSignIn] Error:", err);
       return {
         success: false,
         cancelled: false,
@@ -104,7 +104,7 @@ function signInWebRedirect(): void {
 // ── Native: @react-native-google-signin ─────────────────────────────
 
 async function signInNative(): Promise<GoogleSignInResult> {
-  console.info("[useGoogleSignIn] Platform: native");
+  if (__DEV__) console.info("[useGoogleSignIn] Platform: native");
   const { performNativeGoogleSignIn } = await import("@/lib/googleAuth");
   const result = await performNativeGoogleSignIn();
   if (result.success) {

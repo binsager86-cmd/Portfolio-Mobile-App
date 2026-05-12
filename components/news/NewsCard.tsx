@@ -53,7 +53,7 @@ interface NewsCardProps {
 
 // ── Component ───────────────────────────────────────────────────
 
-export function NewsCard({ item, colors, expertiseLevel, onPress, compact }: NewsCardProps) {
+export const NewsCard = React.memo(function NewsCard({ item, colors, expertiseLevel, onPress, compact }: NewsCardProps) {
   const summary = summarizeForUser(item, expertiseLevel);
   const impact = getNewsImpactBadge(item.impact);
   const sColor = sentimentColor(item.sentiment);
@@ -150,7 +150,7 @@ export function NewsCard({ item, colors, expertiseLevel, onPress, compact }: New
       )}
     </Pressable>
   );
-}
+});
 
 // ── Styles ──────────────────────────────────────────────────────
 

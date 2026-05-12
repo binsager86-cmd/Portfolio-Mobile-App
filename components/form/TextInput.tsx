@@ -15,7 +15,7 @@ interface TextInputProps extends Omit<RNTextInputProps, "style"> {
   hasError?: boolean;
 }
 
-export function TextInput({ hasError, ...props }: TextInputProps) {
+export const TextInput = React.memo(function TextInput({ hasError, ...props }: TextInputProps) {
   const { colors } = useThemeStore();
 
   return (
@@ -32,7 +32,7 @@ export function TextInput({ hasError, ...props }: TextInputProps) {
       ]}
     />
   );
-}
+});
 
 const styles = StyleSheet.create({
   input: {

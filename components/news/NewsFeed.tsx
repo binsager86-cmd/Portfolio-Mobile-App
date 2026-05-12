@@ -73,7 +73,7 @@ interface NewsFeedProps {
 
 // ── Component ───────────────────────────────────────────────────
 
-export function NewsFeed({
+export const NewsFeed = React.memo(function NewsFeed({
   portfolioOnly = false,
   compact = false,
   maxItems,
@@ -403,7 +403,7 @@ export function NewsFeed({
       </Modal>
     </View>
   );
-}
+});
 
 // ── Styles ──────────────────────────────────────────────────────
 

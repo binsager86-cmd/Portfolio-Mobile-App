@@ -18,7 +18,7 @@ interface NewsAttributionProps {
   colors: ThemePalette;
 }
 
-export function NewsAttribution({ source, url, isVerified, colors }: NewsAttributionProps) {
+export const NewsAttribution = React.memo(function NewsAttribution({ source, url, isVerified, colors }: NewsAttributionProps) {
   return (
     <View style={s.container}>
       <View style={s.left}>
@@ -44,15 +44,15 @@ export function NewsAttribution({ source, url, isVerified, colors }: NewsAttribu
       )}
     </View>
   );
-}
+});
 
-export function NewsDisclaimer({ colors }: { colors: ThemePalette }) {
+export const NewsDisclaimer = React.memo(function NewsDisclaimer({ colors }: { colors: ThemePalette }) {
   return (
     <Text style={[s.disclaimer, { color: colors.textMuted }]}>
       {i18n.t('news.disclaimer')}
     </Text>
   );
-}
+});
 
 const s = StyleSheet.create({
   container: {
