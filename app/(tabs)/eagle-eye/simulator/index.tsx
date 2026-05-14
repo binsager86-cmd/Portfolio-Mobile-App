@@ -325,7 +325,12 @@ export default function SimulatorIndexScreen() {
       </Text>
 
       {/* Strategy cards */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardsRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.cardsRow}
+        contentContainerStyle={styles.cardsContent}
+      >
         {(portfolios ?? []).map((p) => (
           <StrategyCard
             key={p.strategy_name}
@@ -353,7 +358,8 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 22, fontWeight: "700", marginBottom: 2 },
   pageSubtitle: { fontSize: 13, marginBottom: 8 },
 
-  cardsRow: { marginHorizontal: -4 },
+  cardsRow: { marginHorizontal: -4, minHeight: 220 },
+  cardsContent: { paddingHorizontal: 4, paddingBottom: 8, alignItems: "stretch" },
   card: {
     width: 200,
     marginHorizontal: 6,

@@ -186,7 +186,7 @@ export function useSimulatorPortfolios() {
     queryKey: simKeys.portfolios(),
     queryFn: async () => {
       const res = await api.get<{ portfolios: SimPortfolioSummary[] }>(
-        "/eagle-eye/simulator/portfolios"
+        "/api/v1/eagle-eye/simulator/portfolios"
       );
       return res.data.portfolios;
     },
@@ -198,7 +198,7 @@ export function useSimulatorCompare() {
   return useQuery({
     queryKey: simKeys.compare(),
     queryFn: async () => {
-      const res = await api.get<CompareResponse>("/eagle-eye/simulator/compare");
+      const res = await api.get<CompareResponse>("/api/v1/eagle-eye/simulator/compare");
       return res.data.strategies;
     },
     staleTime: 60_000,
@@ -210,7 +210,7 @@ export function useSimulatorPortfolioDetail(strategy: string) {
     queryKey: simKeys.portfolio(strategy),
     queryFn: async () => {
       const res = await api.get<{ status: string } & SimPortfolioDetail>(
-        `/eagle-eye/simulator/portfolios/${strategy}`
+        `/api/v1/eagle-eye/simulator/portfolios/${strategy}`
       );
       return res.data;
     },
@@ -232,7 +232,7 @@ export function useSimulatorTrades(
       if (status) params.status = status;
       if (ticker) params.ticker = ticker;
       const res = await api.get<{ status: string } & TradesPage>(
-        `/eagle-eye/simulator/portfolios/${strategy}/trades`,
+        `/api/v1/eagle-eye/simulator/portfolios/${strategy}/trades`,
         { params }
       );
       return res.data;
@@ -247,7 +247,7 @@ export function useSimulatorPerformance(strategy: string) {
     queryKey: simKeys.performance(strategy),
     queryFn: async () => {
       const res = await api.get<{ status: string } & SimPerformance>(
-        `/eagle-eye/simulator/portfolios/${strategy}/performance`
+        `/api/v1/eagle-eye/simulator/portfolios/${strategy}/performance`
       );
       return res.data;
     },
@@ -261,7 +261,7 @@ export function useSimulatorActivity(limit = 20) {
     queryKey: simKeys.activity(),
     queryFn: async () => {
       const res = await api.get<{ feed: ActivityItem[] }>(
-        "/eagle-eye/simulator/activity",
+        "/api/v1/eagle-eye/simulator/activity",
         { params: { limit } }
       );
       return res.data.feed;
@@ -281,7 +281,7 @@ export function useCloseSimulatorPosition() {
       currentPrice: number;
     }) => {
       const res = await api.post(
-        `/eagle-eye/simulator/positions/${positionId}/close`,
+        `/api/v1/eagle-eye/simulator/positions/${positionId}/close`,
         { current_price: currentPrice }
       );
       return res.data;
@@ -296,7 +296,7 @@ export function useRunSimulatorNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const res = await api.post("/eagle-eye/simulator/run");
+      const res = await api.post("/api/v1/eagle-eye/simulator/run");
       return res.data;
     },
     onSuccess: () => {
