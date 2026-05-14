@@ -205,9 +205,9 @@ export default function EagleEyeDnaScreen() {
             </View>
             {dna.threshold_profiles.map((tp, i) => {
               const srColor =
-                tp.success_rate >= 0.7
+                tp.success_rate >= 70
                   ? colors.success
-                  : tp.success_rate >= 0.5
+                  : tp.success_rate >= 50
                   ? colors.warning
                   : colors.danger;
               return (
@@ -234,7 +234,7 @@ export default function EagleEyeDnaScreen() {
                       { color: srColor, textAlign: "center", fontWeight: "700" },
                     ]}
                   >
-                    {Math.round(tp.success_rate * 100)}%
+                    {Math.round(tp.success_rate)}%
                   </Text>
                   <Text
                     style={[styles.thCol, { color: colors.textSecondary, textAlign: "right" }]}
