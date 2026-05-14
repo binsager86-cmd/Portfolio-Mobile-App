@@ -74,7 +74,7 @@ export async function initOfflineSync(
 
   const unsubscribe = NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) {
-      replayQueuedMutations().catch(console.error);
+      replayQueuedMutations().catch((e) => { if (__DEV__) console.error(e); });
     }
   });
 

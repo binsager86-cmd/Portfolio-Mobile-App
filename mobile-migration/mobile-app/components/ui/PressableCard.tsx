@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Platform, Pressable, StyleSheet, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -20,7 +20,7 @@ export const PressableCard: React.FC<{
   disabled?: boolean;
   testID?: string;
   accessibilityLabel?: string;
-}> = ({ onPress, children, style, disabled, testID, accessibilityLabel }) => {
+}> = React.memo(({ onPress, children, style, disabled, testID, accessibilityLabel }) => {
   const { colors } = useThemeStore();
   const haptics = useHaptics();
   const scale = useSharedValue(1);
@@ -29,7 +29,7 @@ export const PressableCard: React.FC<{
     transform: [{ scale: scale.value }],
   }));
 
-  const handlePressIn = () => {
+  const handlePressIn = useCallback(() => {
     if (disabled) return;
     scale.value = withSpring(0.97, Motion.spring.snappy);
     // Note: do NOT fire haptics here — Android fires onPressIn the moment a
@@ -37,19 +37,19 @@ export const PressableCard: React.FC<{
     // which causes spurious vibrations while scrolling lists. Fire on the
     // confirmed onPress instead, which Pressable cancels if the touch moves
     // past the slop threshold.
-  };
+  }, [disabled, scale]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
     scale.value = withSpring(1, Motion.spring.snappy);
-  };
+  }, [scale]);
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (disabled) return;
     if (onPress) {
       haptics.light();
       onPress();
     }
-  };
+  }, [disabled, haptics, onPress]);
 
   return (
     <AnimatedPressable
@@ -75,7 +75,7 @@ export const PressableCard: React.FC<{
       {children}
     </AnimatedPressable>
   );
-};
+});
 
 const styles = StyleSheet.create({
   base: {

@@ -14,7 +14,7 @@ interface FormFieldProps {
   children: ReactNode;
 }
 
-export function FormField({ label, error, required, children }: FormFieldProps) {
+export const FormField = React.memo(function FormField({ label, error, required, children }: FormFieldProps) {
   const { colors } = useThemeStore();
 
   return (
@@ -31,7 +31,7 @@ export function FormField({ label, error, required, children }: FormFieldProps) 
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -226,3 +226,295 @@ export async function getKuwaitSignal(params: KuwaitSignalParams): Promise<Kuwai
   );
   return data.data;
 }
+
+// ── Technical Batch (Daily Scores) ─────────────────────────────────────────
+
+export interface TechnicalBatchRun {
+  id: number;
+  started_at: number | null;
+  finished_at: number | null;
+  status: "running" | "completed" | "failed" | string;
+  triggered_by: string;
+  requested_by_user_id: number | null;
+  segment: string;
+  total_symbols: number;
+  processed_symbols: number;
+  success_count: number;
+  failed_count: number;
+  message: string | null;
+}
+
+export interface TechnicalBatchRow {
+  symbol: string;
+  company_name: string | null;
+  segment: string | null;
+  signal: string | null;
+  reason: string | null;
+  trend_directional: number;
+  speed_momentum: number;
+  buying_pressure: number;
+  key_price_level: number;
+  overall_score: number | null;
+  raw_technical_score: number | null;
+  risk_adjusted_score: number | null;
+  score_gap?: number | null;
+  action_recommendation?: "EXECUTE" | "HOLD" | "WATCH" | "AVOID" | "FLAG" | null;
+  action_note?: string | null;
+  action_priority?: number | null;
+  error: string | null;
+}
+
+export interface TechnicalBatchSnapshot {
+  run: TechnicalBatchRun | null;
+  rows: TechnicalBatchRow[];
+}
+
+export interface RunTechnicalBatchParams {
+  background?: boolean;
+  segment?: string;
+  max_concurrency?: number;
+  limit?: number;
+}
+
+export interface RunTechnicalBatchResponse {
+  accepted: boolean;
+  already_running: boolean;
+  run: TechnicalBatchRun | null;
+  summary?: {
+    run_id: number;
+    status: string;
+    total_symbols: number;
+    processed_symbols: number;
+    success_count: number;
+    failed_count: number;
+    message: string;
+  };
+  message: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pickNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = toFiniteNumber(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function normalizeTechnicalBatchRow(row: TechnicalBatchRow): TechnicalBatchRow {
+  const raw = asRecord(row);
+  const factors = asRecord(raw.factors);
+  const subScores = asRecord(raw.sub_scores);
+  const rawSubScores = asRecord(raw.raw_sub_scores);
+  const confluenceDetails = asRecord(raw.confluence_details);
+  const confluenceSubScores = asRecord(confluenceDetails.sub_scores);
+  const confluenceRawSubScores = asRecord(confluenceDetails.raw_sub_scores);
+
+  const trendDirectional =
+    pickNumber(
+      raw.trend_directional,
+      raw.trendDirectional,
+      raw.directional_trend,
+      raw.trend,
+      factors.trend_directional,
+      factors.trend,
+      subScores.trend,
+      rawSubScores.trend,
+      confluenceSubScores.trend,
+      confluenceRawSubScores.trend,
+    ) ?? NaN;
+
+  const speedMomentum =
+    pickNumber(
+      raw.speed_momentum,
+      raw.speedMomentum,
+      raw.momentum_speed,
+      raw.momentum,
+      factors.speed_momentum,
+      factors.momentum,
+      subScores.momentum,
+      rawSubScores.momentum,
+      confluenceSubScores.momentum,
+      confluenceRawSubScores.momentum,
+    ) ?? NaN;
+
+  const buyingPressure =
+    pickNumber(
+      raw.buying_pressure,
+      raw.buyingPressure,
+      raw.volume_flow,
+      raw.buy_pressure,
+      factors.buying_pressure,
+      factors.volume_flow,
+      subScores.volume_flow,
+      rawSubScores.volume_flow,
+      confluenceSubScores.volume_flow,
+      confluenceRawSubScores.volume_flow,
+    ) ?? NaN;
+
+  const keyPriceLevel =
+    pickNumber(
+      raw.key_price_level,
+      raw.keyPriceLevel,
+      raw.key_levels,
+      raw.key_level,
+      raw.support_resistance,
+      factors.key_price_level,
+      factors.support_resistance,
+      subScores.support_resistance,
+      rawSubScores.support_resistance,
+      confluenceSubScores.support_resistance,
+      confluenceRawSubScores.support_resistance,
+    ) ?? NaN;
+
+  return {
+    ...row,
+    trend_directional: trendDirectional,
+    speed_momentum: speedMomentum,
+    buying_pressure: buyingPressure,
+    key_price_level: keyPriceLevel,
+    overall_score: pickNumber(raw.overall_score, raw.overallScore),
+    raw_technical_score: pickNumber(raw.raw_technical_score, raw.rawTechnicalScore),
+    risk_adjusted_score: pickNumber(raw.risk_adjusted_score, raw.riskAdjustedScore),
+    score_gap: pickNumber(raw.score_gap, raw.scoreGap),
+  };
+}
+
+/** Fetch latest daily technical batch run snapshot. */
+export async function getTechnicalBatchLatest(limit = 300): Promise<TechnicalBatchSnapshot> {
+  const { data } = await api.get<{ status: string; data: TechnicalBatchSnapshot }>(
+    "/api/v1/trade-signals/technical-batch/latest",
+    { params: { limit } },
+  );
+  return {
+    ...data.data,
+    rows: (data.data.rows ?? []).map((row) => normalizeTechnicalBatchRow(row)),
+  };
+}
+
+/** Fetch a specific technical batch run snapshot. */
+export async function getTechnicalBatchRunById(runId: number, limit = 300): Promise<TechnicalBatchSnapshot> {
+  const { data } = await api.get<{ status: string; data: TechnicalBatchSnapshot }>(
+    `/api/v1/trade-signals/technical-batch/${runId}`,
+    { params: { limit } },
+  );
+  return {
+    ...data.data,
+    rows: (data.data.rows ?? []).map((row) => normalizeTechnicalBatchRow(row)),
+  };
+}
+
+/** Trigger technical scoring for the full Kuwait stock universe. */
+export async function runTechnicalBatchScan(params: RunTechnicalBatchParams = {}): Promise<RunTechnicalBatchResponse> {
+  const runInBackground = params.background ?? true;
+  const { data } = await api.post<{ status: string; data: RunTechnicalBatchResponse }>(
+    "/api/v1/trade-signals/technical-batch/run",
+    null,
+    {
+      params: {
+        background: runInBackground,
+        segment: params.segment ?? "PREMIER",
+        max_concurrency: params.max_concurrency ?? 4,
+        limit: params.limit,
+      },
+      timeout: runInBackground ? undefined : 20 * 60 * 1000,
+    },
+  );
+  return data.data;
+}
+
+// ── Exit Signal (used by Holdings position monitor) ─────────────────────────
+
+export interface ExitSignalParams {
+  entry_price: number;
+  bars_held: number;
+  exchange?: string;
+}
+
+export interface ExitSignal {
+  timestamp: string;
+  action: "HOLD" | "TRIM" | "EXIT";
+  confidence: number | null;
+  suggested_trim_pct: number | null;
+  reason: string;
+  notes: string[];
+}
+
+export interface PositionMonitor {
+  symbol: string;
+  shares: number;
+  entry_price: number;
+  current_price: number;
+  pnl_pct: number;
+  exit_signal: ExitSignal;
+}
+
+function fallbackExitSignal(reason: string): ExitSignal {
+  return {
+    timestamp: new Date().toISOString(),
+    action: "HOLD",
+    confidence: null,
+    suggested_trim_pct: null,
+    reason,
+    notes: [],
+  };
+}
+
+function mapKuwaitSignalToExitSignal(signal: KuwaitSignal): ExitSignal {
+  const raw = String(signal.signal ?? "NEUTRAL").toUpperCase();
+  const action: ExitSignal["action"] =
+    raw === "SELL" ? "EXIT" : raw === "NEUTRAL" ? "TRIM" : "HOLD";
+
+  const confidenceScore = Number(signal.confluence_details?.total_score ?? NaN);
+  const confidence = Number.isFinite(confidenceScore)
+    ? Math.max(0, Math.min(100, Math.round(confidenceScore)))
+    : null;
+
+  const suggestedTrim = action === "TRIM" ? 25 : null;
+  const notes = Array.isArray(signal.alerts) ? signal.alerts.filter(Boolean) : [];
+  const reason = notes[0] ?? `Signal ${raw} from technical model`;
+
+  return {
+    timestamp: signal.timestamp ?? new Date().toISOString(),
+    action,
+    confidence,
+    suggested_trim_pct: suggestedTrim,
+    reason,
+    notes,
+  };
+}
+
+/**
+ * Fetch an exit signal for holdings monitor.
+ *
+ * 1) Try dedicated backend endpoint when available.
+ * 2) Fallback to Kuwait signal mapping.
+ * 3) Never throw for monitor-only UI; return HOLD fallback instead.
+ */
+export async function getExitSignal(symbol: string, params: ExitSignalParams): Promise<ExitSignal> {
+  try {
+    const { data } = await api.get<{ status: string; data: ExitSignal }>(
+      "/api/v1/trade-signals/exit-signal",
+      { params: { symbol, ...params } },
+    );
+    return data.data;
+  } catch {
+    try {
+      const signal = await getKuwaitSignal({
+        symbol,
+        exchange: params.exchange,
+      });
+      return mapKuwaitSignalToExitSignal(signal);
+    } catch {
+      return fallbackExitSignal("Exit signal is temporarily unavailable.");
+    }
+  }
+}

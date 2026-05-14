@@ -47,6 +47,10 @@ export function AccessibleDragList<T extends DragItem>({
       data={data}
       keyExtractor={keyExtractor ?? ((item) => String(item.id))}
       contentContainerStyle={{ padding: UITokens.spacing.sm }}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews={true}
       renderItem={({ item, index }) => (
         <View
           style={[styles.row, { borderBottomColor: colors.borderColor }]}

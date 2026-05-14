@@ -109,7 +109,61 @@ When you're ready to point the backend at the real database:
 
 ---
 
-## Phase 2: Mobile App (React Native Expo) — *Not yet implemented*
+## Phase 2: Mobile App (React Native Expo)
 
-The `mobile-app/` folder is a placeholder for the Expo + React Native frontend
-that will consume the FastAPI backend. This will be built in Phase 2.
+React Native / Expo frontend located in `mobile-app/`. Consumes the FastAPI backend.
+
+---
+
+## Eagle Eye — Market Stage Intelligence (Phase 1)
+
+Eagle Eye is a rule-based market-stage classification system that analyses each stock's lifecycle position and produces a confidence score, recommended entry zone, stop-loss, and TP1 target.
+
+### What it does
+
+1. **Computes indicators** — EMA, RSI, MACD, ATR, Bollinger Bands, OBV, CMF, MFI, ADX on the most-recent price window.
+2. **Classifies lifecycle stage** — eight stages: `DORMANT`, `STEALTH_ACCUMULATION`, `EARLY_BREAKOUT`, `MARKUP_TRENDING`, `ACCELERATION_CLIMAX`, `DISTRIBUTION_TOPPING`, `MARKDOWN_DECLINE`, `CAPITULATION_EXHAUSTION`.
+3. **Scores confidence** — 0–100 score derived from rule-based sub-signals; calibrated against 20-day TP1 hit-rate on 336 real predictions.
+4. **Computes entry / stop / TP1** — ATR-floor plus nearest-resistance approach, with per-stage caps to prevent unreachable targets.
+
+### Calibration results (Phase 1, reality check — 336 predictions)
+
+| Confidence band | N   | TP1 hit % | Cal error |
+|-----------------|-----|-----------|-----------|
+| 00–49           | 263 | 31.2 %    | 6.7 pp    |
+| 50–59           | 53  | 50.9 %    | 3.6 pp    |
+| 60–69           | 10  | 70.0 %    | 5.5 pp    |
+
+- Monotonic: 31.2 % < 50.9 % < 70.0 % ✓
+- Spread: 38.8 pp ≥ 20 pp ✓
+- Mean calibration error: **5.3 %** (threshold 15 %) ✓
+
+### Nightly recompute schedule (APScheduler, `app/cron/scheduler.py`)
+
+All times are **Asia/Kuwait**, Sunday–Thursday (Boursa Kuwait trading week).
+
+| Job ID | When | What |
+|--------|------|------|
+| `eagle_eye_intraday_refresh` | 13:15 Sun–Thu | Intraday score refresh near Boursa close |
+| `eagle_eye_nightly` | 14:05 Sun–Thu | Post-close full recompute (no DNA rebuild) |
+| `eagle_eye_weekly_dna` | 14:30 Sunday | Weekly full DNA rebuild |
+
+### Stage labels (UI)
+
+| Internal key | Scanner (short) | Detail screen (full) |
+|---|---|---|
+| `DORMANT` | Sleeping | Sleeping |
+| `STEALTH_ACCUMULATION` | Accumulating | Quiet Buying |
+| `EARLY_BREAKOUT` | Breaking Out | Breaking Out |
+| `MARKUP_TRENDING` | Rising | Rising Strong |
+| `ACCELERATION_CLIMAX` | Overheating | Overheating |
+| `DISTRIBUTION_TOPPING` | Topping | Topping Out |
+| `MARKDOWN_DECLINE` | Falling | Falling |
+| `CAPITULATION_EXHAUSTION` | Bottoming | Crashed — Possible Bottom |
+
+### Key backend files
+
+- `app/services/eagle_eye/rating_engine.py` — core scoring + TP1/stop logic
+- `app/services/eagle_eye/indicators.py` — technical indicator library
+- `app/cron/scheduler.py` — APScheduler job definitions
+- `tests/test_eagle_eye_indicators.py` — Phase 1 unit tests (10 tests, all pass)

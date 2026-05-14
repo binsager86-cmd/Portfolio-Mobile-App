@@ -8,6 +8,7 @@ Run with:  uvicorn app.main:app --reload --port 8004
 import logging
 import os
 import json
+import asyncio
 from contextlib import asynccontextmanager
 
 import tracemalloc
@@ -86,22 +87,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("✅  Database found: %s", settings.database_abs_path)
 
-        # ── [B-3] Schema managed by Alembic — run pending migrations ─
-        # `alembic upgrade head` is also called in Dockerfile/Procfile before
-        # the server starts.  This in-process call handles development restarts
-        # and any edge case where the pre-start hook was skipped.
-        try:
-            from alembic.config import Config as AlembicConfig
-            from alembic import command as alembic_command
-            import os
-            app_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            alembic_ini = os.path.join(app_root, "alembic.ini")
-            alembic_cfg = AlembicConfig(alembic_ini)
-            alembic_cfg.set_main_option("script_location", os.path.join(app_root, "alembic"))
-            alembic_command.upgrade(alembic_cfg, "head")
-            logger.info("✅  Alembic: schema is up to date")
-        except Exception as alembic_err:
-            logger.warning("⚠️  Alembic upgrade failed (DB may be pre-stamped): %s", alembic_err)
+        # ── [B-3] Schema managed by Alembic — skipped in-process to avoid
+        # SQLite lock contention on OneDrive/networked filesystems.
+        # Run `alembic upgrade head` from the CLI before starting the server
+        # when schema changes are needed.
+        logger.info("ℹ️  Alembic in-process migration skipped (run CLI manually if needed)")
 
         # ── Ensure core tables exist for legacy/stamped databases ──
         # Some local DBs can be stamped to head without all table DDL actually
@@ -114,6 +104,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅  Core schema ensured (idempotent)")
         except Exception as schema_err:
             logger.warning("⚠️  Core schema ensure failed: %s", schema_err)
+
+        # ── Eagle Eye tables ──────────────────────────────────────────────
+        try:
+            from app.services.eagle_eye.ingest import init_schema as _ee_init
+            _ee_init()
+            logger.info("✅  Eagle Eye schema ensured (idempotent)")
+        except Exception as ee_err:
+            logger.warning("⚠️  Eagle Eye schema init failed: %s", ee_err)
 
         # ── Additive migration: portfolios.currency (missing in early prod DBs) ──
         try:
@@ -144,20 +142,16 @@ async def lifespan(app: FastAPI):
         # ── Backfill yf_ticker for existing stocks ───────────────
         try:
             from app.core.database import exec_sql, query_df
-            from app.data.stock_lists import KUWAIT_STOCKS, US_STOCKS
-            ticker_map = {}
-            for s in KUWAIT_STOCKS:
-                ticker_map[s["symbol"].upper()] = s["yf_ticker"]
-            for s in US_STOCKS:
-                ticker_map[s["symbol"].upper()] = s["yf_ticker"]
+            from app.data.stock_lists import resolve_yf_ticker_from_lists
             missing = query_df(
-                "SELECT id, symbol FROM stocks WHERE yf_ticker IS NULL OR yf_ticker = ''"
+                "SELECT id, symbol, currency FROM stocks WHERE yf_ticker IS NULL OR yf_ticker = ''"
             )
             if missing is not None and not missing.empty:
                 updated = 0
                 for _, row in missing.iterrows():
                     sym = str(row["symbol"]).strip().upper()
-                    yf = ticker_map.get(sym)
+                    ccy = str(row.get("currency") or "KWD").strip().upper()
+                    yf = resolve_yf_ticker_from_lists(sym, ccy)
                     if yf:
                         exec_sql("UPDATE stocks SET yf_ticker = ? WHERE id = ?", (yf, row["id"]))
                         updated += 1
@@ -165,6 +159,38 @@ async def lifespan(app: FastAPI):
                     logger.info("Backfilled yf_ticker for %d existing stocks", updated)
         except Exception as e:
             logger.warning("yf_ticker backfill skipped: %s", e)
+
+        # ── Correct mismatched yf_ticker for known stocks ────────
+        # Symbols that exist in both the Kuwait and US reference lists (e.g. KRE)
+        # may have been stored with the wrong market ticker. Re-resolve and fix.
+        try:
+            from app.core.database import exec_sql, query_df
+            from app.data.stock_lists import resolve_yf_ticker_from_lists
+            all_stocks = query_df(
+                "SELECT id, symbol, currency, yf_ticker FROM stocks"
+                " WHERE yf_ticker IS NOT NULL AND yf_ticker != ''"
+            )
+            if all_stocks is not None and not all_stocks.empty:
+                corrected = 0
+                for _, row in all_stocks.iterrows():
+                    sym = str(row["symbol"]).strip().upper()
+                    ccy = str(row.get("currency") or "KWD").strip().upper()
+                    stored = str(row["yf_ticker"]).strip()
+                    resolved = resolve_yf_ticker_from_lists(sym, ccy)
+                    if resolved and resolved != stored:
+                        exec_sql(
+                            "UPDATE stocks SET yf_ticker = ? WHERE id = ?",
+                            (resolved, row["id"]),
+                        )
+                        corrected += 1
+                        logger.info(
+                            "Corrected yf_ticker for %s (%s): %s → %s",
+                            sym, ccy, stored, resolved,
+                        )
+                if corrected:
+                    logger.info("Corrected yf_ticker for %d stock(s)", corrected)
+        except Exception as e:
+            logger.warning("yf_ticker correction skipped: %s", e)
     start_scheduler()
 
     # ── Production security audit ────────────────────────────────────
@@ -198,6 +224,22 @@ async def lifespan(app: FastAPI):
         await close_client()
     except Exception as exc:
         logger.debug("HTTP client shutdown skipped: %s", exc)
+
+    # Cancel any in-flight background technical-batch tasks so they can mark
+    # their runs as "failed" before the process exits.  Without this, a
+    # graceful restart leaves runs stuck in "running" status, which causes the
+    # technical-analysis page to spin indefinitely on the next server start.
+    try:
+        from app.services.technical_batch_service import _BACKGROUND_TASKS
+        pending = list(_BACKGROUND_TASKS)
+        if pending:
+            logger.info("Cancelling %d in-flight technical batch task(s) for clean shutdown", len(pending))
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+    except Exception as exc:
+        logger.debug("Background task cleanup skipped: %s", exc)
+
     stop_scheduler()
     logger.info("👋  Backend API shutting down")
 

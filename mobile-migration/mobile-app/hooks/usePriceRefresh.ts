@@ -49,7 +49,7 @@ export function usePriceRefresh() {
       result = await updatePrices();
     } catch (e) {
       // Price update is best-effort; stale prices are still usable
-      console.warn("Price update failed:", e);
+      if (__DEV__) console.warn("Price update failed:", e);
     }
 
     // Single predicate-based invalidation — React Query walks the cache once

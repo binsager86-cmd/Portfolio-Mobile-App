@@ -347,6 +347,10 @@ function AddStockModal({
                 data={filteredStocks}
                 keyExtractor={(item) => item.symbol}
                 keyboardShouldPersistTaps="handled"
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={true}
                 renderItem={({ item, index }) => {
                   const active = selectedEntry?.symbol === item.symbol;
                   return (

@@ -4,7 +4,7 @@
  */
 
 import { useThemeStore } from "@/services/themeStore";
-import React from "react";
+import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { TextInput } from "./TextInput";
 
@@ -24,7 +24,7 @@ function formatDisplay(raw: string): string {
   return parts.length > 1 ? `${intPart}.${parts[1]}` : intPart;
 }
 
-export function NumberInput({
+export const NumberInput = React.memo(function NumberInput({
   value,
   onChangeText,
   placeholder,
@@ -33,11 +33,11 @@ export function NumberInput({
 }: NumberInputProps) {
   const { colors } = useThemeStore();
 
-  const handleChange = (text: string) => {
+  const handleChange = useCallback((text: string) => {
     // Strip formatting chars, keep digits, single decimal, leading minus
     const cleaned = text.replace(/[^0-9.-]/g, "");
     onChangeText(cleaned);
-  };
+  }, [onChangeText]);
 
   const displayed = formatDisplay(value);
 
@@ -73,7 +73,7 @@ export function NumberInput({
       hasError={hasError}
     />
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {
