@@ -305,6 +305,16 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
+            name="eagle-eye"
+            options={{
+              title: t("nav.eagleEye", "Eagle Eye"),
+              href: isAdmin || !showSidebar ? null : undefined,
+              tabBarIcon: ({ color }) => (
+                <TabBarIcon name="eye" color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="portfolio-tracker"
             options={{
               title: t("nav.tracker"),
@@ -413,11 +423,13 @@ const ls = StyleSheet.create({
     height: 44,
     alignItems: "center",
     justifyContent: "center",
+    // eslint-disable-next-line custom-styles/no-hardcoded-styles
     marginHorizontal: 4,
   },
   headerRightRow: {
     flexDirection: "row",
     alignItems: "center",
+    // eslint-disable-next-line custom-styles/no-hardcoded-styles
     marginRight: 4,
   },
 });
