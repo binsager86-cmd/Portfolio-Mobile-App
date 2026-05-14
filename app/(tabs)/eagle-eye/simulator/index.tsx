@@ -12,11 +12,12 @@ import {
   useSimulatorActivity,
   useSimulatorCompare,
   useSimulatorPortfolios,
+  useRunSimulatorNow,
   type SimPortfolioSummary,
   type StrategyName,
 } from "@/hooks/useSimulator";
 import { router } from "expo-router";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -292,8 +293,22 @@ export default function SimulatorIndexScreen() {
   const insets = useSafeAreaInsets();
 
   const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios();
+  const runNow = useRunSimulatorNow();
+  const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
+
+  const handleRunNow = useCallback(async () => {
+    setRunStatus("idle");
+    try {
+      await runNow.mutateAsync();
+      setRunStatus("ok");
+      setTimeout(() => setRunStatus("idle"), 4000);
+    } catch {
+      setRunStatus("err");
+      setTimeout(() => setRunStatus("idle"), 4000);
+    }
+  }, [runNow]);
 
   const handleCardPress = useCallback((strategy: string) => {
     router.push(`/eagle-eye/simulator/${strategy.toLowerCase()}`);
@@ -332,6 +347,36 @@ export default function SimulatorIndexScreen() {
       <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>
         Three parallel strategies • 10,000 KWD each • Live forward from May 14, 2026
       </Text>
+
+      {/* Manual run button */}
+      <Pressable
+        onPress={handleRunNow}
+        disabled={runNow.isPending}
+        style={[
+          styles.runBtn,
+          {
+            backgroundColor:
+              runStatus === "ok"
+                ? colors.success
+                : runStatus === "err"
+                ? colors.danger
+                : colors.accentPrimary,
+            opacity: runNow.isPending ? 0.6 : 1,
+          },
+        ]}
+      >
+        {runNow.isPending ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.runBtnText}>
+            {runStatus === "ok"
+              ? "✓ Simulator ran successfully"
+              : runStatus === "err"
+              ? "✗ Run failed — check logs"
+              : "▶  Run Simulator Now"}
+          </Text>
+        )}
+      </Pressable>
 
       {/* Strategy cards */}
       <ScrollView
@@ -413,4 +458,15 @@ const styles = StyleSheet.create({
   feedPnl: { fontSize: 12, fontWeight: "700", minWidth: 52, textAlign: "right" },
 
   emptyText: { fontSize: 13, textAlign: "center", marginVertical: 24 },
+
+  runBtn: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    minHeight: 44,
+  },
+  runBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });
