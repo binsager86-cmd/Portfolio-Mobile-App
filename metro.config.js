@@ -1,5 +1,6 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
 const { getDefaultConfig } = require("expo/metro-config");
+const exclusionList = require("metro-config/src/defaults/exclusionList");
 const path = require("path");
 
 /** @type {import('expo/metro-config').MetroConfig} */
@@ -20,6 +21,13 @@ config.resolver.unstable_conditionNames = [
   "require",
   "default",
 ];
+
+// Ignore transient Android build artifacts created by react-native-nitro-modules.
+// On Windows/OneDrive these folders can disappear while Metro attaches watchers,
+// which raises ENOENT and crashes the dev server.
+config.resolver.blockList = exclusionList([
+  /.*[\\/]node_modules[\\/]\.react-native-nitro-modules-[^\\/]+[\\/]android[\\/]build(?:[\\/].*)?$/,
+]);
 
 // Force jspdf to always resolve to its browser (ES) build,
 // even inside the SSR / node render bundle where Metro would
