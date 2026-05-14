@@ -48,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "fundamentals", icon: "flask", path: "/(tabs)/fundamental-analysis", minLevel: "normal" },
   { label: "tradeSignals", icon: "signal", path: "/(tabs)/trade-signals", minLevel: "normal" },
   { label: "eagleEye", icon: "eye", path: "/(tabs)/eagle-eye", minLevel: "normal" },
+  { label: "simulator", icon: "play-circle", path: "/(tabs)/eagle-eye/simulator", minLevel: "normal" },
   { label: "tracker", icon: "camera", path: "/(tabs)/portfolio-tracker" },
   { label: "dividends", icon: "money", path: "/(tabs)/dividends" },
   { label: "transactions", icon: "exchange", path: "/(tabs)/transactions", section: "sectionManagement" },
