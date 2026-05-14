@@ -118,15 +118,24 @@ function StrategyCard({
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-        {summary.wins}W / {summary.losses}L ={" "}
-        {summary.total_trades > 0
-          ? ((summary.wins / summary.total_trades) * 100).toFixed(1)
-          : "0.0"}
-        %
+        {summary.total_trades === 0
+          ? "Waiting for signal (\u226565% confidence)"
+          : `${summary.wins}W / ${summary.losses}L = ${((summary.wins / summary.total_trades) * 100).toFixed(1)}%`}
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
         {summary.open_positions_count} open positions
+      </Text>
+
+      <Text style={[styles.metaText, { color: colors.textMuted }]}>
+        Live since:{" "}
+        {summary.live_since
+          ? new Date(summary.live_since).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })
+          : "today"}
       </Text>
 
       <View style={styles.sparklineContainer}>
@@ -321,7 +330,7 @@ export default function SimulatorIndexScreen() {
         Paper Trading Simulator
       </Text>
       <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>
-        Three parallel strategies • 10,000 KWD each • Starting 2025-01-01
+        Three parallel strategies • 10,000 KWD each • Live forward from May 14, 2026
       </Text>
 
       {/* Strategy cards */}

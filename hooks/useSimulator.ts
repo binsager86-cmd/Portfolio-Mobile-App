@@ -42,6 +42,7 @@ export interface SimPortfolioSummary {
   profit_factor: number;
   max_drawdown_pct: number;
   equity_curve: EquityPoint[];
+  live_since: string | null;
 }
 
 export interface SimPosition {
