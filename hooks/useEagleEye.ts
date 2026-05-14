@@ -217,6 +217,11 @@ export function useEagleEyeScanner(filters?: ScannerFilters, enabled = true) {
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
+    // Auto-poll every 30 s while the backend is still warming up
+    refetchInterval: (query) =>
+      (query.state.data as ScannerResponse | undefined)?.status === "warming_up"
+        ? 30_000
+        : false,
   });
 }
 

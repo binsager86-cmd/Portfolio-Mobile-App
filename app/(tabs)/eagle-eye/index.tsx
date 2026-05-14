@@ -134,6 +134,8 @@ export default function EagleEyeScannerScreen() {
   );
   const keyExtractor = useCallback((item: RatedStock) => item.ticker, []);
 
+  const isWarmingUp = data?.status === "warming_up";
+
   const renderEmpty = () => {
     if (isLoading) {
       return (
@@ -142,6 +144,19 @@ export default function EagleEyeScannerScreen() {
             <StockRowSkeleton key={i} />
           ))}
         </>
+      );
+    }
+    if (isWarmingUp) {
+      return (
+        <View style={styles.centred}>
+          <ActivityIndicator size="large" color={colors.accentPrimary} />
+          <Text style={[styles.emptyText, { color: colors.textPrimary, marginTop: 16 }]}>
+            {EE.warmingUp}
+          </Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 8, fontSize: 13 }]}>
+            {EE.warmingUpSub}
+          </Text>
+        </View>
       );
     }
     if (isError) {

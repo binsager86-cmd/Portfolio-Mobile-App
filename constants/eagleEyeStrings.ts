@@ -277,4 +277,6 @@ export const EE = {
   // Loading / error
   loading: "Loading...",
   errorLoading: "Failed to load. Tap to retry.",
+  warmingUp: "Eagle Eye is warming up…",
+  warmingUpSub: "Analysis runs in the background. Refresh in a moment.",
 } as const;
