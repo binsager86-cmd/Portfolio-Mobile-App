@@ -11,11 +11,12 @@ import { getRegimeColors } from "@/constants/eagleEyeColors";
 import { EE, REGIME_LABELS } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { StockRow, StockRowSkeleton, computeRR } from "@/components/eagle-eye/StockRow";
-import { useEagleEyeRegime, useEagleEyeScanner, type RatedStock } from "@/hooks/useEagleEye";
+import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -57,6 +58,22 @@ export default function EagleEyeScannerScreen() {
     });
 
   const { data: regimeData } = useEagleEyeRegime();
+  const eeRefresh = useEagleEyeRefresh();
+  const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
+  const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRunEagleEye = useCallback(async () => {
+    if (eeRefresh.isPending) return;
+    if (runStatusTimer.current) clearTimeout(runStatusTimer.current);
+    setRunStatus("idle");
+    try {
+      await eeRefresh.mutateAsync({ tickers: [] });
+      setRunStatus("ok");
+    } catch {
+      setRunStatus("err");
+    }
+    runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
+  }, [eeRefresh]);
 
   const stocks: RatedStock[] = useMemo(() => {
     let list = data?.stocks ?? [];
@@ -197,6 +214,35 @@ export default function EagleEyeScannerScreen() {
             <Text style={[styles.countBadge, { color: colors.textMuted }]}>
               {stocks.length} stocks
             </Text>
+
+            <Pressable
+              onPress={handleRunEagleEye}
+              disabled={eeRefresh.isPending}
+              style={[
+                styles.eeRunBtn,
+                {
+                  backgroundColor:
+                    runStatus === "ok"
+                      ? colors.success
+                      : runStatus === "err"
+                      ? colors.danger
+                      : colors.accentPrimary,
+                  opacity: eeRefresh.isPending ? 0.6 : 1,
+                },
+              ]}
+            >
+              {eeRefresh.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.eeRunBtnText}>
+                  {runStatus === "ok"
+                    ? "\u2713 Running..."
+                    : runStatus === "err"
+                    ? "\u2717 Failed"
+                    : "\u25b6 Run"}
+                </Text>
+              )}
+            </Pressable>
           </View>
         </View>
       </View>
@@ -478,4 +524,14 @@ const styles = StyleSheet.create({
     borderRadius: UITokens.radius.md,
   },
   retryText: { fontWeight: "600", fontSize: 14 },
+  eeRunBtn: {
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 52,
+    minHeight: 28,
+  },
+  eeRunBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
 });
