@@ -33,6 +33,14 @@ export interface SignalItem {
   description?: string | null;
 }
 
+export interface VolumeContext {
+  relative_volume: number;
+  liquidity_tier: "TRADEABLE" | "WATCH_ONLY" | "ILLIQUID";
+  is_volume_confirmed: boolean;
+  volume_character: "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL";
+  volume_trend_5d: "EXPANDING" | "CONTRACTING" | "NEUTRAL";
+}
+
 export interface RatedStock {
   ticker: string;
   name_en: string;
@@ -46,6 +54,7 @@ export interface RatedStock {
   tp1?: number | null;
   last_price?: number | null;
   computed_at?: string | null;
+  volume_context?: VolumeContext | null;
 }
 
 export interface ScannerResponse {
@@ -98,6 +107,18 @@ export interface ThresholdProfile {
   avg_loss_pct?: number | null;
 }
 
+export interface VolumeProfile {
+  avg_rel_vol_t90?: number | null;
+  avg_rel_vol_t60?: number | null;
+  avg_rel_vol_t30?: number | null;
+  avg_rel_vol_t14?: number | null;
+  avg_rel_vol_t7?: number | null;
+  avg_rel_vol_t3?: number | null;
+  avg_rel_vol_t0?: number | null;
+  volume_pattern?: "GRADUAL_BUILD" | "LATE_SPIKE" | "EARLY_SIGNAL" | "NO_CLEAR_PATTERN" | null;
+  min_rel_vol_for_real_move?: number | null;
+}
+
 export interface BehavioralDNA {
   ticker: string;
   total_events_analyzed: number;
@@ -105,6 +126,8 @@ export interface BehavioralDNA {
   threshold_profiles: ThresholdProfile[];
   dominant_pattern?: string | null;
   computed_at?: string | null;
+  pre_move_volume_profile?: VolumeProfile | null;
+  fakeout_volume_profile?: VolumeProfile | null;
 }
 
 export interface DNAResponse {

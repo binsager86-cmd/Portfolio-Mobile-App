@@ -8,7 +8,7 @@
  * Route: /(tabs)/eagle-eye/[ticker]-dna
  */
 
-import { getDiscriminativePowerColor } from "@/constants/eagleEyeColors";
+import { getDiscriminativePowerColor as _getDiscriminativePowerColor } from "@/constants/eagleEyeColors";
 import { EE, PERSONALITY_LABELS, signalLabel } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeDna } from "@/hooks/useEagleEye";
@@ -36,7 +36,6 @@ export default function EagleEyeDnaScreen() {
   const ticker = rawParam.replace(/-dna$/i, "").toUpperCase().trim();
 
   const { colors } = useThemeStore();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const { data, isLoading, isError, refetch } = useEagleEyeDna(ticker);
@@ -254,6 +253,35 @@ export default function EagleEyeDnaScreen() {
           </View>
         )}
 
+        {/* ── Volume Signature ─────────────────────────────────────────────── */}
+        {dna.pre_move_volume_profile &&
+          (dna.pre_move_volume_profile.avg_rel_vol_t0 != null ||
+            dna.pre_move_volume_profile.avg_rel_vol_t7 != null) && (
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+              ]}
+            >
+              <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                Volume Signature
+              </Text>
+              {dna.pre_move_volume_profile.volume_pattern && (
+                <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>
+                  {dna.pre_move_volume_profile.volume_pattern.replace(/_/g, " ")}
+                  {dna.pre_move_volume_profile.min_rel_vol_for_real_move != null
+                    ? `  ·  min rel-vol ${dna.pre_move_volume_profile.min_rel_vol_for_real_move.toFixed(2)}×`
+                    : ""}
+                </Text>
+              )}
+              <VolumeProfileChart
+                realProfile={dna.pre_move_volume_profile}
+                fakeoutProfile={dna.fakeout_volume_profile ?? undefined}
+                colors={colors}
+              />
+            </View>
+          )}
+
         {/* ── Freshness ────────────────────────────────────────────────────── */}
         {dna.computed_at && (
           <Text style={[styles.freshness, { color: colors.textMuted }]}>
@@ -308,6 +336,101 @@ function StatCell({
     <View style={styles.statCell}>
       <Text style={[styles.statValue, { color: colors.textPrimary }]}>{value}</Text>
       <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Simple bar chart showing avg relative-volume at each pre-move lookback. */
+function VolumeProfileChart({
+  realProfile,
+  fakeoutProfile,
+  colors,
+}: {
+  realProfile: import("@/hooks/useEagleEye").VolumeProfile;
+  fakeoutProfile?: import("@/hooks/useEagleEye").VolumeProfile;
+  colors: ThemePalette;
+}) {
+  const LOOKBACKS: Array<{ key: keyof import("@/hooks/useEagleEye").VolumeProfile; label: string }> = [
+    { key: "avg_rel_vol_t90", label: "t−90" },
+    { key: "avg_rel_vol_t60", label: "t−60" },
+    { key: "avg_rel_vol_t30", label: "t−30" },
+    { key: "avg_rel_vol_t14", label: "t−14" },
+    { key: "avg_rel_vol_t7",  label: "t−7"  },
+    { key: "avg_rel_vol_t3",  label: "t−3"  },
+    { key: "avg_rel_vol_t0",  label: "t−0"  },
+  ];
+
+  const realVals  = LOOKBACKS.map(l => (realProfile[l.key] as number | null | undefined) ?? 0);
+  const fakeVals  = fakeoutProfile
+    ? LOOKBACKS.map(l => (fakeoutProfile[l.key] as number | null | undefined) ?? 0)
+    : null;
+  const maxVal = Math.max(...realVals, ...(fakeVals ?? []), 2.0);
+
+  const BAR_H = 80;
+
+  return (
+    <View style={{ gap: 6 }}>
+      {/* legend */}
+      <View style={{ flexDirection: "row", gap: 12, marginBottom: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: "#34D399" }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>Real moves</Text>
+        </View>
+        {fakeVals && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: "#F87171" }} />
+            <Text style={{ fontSize: 10, color: colors.textMuted }}>Fakeouts</Text>
+          </View>
+        )}
+        <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: "auto" }}>
+          1.0× = avg
+        </Text>
+      </View>
+
+      {/* bars */}
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 4, height: BAR_H + 20 }}>
+        {LOOKBACKS.map((lb, i) => {
+          const rv = realVals[i];
+          const fv = fakeVals ? fakeVals[i] : null;
+          const realH = Math.max(4, (rv / maxVal) * BAR_H);
+          const fakeH = fv != null ? Math.max(4, (fv / maxVal) * BAR_H) : 0;
+          return (
+            <View key={lb.key} style={{ flex: 1, alignItems: "center", gap: 2 }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 1, height: BAR_H }}>
+                <View
+                  style={{
+                    width: fakeVals ? 8 : 14,
+                    height: realH,
+                    backgroundColor: rv >= 1.5 ? "#34D399" : rv >= 0.8 ? "#6EE7B7" : "#D1FAE5",
+                    borderRadius: 2,
+                  }}
+                />
+                {fv != null && (
+                  <View
+                    style={{
+                      width: 8,
+                      height: fakeH,
+                      backgroundColor: "#F87171",
+                      borderRadius: 2,
+                    }}
+                  />
+                )}
+              </View>
+              <Text style={{ fontSize: 9, color: colors.textMuted, textAlign: "center" }}>
+                {lb.label}
+              </Text>
+              <Text style={{ fontSize: 9, color: colors.textSecondary, fontVariant: ["tabular-nums"] }}>
+                {rv > 0 ? rv.toFixed(1) : "—"}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* 1.0× baseline indicator */}
+      <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: "right" }}>
+        Bars show avg relative volume at each lookback day before move start
+      </Text>
     </View>
   );
 }

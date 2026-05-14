@@ -138,6 +138,25 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
           </Text>
         )}
 
+        {/* Row 4: volume indicator */}
+        {item.volume_context != null && (() => {
+          const vc = item.volume_context!;
+          const rv = vc.relative_volume;
+          const confirmed = vc.is_volume_confirmed;
+          const tier = vc.liquidity_tier;
+          const [label, volColor]: [string, string] =
+            tier === "ILLIQUID"             ? ["💧 Illiquid", colors.textMuted]
+            : tier === "WATCH_ONLY"         ? ["💧 Low liquidity", "#E6A817"]
+            : confirmed && rv >= 1.5        ? [`🔥 ${rv.toFixed(1)}× vol`, "#34D399"]
+            : !confirmed                    ? [`⚠ Low vol (${rv.toFixed(1)}×)`, "#E6A817"]
+            :                                [`${rv.toFixed(1)}× vol`, colors.textMuted];
+          return (
+            <Text style={{ fontSize: 10, color: volColor, fontVariant: ["tabular-nums"] }}>
+              {label}
+            </Text>
+          );
+        })()}
+
         <View style={styles.confLine}>
           <View
             style={[
