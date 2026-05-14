@@ -26,6 +26,7 @@ config.resolver.unstable_conditionNames = [
 // which raises ENOENT and crashes the dev server.
 config.resolver.blockList = [
   /.*[\\/]node_modules[\\/]\.react-native-nitro-modules-[^\\/]+[\\/]android[\\/]build(?:[\\/].*)?$/,
+  /.*[\\/]node_modules[\\/]\.expo-modules-autolinking-[^\\/]+[\\/]android(?:[\\/].*)?$/,
 ];
 
 // Force jspdf to always resolve to its browser (ES) build,

@@ -1,22 +1,28 @@
-import { Link } from 'expo-router';
+import { Link, type ExternalPathString } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { Platform } from 'react-native';
 
+type ExternalLinkProps = Omit<React.ComponentProps<typeof Link>, 'href'> & {
+  href: ExternalPathString;
+};
+
 export function ExternalLink(
-  props: Omit<React.ComponentProps<typeof Link>, 'href'> & { href: string }
+  props: ExternalLinkProps
 ) {
+  const url = props.href;
+
   return (
     <Link
       target="_blank"
       {...props}
-      href={props.href}
+      href={url}
       onPress={(e) => {
         e.preventDefault();
         if (Platform.OS !== 'web') {
-          WebBrowser.openBrowserAsync(props.href as string);
+          WebBrowser.openBrowserAsync(url);
         } else {
-          window.open(props.href, '_blank', 'noopener,noreferrer');
+          window.open(url, '_blank', 'noopener,noreferrer');
         }
       }}
     />

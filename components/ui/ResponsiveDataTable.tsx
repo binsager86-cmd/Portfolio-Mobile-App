@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 import { UITokens } from "@/constants/uiTokens";
@@ -45,7 +45,6 @@ export function ResponsiveDataTable<T>({
   const visibleCols = columns;
 
   // Memoised to avoid creating a new function reference on every parent render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const renderCardItem = React.useCallback(
     ({ item }: { item: T }) => (
       <PressableCard
@@ -71,7 +70,6 @@ export function ResponsiveDataTable<T>({
       </PressableCard>
     ),
     // visibleCols and callbacks are the real deps; colors from hook is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibleCols, colors, onPressItem, itemA11yLabel, isPhone],
   );
 
@@ -79,7 +77,6 @@ export function ResponsiveDataTable<T>({
     <FlashList
       data={data}
       keyExtractor={keyExtractor ?? ((item, i) => String((item as { id?: string | number }).id ?? i))}
-      estimatedItemSize={84}
       renderItem={renderCardItem as (info: { item: T }) => React.ReactElement}
     />
   );
@@ -96,14 +93,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: UITokens.spacing.xs,
     minHeight: 32,
   },
   label: {
     fontSize: UITokens.typography.caption.size,
     opacity: 0.7,
     flexShrink: 0,
-    marginRight: UITokens.spacing.sm,
+    marginEnd: UITokens.spacing.sm,
   },
   valueWrap: {
     flex: 1,
