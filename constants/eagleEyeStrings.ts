@@ -279,4 +279,29 @@ export const EE = {
   errorLoading: "Failed to load. Tap to retry.",
   warmingUp: "Eagle Eye is warming up…",
   warmingUpSub: "Analysis runs in the background. Refresh in a moment.",
+
+  // ML Phase 3
+  mlColumnHeader: "ML",
+  mlDisclaimerTitle: "EXPERIMENTAL: ML signals are in active evaluation.",
+  mlDisclaimerBody:
+    "Do not use for trading decisions yet. Compare with rule-based confidence column. Auto-disable triggers active.",
+  mlDisclaimerDismiss: "Dismiss for session",
+  mlAutoDisabled: "⚠️ ML signals auto-disabled. Calibration anomaly detected. Investigating.",
+  mlDisabled: "ML signals temporarily disabled.",
+  mlMethodologyLink: "What does this mean?",
+  mlSignalCardTitle: "ML Signal",
+  mlCollectingData: "Collecting baseline data",
+  mlInsufficientVariance: "Insufficient model variance",
+  mlNotActive: "ML not active for this stock",
+  mlExperimentalNote: "⚠️ EXPERIMENTAL — do not trade on this signal yet.",
+  mlBandHigh: "HIGH",
+  mlBandMed: "MED",
+  mlBandLow: "LOW",
+  mlCalibrationVerdict: "Calibration verdict",
+  mlBandDescription: (band: string, pct: string) =>
+    band === "HIGH"
+      ? `Above ${pct} percentile of recent 90 days`
+      : band === "LOW"
+      ? `Below ${pct} percentile of recent 90 days`
+      : `Within middle range of recent 90 days`,
 } as const;

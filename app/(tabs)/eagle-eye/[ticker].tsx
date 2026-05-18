@@ -15,6 +15,7 @@ import { SafetyConfirmModal } from "@/components/eagle-eye/SafetyConfirmModal";
 import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { TradePlanCard } from "@/components/eagle-eye/TradePlanCard";
+import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
 import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeStock } from "@/hooks/useEagleEye";
@@ -230,6 +231,12 @@ export default function EagleEyeDetailScreen() {
             <TradePlanCard data={analysis} />
           </View>
         )}
+
+        {/* ── ML Signal Card (SHADOW roster stocks only) ────────────────────── */}
+        <View style={styles.section}>
+          <SectionTitle title={EE.mlSignalCardTitle} colors={colors} />
+          <MLSignalCard ticker={t} />
+        </View>
 
         {/* ── Confluence ────────────────────────────────────────────────────── */}
         {analysis.signals && analysis.signals.length > 0 && (

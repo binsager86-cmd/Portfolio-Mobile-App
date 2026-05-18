@@ -28,6 +28,21 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// ── Strategy metadata ─────────────────────────────────────────────────────────
+
+type TaggedPosition = SimPosition & { strategyName: string };
+
+const PORTFOLIO_META: Record<number, {
+  name: string;
+  minConfidence: number;
+  color: string;
+  allowedStages: readonly string[];
+}> = {
+  1: { name: "Conservative", minConfidence: 65, color: "#22c55e", allowedStages: ["EARLY_BREAKOUT", "MARKUP_TRENDING"] },
+  2: { name: "Moderate",     minConfidence: 60, color: "#f59e0b", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING"] },
+  3: { name: "Aggressive",   minConfidence: 55, color: "#ef4444", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING", "CAPITULATION_EXHAUSTION"] },
+};
+
 // ── Info row ─────────────────────────────────────────────────────────────────
 
 function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -181,13 +196,13 @@ export default function SimulatorPositionDetailScreen() {
   const { data: moderateTrades } = useSimulatorTrades("MODERATE", 1);
   const { data: aggressiveTrades } = useSimulatorTrades("AGGRESSIVE", 1);
 
-  const allTrades: SimPosition[] = [
-    ...(conservativeTrades?.trades ?? []),
-    ...(moderateTrades?.trades ?? []),
-    ...(aggressiveTrades?.trades ?? []),
+  const taggedTrades: TaggedPosition[] = [
+    ...(conservativeTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Conservative" })),
+    ...(moderateTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Moderate" })),
+    ...(aggressiveTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Aggressive" })),
   ];
 
-  const pos = allTrades.find((t) => t.id === positionId);
+  const pos = taggedTrades.find((t) => t.id === positionId);
 
   if (!pos) {
     return (
@@ -205,6 +220,11 @@ export default function SimulatorPositionDetailScreen() {
   const pnlKwd = pos.pnl_kwd ?? 0;
   const pnlColor = pnl >= 0 ? colors.success : colors.danger;
   const accentColor = isOpen ? colors.accentPrimary : pnlColor;
+
+  const meta = PORTFOLIO_META[pos.portfolio_id] ?? { name: "Unknown", minConfidence: 0, color: colors.accentPrimary, allowedStages: [] };
+  const crossStrategyOpen = taggedTrades.filter(
+    (t) => t.ticker === pos.ticker && t.status === "OPEN" && t.id !== pos.id
+  );
 
   return (
     <ScrollView
@@ -271,6 +291,52 @@ export default function SimulatorPositionDetailScreen() {
             </Text>
           </View>
         ) : null}
+      </View>
+
+      {/* Trigger Details */}
+      <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Trigger Details</Text>
+
+        <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Strategy</Text>
+          <View style={[styles.stratBadge, { backgroundColor: meta.color + "22" }]}>
+            <Text style={[styles.stratBadgeText, { color: meta.color }]}>{meta.name}</Text>
+          </View>
+        </View>
+
+        <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Confidence Gate</Text>
+          <Text style={[styles.infoValue, { color: colors.success }]}>
+            {pos.entry_confidence != null ? `${pos.entry_confidence.toFixed(1)}%` : "—"}{" "}
+            {"\u2265"} {meta.minConfidence}% min
+          </Text>
+        </View>
+
+        <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Stage Gate</Text>
+          <Text style={[styles.infoValue, { color: colors.success }]}>
+            {(pos.entry_stage ?? "—").replace(/_/g, " ")} (allowed)
+          </Text>
+        </View>
+
+        <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Price Source</Text>
+          <Text style={[styles.infoValue, { color: colors.textMuted }]}>Same-day close</Text>
+        </View>
+
+        <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Also Open In</Text>
+          <Text
+            style={[
+              styles.infoValue,
+              { color: crossStrategyOpen.length > 0 ? colors.textSecondary : colors.textMuted },
+            ]}
+          >
+            {crossStrategyOpen.length > 0
+              ? crossStrategyOpen.map((t) => t.strategyName).join(", ")
+              : "This strategy only"}
+          </Text>
+        </View>
       </View>
 
       {/* Trade plan */}
@@ -373,4 +439,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closeBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+
+  stratBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  stratBadgeText: { fontSize: 12, fontWeight: "700" },
 });

@@ -39,7 +39,9 @@ export default function EagleEyeDnaScreen() {
   const insets = useSafeAreaInsets();
 
   const { data, isLoading, isError, refetch } = useEagleEyeDna(ticker);
+  // "pending" kept for backward-compat; "unavailable" = not enough price history
   const isPending = data?.status === "pending";
+  const isUnavailable = data?.status === "unavailable";
   const dna = data?.data;
 
   const personality = dna?.dominant_pattern;
@@ -76,6 +78,22 @@ export default function EagleEyeDnaScreen() {
   }
 
   if (isError || !dna) {
+    if (isUnavailable) {
+      return (
+        <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
+          <BackHeader title={screenTitle} colors={colors} />
+          <View style={styles.centred}>
+            <FontAwesome name="bar-chart" size={28} color={colors.textMuted} />
+            <Text style={[styles.errorText, { color: colors.textPrimary, marginTop: 12 }]}>
+              Insufficient Price History
+            </Text>
+            <Text style={[{ color: colors.textMuted, fontSize: 13, textAlign: "center", marginTop: 6 }]}>
+              {data?.message ?? "Not enough trading history to build Behavioral DNA for this stock."}
+            </Text>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
         <BackHeader title={screenTitle} colors={colors} />

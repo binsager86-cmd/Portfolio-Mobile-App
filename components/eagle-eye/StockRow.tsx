@@ -18,6 +18,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { RatedStock } from "@/hooks/useEagleEye";
 import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
+import { MLBandBadge } from "./MLBandBadge";
+import type { MLBandLabel } from "./MLBandBadge";
 
 interface StockRowProps {
   item: RatedStock;
@@ -179,6 +181,18 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
           <Text style={[styles.confNum, { color: confColor }]}>{confPct.toFixed(0)}%</Text>
         </View>
       </View>
+
+      {/* ── ML band column ──────────────────────────────────── */}
+      <View style={styles.mlCol}>
+        <MLBandBadge
+          band={(item.ml_band?.band ?? null) as MLBandLabel}
+          accessibilityHint={
+            item.ml_band?.band
+              ? `ML band: ${item.ml_band.band}`
+              : "ML not active for this stock"
+          }
+        />
+      </View>
     </Pressable>
   );
 });
@@ -285,5 +299,11 @@ const styles = StyleSheet.create({
   },
   skelRect: {
     borderRadius: 4,
+  },
+  mlCol: {
+    width: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 4,
   },
 });

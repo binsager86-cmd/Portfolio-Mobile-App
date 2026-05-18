@@ -235,6 +235,13 @@ export default function SimulatorStrategyScreen() {
   const [tab, setTab] = useState<"open" | "closed" | "perf">("open");
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
+  const handlePositionPress = useCallback(
+    (posId: number) => {
+      router.push(`/eagle-eye/simulator/position/${posId}`);
+    },
+    []
+  );
+
   if (isLoading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
@@ -252,13 +259,6 @@ export default function SimulatorStrategyScreen() {
   }
 
   const { summary, equity_curve, open_positions, recent_closed_trades } = data;
-
-  const handlePositionPress = useCallback(
-    (posId: number) => {
-      router.push(`/eagle-eye/simulator/position/${posId}`);
-    },
-    []
-  );
 
   return (
     <ScrollView

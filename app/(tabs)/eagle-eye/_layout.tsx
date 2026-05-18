@@ -21,6 +21,7 @@ export default function EagleEyeLayout() {
       <Stack.Screen name="simulator/index" />
       <Stack.Screen name="simulator/[strategy]" />
       <Stack.Screen name="simulator/position/[id]" />
+      <Stack.Screen name="methodology" />
     </Stack>
   );
 }

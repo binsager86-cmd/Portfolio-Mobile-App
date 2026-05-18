@@ -41,6 +41,59 @@ export interface VolumeContext {
   volume_trend_5d: "EXPANDING" | "CONTRACTING" | "NEUTRAL";
 }
 
+export interface MLBandItem {
+  ticker: string;
+  band: string | null;
+  color: string | null;
+  emoji: string | null;
+  short_label: string | null;
+  as_of?: string | null;
+  calibrated_prob?: number | null;
+}
+
+export interface MLBandsResponse {
+  enabled: boolean;
+  disclaimer: string;
+  bands: MLBandItem[];
+}
+
+export interface MLDisplayStateResponse {
+  enabled: boolean;
+  config_enabled: boolean;
+  auto_disabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface MLMethodologySection {
+  heading: string;
+  body: string;
+}
+
+export interface MLMethodologyResponse {
+  title: string;
+  phase: string;
+  status: string;
+  disclaimer: string;
+  sections: MLMethodologySection[];
+}
+
+export interface MLBandCard {
+  ticker: string;
+  enabled: boolean;
+  band: string | null;
+  color?: string | null;
+  emoji?: string | null;
+  calibrated_prob?: number | null;
+  raw_prob?: number | null;
+  band_low_threshold?: number | null;
+  band_high_threshold?: number | null;
+  rule_stage?: string | null;
+  verdict?: string | null;
+  as_of?: string | null;
+  disclaimer: string;
+  methodology_link?: string | null;
+}
+
 export interface RatedStock {
   ticker: string;
   name_en: string;
@@ -55,6 +108,7 @@ export interface RatedStock {
   last_price?: number | null;
   computed_at?: string | null;
   volume_context?: VolumeContext | null;
+  ml_band?: MLBandItem | null;
 }
 
 export interface ScannerResponse {
@@ -183,6 +237,10 @@ export const eagleEyeKeys = {
   dna: (ticker: string) => [...eagleEyeKeys.all, "dna", ticker.toUpperCase()] as const,
   events: (ticker: string) => [...eagleEyeKeys.all, "events", ticker.toUpperCase()] as const,
   regime: () => [...eagleEyeKeys.all, "regime"] as const,
+  mlDisplayState: () => [...eagleEyeKeys.all, "ml-display-state"] as const,
+  mlBands: () => [...eagleEyeKeys.all, "ml-bands"] as const,
+  mlBandForTicker: (ticker: string) => [...eagleEyeKeys.all, "ml-band", ticker.toUpperCase()] as const,
+  mlMethodology: () => [...eagleEyeKeys.all, "ml-methodology"] as const,
 } as const;
 
 // ── API helpers ──────────────────────────────────────────────────────────────
@@ -331,5 +389,90 @@ export function useEagleEyeRefresh() {
       queryClient.invalidateQueries({ queryKey: eagleEyeKeys.scanner() });
       queryClient.invalidateQueries({ queryKey: [...eagleEyeKeys.all, "stock"] });
     },
+  });
+}
+
+// ── Phase 3 ML hooks ─────────────────────────────────────────────────────────
+
+/**
+ * useMLDisplayState
+ * GET /api/v1/eagle-eye/ml/display-state
+ * Checks kill-switch + auto-disable state.
+ */
+export function useMLDisplayState(enabled = true) {
+  return useQuery<MLDisplayStateResponse>({
+    queryKey: eagleEyeKeys.mlDisplayState(),
+    queryFn: async () => {
+      const { data } = await api.get<MLDisplayStateResponse>("/api/v1/eagle-eye/ml/display-state");
+      return data;
+    },
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+    enabled,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLBands
+ * GET /api/v1/eagle-eye/ml/bands
+ * Returns ML band labels for all 14 SHADOW-roster stocks.
+ * staleTime: 10 minutes (refreshes with market data, not real-time)
+ */
+export function useMLBands(enabled = true) {
+  return useQuery<MLBandsResponse>({
+    queryKey: eagleEyeKeys.mlBands(),
+    queryFn: async () => {
+      const { data } = await api.get<MLBandsResponse>("/api/v1/eagle-eye/ml/bands");
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLBandForTicker
+ * GET /api/v1/eagle-eye/ml/bands/{ticker}
+ * Full ML band card for a single stock.
+ */
+export function useMLBandForTicker(ticker: string, enabled = true) {
+  const t = ticker.toUpperCase().trim();
+  return useQuery<MLBandCard>({
+    queryKey: eagleEyeKeys.mlBandForTicker(t),
+    queryFn: async () => {
+      const { data } = await api.get<MLBandCard>(
+        `/api/v1/eagle-eye/ml/bands/${encodeURIComponent(t)}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    enabled: enabled && !!t,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLMethodology
+ * GET /api/v1/eagle-eye/ml/methodology
+ * Human-readable methodology for the band display.
+ */
+export function useMLMethodology(enabled = true) {
+  return useQuery<MLMethodologyResponse>({
+    queryKey: eagleEyeKeys.mlMethodology(),
+    queryFn: async () => {
+      const { data } = await api.get<MLMethodologyResponse>("/api/v1/eagle-eye/ml/methodology");
+      return data;
+    },
+    staleTime: 60 * 60_000,
+    gcTime: 4 * 60 * 60_000,
+    retry: 1,
+    enabled,
   });
 }

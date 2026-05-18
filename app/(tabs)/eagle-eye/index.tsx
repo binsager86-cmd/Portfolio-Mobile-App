@@ -11,9 +11,11 @@ import { getRegimeColors } from "@/constants/eagleEyeColors";
 import { EE, REGIME_LABELS } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { StockRow, StockRowSkeleton, computeRR } from "@/components/eagle-eye/StockRow";
-import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, type RatedStock } from "@/hooks/useEagleEye";
+import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
+import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -52,12 +54,23 @@ export default function EagleEyeScannerScreen() {
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
-    useEagleEyeScanner({
-      min_confidence: minConfidence > 0 ? minConfidence : undefined,
-    });
+  // Lazy load: don't fetch until the user actually taps into this tab
+  const [fetchEnabled, setFetchEnabled] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setFetchEnabled(true);
+    }, [])
+  );
 
-  const { data: regimeData } = useEagleEyeRegime();
+  const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
+    useEagleEyeScanner(
+      { min_confidence: minConfidence > 0 ? minConfidence : undefined },
+      fetchEnabled
+    );
+
+  const { data: regimeData } = useEagleEyeRegime(fetchEnabled);
+  const { data: mlBandsData } = useMLBands(fetchEnabled);
+  const { data: mlDisplayState } = useMLDisplayState(fetchEnabled);
   const eeRefresh = useEagleEyeRefresh();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
   const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,7 +89,18 @@ export default function EagleEyeScannerScreen() {
   }, [eeRefresh]);
 
   const stocks: RatedStock[] = useMemo(() => {
-    let list = data?.stocks ?? [];
+    // Build ML band lookup map (ticker → band item)
+    const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
+    if (mlBandsData?.enabled && mlBandsData.bands) {
+      for (const b of mlBandsData.bands) {
+        mlMap[b.ticker] = b;
+      }
+    }
+
+    let list = (data?.stocks ?? []).map((s) => ({
+      ...s,
+      ml_band: mlMap[s.ticker] ?? null,
+    }));
     const q = search.trim().toUpperCase();
     if (q) {
       list = list.filter(
@@ -105,7 +129,7 @@ export default function EagleEyeScannerScreen() {
       return sortDir === "asc" ? -diff : diff;
     });
     return list;
-  }, [data, search, buyOnly, breakoutOnly, sortBy, sortDir]);
+  }, [data, search, buyOnly, breakoutOnly, sortBy, sortDir, mlBandsData]);
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -261,6 +285,16 @@ export default function EagleEyeScannerScreen() {
           </View>
         </View>
       </View>
+
+      {/* ML Experimental Disclaimer Banner */}
+      {mlBandsData?.enabled ? (
+        <MLDisclaimerBanner
+          autoDisabled={mlDisplayState?.auto_disabled ?? false}
+          disabledReason={mlDisplayState?.disabled_reason}
+        />
+      ) : mlDisplayState?.auto_disabled ? (
+        <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
+      ) : null}
 
       {/* Search bar */}
       <View
@@ -425,6 +459,16 @@ export default function EagleEyeScannerScreen() {
             {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
           </Text>
         </Pressable>
+        {mlBandsData?.enabled ? (
+          <Text
+            style={[
+              styles.colHeaderCell,
+              { color: colors.textMuted, width: 32, textAlign: "center", marginLeft: 4 },
+            ]}
+          >
+            {EE.mlColumnHeader}
+          </Text>
+        ) : null}
       </View>
 
       {/* List */}
