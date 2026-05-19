@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Alert,
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
@@ -24,9 +25,12 @@ import type { ThemePalette } from "@/constants/theme";
 import { useAnalysisStocks, useStockList } from "@/hooks/queries";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { showErrorAlert } from "@/lib/errorHandling";
+import { QuarterMovementPanel } from "@/src/features/trade-signals/components/QuarterMovementPanel";
 import { WhaleTrackerPanel } from "@/src/features/trade-signals/components/WhaleTrackerPanel";
 import {
   createAnalysisStock,
+  deleteAnalysisStock,
+  getAnalysisStocks,
   getPEQuarterly,
   type AnalysisStock,
   type PEQuarterlyResponse,
@@ -36,7 +40,7 @@ import {
 
 const QUARTERS: readonly Quarter[] = ["q1", "q2", "q3", "q4"] as const;
 const Q_LABEL: Record<Quarter, string> = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4" };
-type SignalTabKey = "pe" | "dividendYield" | "whaleTracker";
+type SignalTabKey = "pe" | "dividendYield" | "whaleTracker" | "quarterMovement";
 
 const fmtPe = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? "-" : v.toFixed(2);
@@ -65,7 +69,7 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
     staleTime: 60_000,
   });
 
-  const needsSelectedStock = signalTab === "pe" || signalTab === "dividendYield";
+  const needsSelectedStock = signalTab === "pe" || signalTab === "dividendYield" || signalTab === "quarterMovement";
 
   if (!selected && needsSelectedStock) {
     return (
@@ -108,11 +112,16 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
         onChange={setSignalTab}
       />
       {selected && needsSelectedStock ? (
-        <SelectedHeader colors={colors} stock={selected} onChange={() => setSelected(null)} />
+        <SelectedHeader
+          colors={colors}
+          stock={selected}
+          onChange={() => setSelected(null)}
+          allowDelete={signalTab === "quarterMovement"}
+          onDeleted={() => setSelected(null)}
+        />
       ) : null}
 
-      {signalTab === "pe" && peQuery.isLoading && (
-        <View style={styles.loadingBox}>
+      {signalTab === "pe" && peQuery.isLoading && (        <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.accentPrimary} />
           <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 13 }}>
             {t("tradeSignals.loadingPe", "Loading P/E history...")}
@@ -134,6 +143,7 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
       {signalTab === "pe" && peQuery.data && <PEContent colors={colors} data={peQuery.data} />}
       {signalTab === "dividendYield" && selected && <DividendYieldContent colors={colors} stock={selected} />}
       {signalTab === "whaleTracker" && <WhaleTrackerPanel colors={colors} selectedStock={selected} />}
+      {signalTab === "quarterMovement" && <QuarterMovementPanel colors={colors} selectedStock={selected} />}
     </ScrollView>
   );
 }
@@ -205,6 +215,27 @@ function SignalTabBar({
           }}
         >
           {t("tradeSignals.whaleTracker", "Whale Tracker")}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => onChange("quarterMovement")}
+        style={[
+          styles.signalTab,
+          {
+            backgroundColor: active === "quarterMovement" ? colors.accentPrimary + "16" : "transparent",
+          },
+        ]}
+      >
+        <FontAwesome name="calendar" size={12} color={active === "quarterMovement" ? colors.accentPrimary : colors.textMuted} />
+        <Text
+          style={{
+            color: active === "quarterMovement" ? colors.accentPrimary : colors.textSecondary,
+            fontSize: 12,
+            fontWeight: "700",
+          }}
+        >
+          {t("tradeSignals.quarterMovement", "Quarter Movement")}
         </Text>
       </Pressable>
     </View>
@@ -432,12 +463,144 @@ function StockPicker({
   topContent?: React.ReactNode;
 }) {
   const { t } = useTranslation();
+  const [scanInput, setScanInput] = useState("");
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState("");
+
   const marketLabel = (symbol: string) => (symbol.toUpperCase().endsWith(".KW") ? "KSE" : "US");
+
+  const handleScanTicker = async () => {
+    const ticker = scanInput.trim().toUpperCase();
+    if (!ticker) return;
+
+    // Infer market from ticker suffix (e.g. KFH.KW → KSE, AAPL.US → USA)
+    const dotIdx = ticker.lastIndexOf(".");
+    const suffix = dotIdx !== -1 ? ticker.slice(dotIdx + 1) : "";
+    const US_SUFFIXES = new Set(["US", "USA", "NYSE", "NASDAQ", "AMEX"]);
+    const KW_SUFFIXES = new Set(["KW", "KSE", "BK"]);
+    let inferredExchange: string;
+    let inferredCurrency: string;
+    if (US_SUFFIXES.has(suffix)) {
+      inferredExchange = "USA";
+      inferredCurrency = "USD";
+    } else if (KW_SUFFIXES.has(suffix) || suffix === "") {
+      // Bare ticker (no suffix) defaults to Kuwait for this app
+      inferredExchange = "KSE";
+      inferredCurrency = "KWD";
+    } else {
+      // Unknown suffix — pass it through and let the backend handle it
+      inferredExchange = suffix;
+      inferredCurrency = "USD";
+    }
+
+    setScanLoading(true);
+    setScanError("");
+    try {
+      // Try to create/fetch the stock directly from ticker
+      const stock = await createAnalysisStock({
+        symbol: ticker,
+        company_name: ticker,
+        exchange: inferredExchange,
+        currency: inferredCurrency,
+      });
+      setScanInput("");
+      onSelect(stock);
+    } catch (err: unknown) {
+      // 409 = stock already exists — fetch it and navigate directly
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        try {
+          const result = await getAnalysisStocks({ search: ticker });
+          const existing = result.stocks.find(
+            (s) => s.symbol.toUpperCase() === ticker
+          ) ?? result.stocks[0];
+          if (existing) {
+            setScanInput("");
+            onSelect(existing);
+            return;
+          }
+        } catch {
+          // fall through to generic error
+        }
+      }
+      setScanError(
+        err instanceof Error
+          ? err.message
+          : t("tradeSignals.scanError", "Unable to scan ticker. Check symbol format (e.g., NBK, KFH.KW, AAPL)"
+        )
+      );
+    } finally {
+      setScanLoading(false);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.listWrap}>
       {topContent}
+      
+      {/* Quick Scan Section */}
+      <View style={[styles.quickScanBox, { backgroundColor: colors.accentPrimary + "10", borderColor: colors.accentPrimary + "40" }]}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+          {t("tradeSignals.quickScan", "Quick Scan")}
+        </Text>
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>
+          {t("tradeSignals.scanHint", "Kuwait tickers (bare or .KW), US stocks use .US suffix")}
+        </Text>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={[styles.scanInputBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, flex: 1 }]}>
+            <FontAwesome name="search" size={12} color={colors.textMuted} />
+            <TextInput
+              value={scanInput}
+              onChangeText={setScanInput}
+              placeholder={t("tradeSignals.tickerPlaceholder", "NBK, KFH.KW, AAPL.US")}
+              placeholderTextColor={colors.textMuted}
+              onSubmitEditing={handleScanTicker}
+              autoCapitalize="characters"
+              editable={!scanLoading}
+              style={[styles.scanInput, { color: colors.textPrimary }]}
+            />
+            {scanInput ? (
+              <Pressable onPress={() => setScanInput("")} disabled={scanLoading} hitSlop={8}>
+                <FontAwesome name="times-circle" size={12} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={handleScanTicker}
+            disabled={!scanInput.trim() || scanLoading}
+            style={[
+              styles.scanBtn,
+              {
+                backgroundColor:
+                  scanInput.trim() && !scanLoading
+                    ? colors.accentPrimary
+                    : colors.textMuted + "40",
+              },
+            ]}
+          >
+            {scanLoading ? (
+              <ActivityIndicator color="#fff" size={14} />
+            ) : (
+              <FontAwesome name="arrow-right" size={12} color="#fff" />
+            )}
+          </Pressable>
+        </View>
+        {scanError && (
+          <Text style={{ color: "#e74c3c", fontSize: 11, marginTop: 8 }}>
+            ⚠ {scanError}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.dividerBox}>
+        <View style={{ flex: 1, height: 1, backgroundColor: colors.borderColor }} />
+        <Text style={{ color: colors.textMuted, marginHorizontal: 8, fontSize: 11 }}>
+          {t("common.or", "OR")}
+        </Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: colors.borderColor }} />
+      </View>
+
       <View style={styles.pickerHeader}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>
           {t("tradeSignals.pickStock", "Choose a company")}
@@ -517,12 +680,38 @@ function SelectedHeader({
   colors,
   stock,
   onChange,
+  allowDelete,
+  onDeleted,
 }: {
   colors: ThemePalette;
   stock: AnalysisStock;
   onChange: () => void;
+  allowDelete?: boolean;
+  onDeleted?: () => void;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteAnalysisStock(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
+      onDeleted?.();
+    },
+    onError: (err: Error) => showErrorAlert("Delete Failed", err),
+  });
+
+  const handleDelete = () => {
+    const message = `Delete ${stock.symbol} and all related data?`;
+    if (Platform.OS === "web") {
+      if (confirm(message)) deleteMut.mutate(stock.id);
+      return;
+    }
+    Alert.alert("Delete Stock", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteMut.mutate(stock.id) },
+    ]);
+  };
+
   return (
     <View style={[styles.selectedRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       <View style={[styles.symbolBadge, { backgroundColor: colors.accentPrimary + "15" }]}>
@@ -532,6 +721,17 @@ function SelectedHeader({
         <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 14 }}>{stock.symbol}</Text>
         <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{stock.company_name}</Text>
       </View>
+      {allowDelete ? (
+        <Pressable
+          onPress={handleDelete}
+          disabled={deleteMut.isPending}
+          style={[styles.changeBtn, { backgroundColor: colors.danger + "12", marginRight: 8 }]}
+        >
+          <Text style={{ color: colors.danger, fontSize: 12, fontWeight: "700" }}>
+            {deleteMut.isPending ? t("common.deleting", "Deleting...") : t("common.delete", "Delete")}
+          </Text>
+        </Pressable>
+      ) : null}
       <Pressable onPress={onChange} style={[styles.changeBtn, { backgroundColor: colors.accentPrimary + "12" }]}>
         <Text style={{ color: colors.accentPrimary, fontSize: 12, fontWeight: "700" }}>
           {t("tradeSignals.change", "Change")}
@@ -874,4 +1074,38 @@ const styles = StyleSheet.create({
   marketChip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   pickerList: { maxHeight: 220, borderWidth: 1, borderRadius: 10, overflow: "hidden", marginBottom: 12 },
   pickerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10, paddingVertical: 9, borderBottomWidth: 1 },
+
+  quickScanBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 14,
+  },
+  scanInputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  scanInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    paddingVertical: 10,
+  },
+  scanBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dividerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginVertical: 14,
+  },
 });

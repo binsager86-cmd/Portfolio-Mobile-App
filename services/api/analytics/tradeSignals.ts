@@ -38,6 +38,83 @@ export async function getPEQuarterly(stockId: number): Promise<PEQuarterlyRespon
   return data.data;
 }
 
+// ── Quarter Movement ───────────────────────────────────────────────────────────
+
+export interface QuarterMovementPriceCell {
+  high_pct: number | null;
+  low_pct: number | null;
+  in_progress: boolean;
+  insufficient_data: boolean;
+}
+
+export interface QuarterMovementPECell {
+  highest_pe: number | null;
+  lowest_pe: number | null;
+  in_progress: boolean;
+  insufficient_data: boolean;
+}
+
+export interface QuarterMovementPriceMean {
+  high_pct_mean: number | null;
+  low_pct_mean: number | null;
+  reduced_sample: boolean;
+  sample_count: number;
+}
+
+export interface QuarterMovementPEMean {
+  highest_pe_mean: number | null;
+  lowest_pe_mean: number | null;
+  reduced_sample: boolean;
+  sample_count: number;
+}
+
+export interface QuarterMovementForecastInputs {
+  baseline_price: number | null;
+  historical_mean_high_pct?: number | null;
+  historical_mean_low_pct?: number | null;
+  ttm_eps?: number | null;
+  historical_mean_highest_pe?: number | null;
+  historical_mean_lowest_pe?: number | null;
+}
+
+export interface QuarterMovementResponse {
+  symbol: string;
+  company_name: string | null;
+  currency: string | null;
+  active_quarter: string;
+  active_quarter_key: Quarter;
+  active_year: number;
+  current_price: number | null;
+  baseline_price: number | null;
+  years: number[];
+  price_movement_table: Record<string, Record<Quarter, QuarterMovementPriceCell | null>>;
+  price_movement_means: Record<Quarter, QuarterMovementPriceMean>;
+  pe_movement_table: Record<string, Record<Quarter, QuarterMovementPECell | null>>;
+  pe_movement_means: Record<Quarter, QuarterMovementPEMean>;
+  ttm_eps: number | null;
+  ttm_eps_source: string;
+  eps_coverage: "full" | "latest_only" | "none" | "flatfiles";
+  method_one_expected_price: number | null;
+  method_one_expected_low_price: number | null;
+  method_two_expected_price: number | null;
+  method_two_expected_low_price: number | null;
+  consensus_expected_price: number | null;
+  consensus_expected_low_price: number | null;
+  method_one_inputs: QuarterMovementForecastInputs;
+  method_two_inputs: QuarterMovementForecastInputs;
+  data_source: string;
+  last_updated: string;
+  stale: boolean;
+}
+
+/** Fetch quarterly price & P/E movement analysis + expected price forecast. */
+export async function getQuarterMovement(stockId: number): Promise<QuarterMovementResponse> {
+  const { data } = await api.get<{ status: string; data: QuarterMovementResponse }>(
+    `/api/v1/trade-signals/quarter-movement/${stockId}`,
+  );
+  return data.data;
+}
+
 // ── Kuwait Multi-Factor Signal Engine ─────────────────────────────────────────
 
 export interface KuwaitSignalTPMethods {
