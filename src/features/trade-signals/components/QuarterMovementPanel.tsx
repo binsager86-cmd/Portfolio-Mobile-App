@@ -8,11 +8,15 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQuery } from "@tanstack/react-query";
-import React, { useMemo } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ThemePalette } from "@/constants/theme";
 import { useStockList } from "@/hooks/queries";
+import {
+  exportQuarterMovementExcel,
+  exportQuarterMovementPdf,
+} from "@/lib/exportQuarterMovementReport";
 import {
   fetchStockPrice,
   getQuarterMovement,
@@ -454,16 +458,18 @@ function DualValueCell({
 }) {
   return (
     <View style={styles.dualCell}>
-      <View style={styles.dualMetricRow}>
+      <View style={styles.dualMetricBlock}>
         <Text style={[styles.dualMetricLabel, { color: highColor }]}>{highLabel}</Text>
         <Text style={[styles.dualMetricValue, { color: highColor }]}>{highText}</Text>
       </View>
-      <View style={styles.dualMetricRow}>
+      <View style={styles.dualMetricBlock}>
         <Text style={[styles.dualMetricLabel, { color: lowColor }]}>{lowLabel}</Text>
         <Text style={[styles.dualMetricValue, { color: lowColor }]}>{lowText}</Text>
       </View>
       {inProgress ? (
-        <Text style={[styles.inProgressLabel, { color: colors.accentPrimary }]}>LIVE</Text>
+        <View style={[styles.inProgressBadge, { backgroundColor: colors.accentPrimary + "14" }]}>
+          <Text style={[styles.inProgressLabel, { color: colors.accentPrimary }]}>LIVE</Text>
+        </View>
       ) : null}
     </View>
   );
@@ -482,6 +488,7 @@ export function QuarterMovementPanel({
     ? "kuwait"
     : "us";
   const stockListQuery = useStockList(stockListMarket, !!selectedStock?.symbol);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
   const matchedStockEntry = useMemo(() => {
     if (!selectedStock?.symbol) return null;
     return stockListQuery.data?.stocks.find(
@@ -555,8 +562,83 @@ export function QuarterMovementPanel({
     data.currency ?? selectedStock?.currency,
   );
 
+  const handleExport = async (format: "excel" | "pdf") => {
+    if (exporting) return;
+    try {
+      setExporting(format);
+      const reportInput = {
+        data,
+        stock: {
+          symbol: selectedStock.symbol,
+          company_name: selectedStock.company_name,
+          currency: selectedStock.currency,
+        },
+        currentPrice: effectiveCurrentPrice,
+      };
+      if (format === "excel") {
+        await exportQuarterMovementExcel(reportInput);
+      } else {
+        await exportQuarterMovementPdf(reportInput);
+      }
+    } catch (error) {
+      console.error("Quarter movement export failed", error);
+      Alert.alert("Export failed", "Could not export the quarter movement report.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <>
+      <View style={[styles.exportCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <View style={styles.exportHeaderRow}>
+          <View style={[styles.exportBadge, { backgroundColor: colors.accentPrimary + "14" }]}>
+            <FontAwesome name="files-o" size={18} color={colors.accentPrimary} />
+          </View>
+          <View style={styles.exportTextWrap}>
+            <Text style={[styles.exportTitle, { color: colors.textPrimary }]}>Quarter Movement Report</Text>
+            <Text style={[styles.exportSubtitle, { color: colors.textMuted }]}>Export the live analysis as a styled Excel workbook or presentation-ready PDF.</Text>
+          </View>
+        </View>
+
+        <View style={styles.exportActionsRow}>
+          <Pressable
+            onPress={() => void handleExport("excel")}
+            disabled={exporting !== null}
+            style={({ pressed }) => [
+              styles.exportAction,
+              {
+                backgroundColor: colors.accentPrimary,
+                opacity: pressed || exporting !== null ? 0.7 : 1,
+              },
+            ]}
+          >
+            <FontAwesome name="file-excel-o" size={16} color="#fff" />
+            <Text style={styles.exportActionText}>
+              {exporting === "excel" ? "Preparing Excel..." : "Export Excel"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => void handleExport("pdf")}
+            disabled={exporting !== null}
+            style={({ pressed }) => [
+              styles.exportActionSecondary,
+              {
+                borderColor: colors.borderColor,
+                backgroundColor: colors.bgInput,
+                opacity: pressed || exporting !== null ? 0.7 : 1,
+              },
+            ]}
+          >
+            <FontAwesome name="file-pdf-o" size={16} color={colors.textPrimary} />
+            <Text style={[styles.exportActionSecondaryText, { color: colors.textPrimary }]}>
+              {exporting === "pdf" ? "Preparing PDF..." : "Export PDF"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       <SummaryBlock data={data} colors={colors} currentPrice={effectiveCurrentPrice} />
 
       <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 18 }]}>
@@ -615,6 +697,73 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  exportCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  exportHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  exportBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  exportTextWrap: {
+    flex: 1,
+  },
+  exportTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  exportSubtitle: {
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  exportActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 14,
+  },
+  exportAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 10,
+    minWidth: 150,
+  },
+  exportActionSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 10,
+    minWidth: 150,
+    borderWidth: 1,
+  },
+  exportActionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  exportActionSecondaryText: {
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   summaryCard: {
@@ -693,20 +842,26 @@ const styles = StyleSheet.create({
   sectionSubtitle: { fontSize: 11, marginBottom: 8 },
 
   table: { borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  tableRow: { flexDirection: "row", paddingVertical: 12, paddingHorizontal: 8, alignItems: "center" },
-  thYear: { width: 58, fontSize: 13, fontWeight: "800" },
-  thCell: { flex: 1, fontSize: 12, fontWeight: "800", textAlign: "center" },
+  tableRow: { flexDirection: "row", paddingVertical: 15, paddingHorizontal: 10, alignItems: "stretch" },
+  thYear: { width: 70, fontSize: 15, fontWeight: "800", textAlignVertical: "center" },
+  thCell: { flex: 1, fontSize: 14, fontWeight: "800", textAlign: "center" },
 
-  dualCell: { flex: 1, alignItems: "stretch", justifyContent: "center", paddingHorizontal: 6 },
-  dualMetricRow: {
-    flexDirection: "row",
+  dualCell: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, gap: 8 },
+  dualMetricBlock: {
+    width: "100%",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+    justifyContent: "center",
+    paddingVertical: 4,
   },
-  dualMetricLabel: { width: 34, fontSize: 10, fontWeight: "800", letterSpacing: 0.4 },
-  dualMetricValue: { flex: 1, fontSize: 15, fontWeight: "700", textAlign: "right", fontVariant: ["tabular-nums"] },
-  inProgressLabel: { fontSize: 9, marginTop: 4, textAlign: "center", fontWeight: "800" },
+  dualMetricLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5, marginBottom: 3, textAlign: "center" },
+  dualMetricValue: { fontSize: 18, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
+  inProgressBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 2,
+  },
+  inProgressLabel: { fontSize: 10, textAlign: "center", fontWeight: "800", letterSpacing: 0.4 },
 
   naPillCard: {
     flexDirection: "row",

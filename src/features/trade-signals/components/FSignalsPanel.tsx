@@ -30,6 +30,7 @@ import { WhaleTrackerPanel } from "@/src/features/trade-signals/components/Whale
 import {
   createAnalysisStock,
   deleteAnalysisStock,
+  getAnalysisStock,
   getAnalysisStocks,
   getPEQuarterly,
   type AnalysisStock,
@@ -497,12 +498,13 @@ function StockPicker({
     setScanError("");
     try {
       // Try to create/fetch the stock directly from ticker
-      const stock = await createAnalysisStock({
+      const created = await createAnalysisStock({
         symbol: ticker,
         company_name: ticker,
         exchange: inferredExchange,
         currency: inferredCurrency,
       });
+      const stock = await getAnalysisStock(created.id);
       setScanInput("");
       onSelect(stock);
     } catch (err: unknown) {
@@ -981,10 +983,16 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 14, fontWeight: "700", marginBottom: 10 },
   pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9 },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-  addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-    flexGrow: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700", flexGrow: 1 },
 
   searchBox: {
     flexDirection: "row",
