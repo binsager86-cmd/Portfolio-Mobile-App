@@ -961,7 +961,8 @@ const styles = StyleSheet.create({
   listWrap: { width: "100%", maxWidth: 1120, alignSelf: "center" },
   signalTabsWrap: {
     flexDirection: "row",
-    alignSelf: "flex-start",
+    flexWrap: "wrap",
+    alignSelf: "stretch",
     borderWidth: 1,
     borderRadius: 12,
     padding: 4,
@@ -970,7 +971,9 @@ const styles = StyleSheet.create({
   },
   signalTab: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    alignSelf: "stretch",
+    justifyContent: "center",
     gap: 6,
     borderRadius: 8,
     paddingHorizontal: 10,
@@ -979,7 +982,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 14, fontWeight: "700", marginBottom: 10 },
   pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9 },
+    justifyContent: "center",
   addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+    flexGrow: 1,
 
   searchBox: {
     flexDirection: "row",
