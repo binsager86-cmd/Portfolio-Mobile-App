@@ -30,7 +30,6 @@ import { WhaleTrackerPanel } from "@/src/features/trade-signals/components/Whale
 import {
   createAnalysisStock,
   deleteAnalysisStock,
-  getAnalysisStock,
   getAnalysisStocks,
   getPEQuarterly,
   type AnalysisStock,
@@ -464,6 +463,7 @@ function StockPicker({
   topContent?: React.ReactNode;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [scanInput, setScanInput] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
@@ -504,7 +504,25 @@ function StockPicker({
         exchange: inferredExchange,
         currency: inferredCurrency,
       });
-      const stock = await getAnalysisStock(created.id);
+      const stock: AnalysisStock = {
+        id: created.id,
+        user_id: 0,
+        symbol: ticker,
+        company_name: ticker,
+        exchange: inferredExchange,
+        currency: inferredCurrency,
+        sector: null,
+        industry: null,
+        country: null,
+        isin: null,
+        cik: null,
+        description: null,
+        website: null,
+        outstanding_shares: null,
+        created_at: 0,
+        updated_at: 0,
+      };
+      queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
       setScanInput("");
       onSelect(stock);
     } catch (err: unknown) {
