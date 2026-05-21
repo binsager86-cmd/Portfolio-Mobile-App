@@ -156,9 +156,26 @@ export interface ThresholdProfile {
   threshold_pct: number;
   success_rate: number;
   sample_count: number;
+  total_count?: number | null;
+  hits?: number | null;
+  total_setups?: number | null;
   median_bars_to_hit?: number | null;
   avg_win_pct?: number | null;
   avg_loss_pct?: number | null;
+  avg_gain_all_pct?: number | null;
+  avg_gain_on_hits_pct?: number | null;
+}
+
+export interface SignalReliabilityStat {
+  signal: string;
+  reliability_pct?: number | null;
+  presence_pct?: number | null;
+  fired_count: number;
+  total_events?: number | null;
+  total_setups?: number | null;
+  avg_lead_days?: number | null;
+  false_positive_rate?: number | null;
+  discriminative_power?: number | null;
 }
 
 export interface VolumeProfile {
@@ -176,7 +193,11 @@ export interface VolumeProfile {
 export interface BehavioralDNA {
   ticker: string;
   total_events_analyzed: number;
+  history_status?: string | null;
+  setup_signals?: string[];
+  setup_horizon_days?: number | null;
   most_reliable_signals: string[];
+  signal_stats?: SignalReliabilityStat[];
   threshold_profiles: ThresholdProfile[];
   dominant_pattern?: string | null;
   computed_at?: string | null;

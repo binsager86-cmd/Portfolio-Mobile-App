@@ -230,19 +230,75 @@ export const EE = {
 
   // DNA
   dnaPersonality: "Personality",
-  dnaStats: "Move Statistics",
+  dnaStats: "Historical Base Rates",
   avgConsolidation: "Avg Consolidation",
   avgDuration: "Avg Move Duration",
   avgMagnitude: "Avg Magnitude",
-  totalEvents: "Total Events",
+  totalEvents: "Matching Setups",
   fakeouts: "Fakeouts Detected",
-  earlyWarningSignals: "What fires before this stock moves",
+  earlyWarningSignals: "Common Ingredients in This Setup",
   leadsBy: (days: number) => `fires avg ${days} days before move`,
-  thresholdProfiles: "Historical Performance by Target",
+  thresholdProfiles: "What Happened Next",
   successRate: "Success Rate",
   occurrences: "Occurrences",
   avgGain: "Avg Gain",
+  avgGainAllShort: "All",
+  avgGainHitsShort: "Hits",
+  ofEvents: "of events",
+  setupSignals: "Current setup fingerprint",
+  setupHeadline: (count: number, days?: number | null) =>
+    `When this setup appeared in the past ${count} time${count === 1 ? "" : "s"}, here is what happened next${days ? ` within ${days} trading days` : ""}:`,
+  setupDisclaimer:
+    "Based on this stock's own history. Past setups do not predict future results. Sample size affects reliability.",
+  limitedData: (count: number) => `Limited data: only ${count} matching setups found. Read these base rates cautiously.`,
+  insufficientHistoryTitle: "Insufficient Setup History",
+  insufficientHistoryBody: (count: number) =>
+    `Only ${count} matching setups were found. At least 20 are required before showing historical percentages for this setup.`,
+  setupHorizon: "Forward Horizon",
+  expectedGain: "Avg Gain Across All Setups",
+  hitGain: "Avg Gain When Target Hit",
+  reachedTarget: (target: number) => `Reached +${target.toFixed(0)}%`,
+  ofSetups: "of setups",
   fakeoutSignatures: "What this engine has learned NOT to trust",
+  dnaIntro: (ticker: string, days?: number | null) => {
+    const windowText = days
+      ? `over the next ${days} trading days`
+      : "after the pattern appears";
+    return `Behavioral DNA looks at every time ${ticker} showed this same pattern in the past, then checks what the price did ${windowText}. It is a history lesson about this one stock, not a prediction. More past examples make it more reliable.`;
+  },
+  setupSummaryTitle: "Setup Summary",
+  setupCountLine: (ticker: string, count: number) =>
+    `${ticker} has shown this pattern ${count} time${count === 1 ? "" : "s"} in the history we checked.`,
+  forwardWindowLine: (days?: number | null) => {
+    if (!days) return "We measured what happened after the pattern appeared.";
+    const weeks = Math.max(1, Math.round(days / 5));
+    return `We measured what happened over the next ${days} trading days (about ${weeks} week${weeks === 1 ? "" : "s"}).`;
+  },
+  patternMatchedNow: "Pattern matched now",
+  typicalResultTitle: "Typical result",
+  typicalResultBody: (value: string) => `All past setups, wins and losses included: ${value}`,
+  typicalResultCaption: "wins and losses included",
+  targetOutcomeLine: (target: number, hits: number, total: number, rate: number) =>
+    `Reached +${Math.round(target)}% in ${hits} of ${total} past setups (${rate}%)`,
+  avgHitLine: (value: string) => `When it did hit, the average gain was ${value}`,
+  noHitLine: "This target did not hit often enough to show a reliable average gain.",
+  strengthStrong: "Strong",
+  strengthModerate: "Moderate",
+  strengthWeak: "Weak / thin data",
+  patternLooksLikeTitle: "What This Pattern Looks Like",
+  patternLooksLikeBody:
+    "These are the ingredients that showed up most often when this setup appeared in the past.",
+  signalSeenLine: (pct: number, fired: number, total: number) =>
+    `Seen in ${pct}% of these setups (${fired} of ${total})`,
+  insufficientHistoryHonestTitle: "Not enough history yet",
+  insufficientHistoryHonestBody: (ticker: string, count: number, minCount = 20) =>
+    `${ticker} has only shown this pattern ${count} time${count === 1 ? "" : "s"} so far, which is too few to draw reliable conclusions. We need at least ${minCount} past examples before showing success rates.`,
+  dataAnomalyTitle: "Data anomaly",
+  dataAnomalyBody:
+    "Bigger targets should usually get harder to reach. This stock's past results do not follow that pattern cleanly, so read the ladder with extra caution.",
+  howToReadTitle: "How to Read This",
+  howToReadBody:
+    "A strong signal means this stock often rose after this pattern, but past results never guarantee the future. Always check your own risk before acting. Thin-volume stocks are less reliable.",
   noFakeouts: "No fakeout patterns identified yet",
   days: "days",
   bars: "bars",
