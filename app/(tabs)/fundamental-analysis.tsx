@@ -78,6 +78,10 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ComponentProps<typeof 
 ];
 
 const STMNT_TYPES = ["income", "balance", "cashflow", "equity"] as const;
+const EXPORT_MENU_WIDTH = 160;
+const EXPORT_MENU_OFFSET = 4;
+const EXPORT_MENU_MARGIN = 16;
+const EXPORT_MENU_FALLBACK_TOP = 60;
 
 const STMNT_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>["name"]; color: string }> = {
   income:   { label: "Income",        icon: "money",         color: "#10b981" },
@@ -195,15 +199,37 @@ function ExportBar({
 }: { onExport: (fmt: "xlsx" | "csv" | "pdf") => Promise<void>; colors: ThemePalette; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const triggerRef = useRef<View>(null);
+  const isMountedRef = useRef(true);
   const off = disabled || busy != null;
 
-  const handle = async (fmt: "xlsx" | "csv" | "pdf") => {
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+
+  const handle = useCallback(async (fmt: "xlsx" | "csv" | "pdf") => {
     setOpen(false);
     setBusy(fmt);
     try { await onExport(fmt); }
     catch (e) { Alert.alert("Export Failed", e instanceof Error ? e.message : "Unknown error"); }
     setBusy(null);
-  };
+  }, [onExport]);
+
+  const openMenu = useCallback(() => {
+    if (triggerRef.current) {
+      triggerRef.current.measureInWindow((x, y, w, h) => {
+        if (!isMountedRef.current) return;
+        setMenuPos({
+          left: Math.max(EXPORT_MENU_MARGIN, x + w - EXPORT_MENU_WIDTH),
+          top: y + h + EXPORT_MENU_OFFSET,
+        });
+        setOpen(true);
+      });
+      return;
+    }
+    setOpen(true);
+  }, []);
 
   const items: { fmt: "xlsx" | "csv" | "pdf"; icon: React.ComponentProps<typeof FontAwesome>["name"]; label: string; color: string }[] = [
     { fmt: "xlsx", icon: "file-excel-o", label: "Excel (.xlsx)", color: colors.success },
@@ -211,11 +237,33 @@ function ExportBar({
     { fmt: "pdf",  icon: "file-pdf-o",   label: "PDF (.pdf)",    color: "#ef4444" },
   ];
 
+  const dropdown = (
+    <View style={[st.exportDropdown, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      {items.map(({ fmt, icon, label, color }) => (
+        <Pressable
+          key={fmt}
+          accessibilityRole="button"
+          accessibilityLabel={`Export as ${label}`}
+          onPress={() => handle(fmt)}
+          style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}
+        >
+          <FontAwesome name={icon} size={12} color={color} style={{ width: 18, textAlign: "center" }} />
+          <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "600", marginLeft: 8 }}>{label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+  const dropdownPositionStyle = menuPos
+    ? { position: "absolute" as const, top: menuPos.top, left: menuPos.left }
+    : { position: "absolute" as const, top: EXPORT_MENU_FALLBACK_TOP, right: EXPORT_MENU_MARGIN };
+
   return (
-    <View style={{ position: "relative", zIndex: 50 }}>
-      {/* trigger */}
+    <View ref={triggerRef} style={{ zIndex: 50 }}>
       <Pressable
-        onPress={() => setOpen((p) => !p)}
+        accessibilityRole="button"
+        accessibilityLabel="Export"
+        accessibilityState={{ disabled: off, expanded: open, busy: !!busy }}
+        onPress={openMenu}
         disabled={off}
         style={({ pressed }) => ([
           st.exportTrigger,
@@ -233,23 +281,13 @@ function ExportBar({
         )}
       </Pressable>
 
-      {/* dropdown */}
-      {open && (
-        <Pressable style={st.exportOverlay} onPress={() => setOpen(false)}>
-          <View style={[st.exportDropdown, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-            {items.map(({ fmt, icon, label, color }) => (
-              <Pressable
-                key={fmt}
-                onPress={() => handle(fmt)}
-                style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}
-              >
-                <FontAwesome name={icon} size={12} color={color} style={{ width: 18, textAlign: "center" }} />
-                <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "600", marginLeft: 8 }}>{label}</Text>
-              </Pressable>
-            ))}
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)}>
+          <View style={dropdownPositionStyle}>
+            {dropdown}
           </View>
         </Pressable>
-      )}
+      </Modal>
     </View>
   );
 }
