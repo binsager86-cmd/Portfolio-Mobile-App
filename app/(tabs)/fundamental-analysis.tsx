@@ -201,7 +201,12 @@ function ExportBar({
   const [busy, setBusy] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const triggerRef = useRef<View>(null);
+  const isMountedRef = useRef(true);
   const off = disabled || busy != null;
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
 
   const handle = useCallback(async (fmt: "xlsx" | "csv" | "pdf") => {
     setOpen(false);
@@ -214,6 +219,7 @@ function ExportBar({
   const openMenu = useCallback(() => {
     if (triggerRef.current) {
       triggerRef.current.measureInWindow((x, y, w, h) => {
+        if (!isMountedRef.current) return;
         setMenuPos({
           left: Math.max(EXPORT_MENU_MARGIN, x + w - EXPORT_MENU_WIDTH),
           top: y + h + EXPORT_MENU_OFFSET,
@@ -222,7 +228,7 @@ function ExportBar({
       });
       return;
     }
-    setOpen((p) => !p);
+    setOpen(true);
   }, []);
 
   const items: { fmt: "xlsx" | "csv" | "pdf"; icon: React.ComponentProps<typeof FontAwesome>["name"]; label: string; color: string }[] = [
@@ -247,6 +253,9 @@ function ExportBar({
       ))}
     </View>
   );
+  const dropdownPositionStyle = menuPos
+    ? { position: "absolute" as const, top: menuPos.top, left: menuPos.left }
+    : { position: "absolute" as const, top: EXPORT_MENU_FALLBACK_TOP, right: EXPORT_MENU_MARGIN };
 
   return (
     <View ref={triggerRef} style={{ zIndex: 50 }}>
@@ -274,7 +283,7 @@ function ExportBar({
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)}>
-          <View style={menuPos ? { position: "absolute", top: menuPos.top, left: menuPos.left } : { position: "absolute", top: EXPORT_MENU_FALLBACK_TOP, right: EXPORT_MENU_MARGIN }}>
+          <View style={dropdownPositionStyle}>
             {dropdown}
           </View>
         </Pressable>
