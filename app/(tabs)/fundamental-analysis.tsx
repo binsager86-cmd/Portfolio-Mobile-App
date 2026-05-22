@@ -78,6 +78,10 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ComponentProps<typeof 
 ];
 
 const STMNT_TYPES = ["income", "balance", "cashflow", "equity"] as const;
+const EXPORT_MENU_WIDTH = 160;
+const EXPORT_MENU_OFFSET = 4;
+const EXPORT_MENU_MARGIN = 16;
+const EXPORT_MENU_FALLBACK_TOP = 60;
 
 const STMNT_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>["name"]; color: string }> = {
   income:   { label: "Income",        icon: "money",         color: "#10b981" },
@@ -193,10 +197,6 @@ function StatementTabBar({
 function ExportBar({
   onExport, colors, disabled,
 }: { onExport: (fmt: "xlsx" | "csv" | "pdf") => Promise<void>; colors: ThemePalette; disabled?: boolean }) {
-  const MENU_WIDTH = 160;
-  const MENU_OFFSET = 4;
-  const MENU_MARGIN = 16;
-  const MENU_FALLBACK_TOP = 60;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
@@ -215,15 +215,15 @@ function ExportBar({
     if (triggerRef.current) {
       triggerRef.current.measureInWindow((x, y, w, h) => {
         setMenuPos({
-          left: Math.max(MENU_MARGIN, x + w - MENU_WIDTH),
-          top: y + h + MENU_OFFSET,
+          left: Math.max(EXPORT_MENU_MARGIN, x + w - EXPORT_MENU_WIDTH),
+          top: y + h + EXPORT_MENU_OFFSET,
         });
         setOpen(true);
       });
       return;
     }
     setOpen((p) => !p);
-  }, [MENU_MARGIN, MENU_OFFSET, MENU_WIDTH]);
+  }, []);
 
   const items: { fmt: "xlsx" | "csv" | "pdf"; icon: React.ComponentProps<typeof FontAwesome>["name"]; label: string; color: string }[] = [
     { fmt: "xlsx", icon: "file-excel-o", label: "Excel (.xlsx)", color: colors.success },
@@ -273,8 +273,8 @@ function ExportBar({
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable accessibilityRole="none" accessibilityLabel="Close menu" style={{ flex: 1 }} onPress={() => setOpen(false)}>
-          <View style={menuPos ? { position: "absolute", top: menuPos.top, left: menuPos.left } : { position: "absolute", top: MENU_FALLBACK_TOP, right: MENU_MARGIN }}>
+        <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)}>
+          <View style={menuPos ? { position: "absolute", top: menuPos.top, left: menuPos.left } : { position: "absolute", top: EXPORT_MENU_FALLBACK_TOP, right: EXPORT_MENU_MARGIN }}>
             {dropdown}
           </View>
         </Pressable>
