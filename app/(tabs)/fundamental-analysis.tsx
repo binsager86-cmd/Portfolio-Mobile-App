@@ -195,15 +195,28 @@ function ExportBar({
 }: { onExport: (fmt: "xlsx" | "csv" | "pdf") => Promise<void>; colors: ThemePalette; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number; w: number } | null>(null);
+  const triggerRef = useRef<View>(null);
   const off = disabled || busy != null;
 
-  const handle = async (fmt: "xlsx" | "csv" | "pdf") => {
+  const handle = useCallback(async (fmt: "xlsx" | "csv" | "pdf") => {
     setOpen(false);
     setBusy(fmt);
     try { await onExport(fmt); }
     catch (e) { Alert.alert("Export Failed", e instanceof Error ? e.message : "Unknown error"); }
     setBusy(null);
-  };
+  }, [onExport]);
+
+  const openMenu = useCallback(() => {
+    if (triggerRef.current) {
+      triggerRef.current.measureInWindow((x, y, w, h) => {
+        setMenuPos({ x: x + w, y: y + h + 4, w });
+        setOpen(true);
+      });
+      return;
+    }
+    setOpen((p) => !p);
+  }, []);
 
   const items: { fmt: "xlsx" | "csv" | "pdf"; icon: React.ComponentProps<typeof FontAwesome>["name"]; label: string; color: string }[] = [
     { fmt: "xlsx", icon: "file-excel-o", label: "Excel (.xlsx)", color: colors.success },
@@ -211,11 +224,30 @@ function ExportBar({
     { fmt: "pdf",  icon: "file-pdf-o",   label: "PDF (.pdf)",    color: "#ef4444" },
   ];
 
+  const dropdown = (
+    <View style={[st.exportDropdown, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      {items.map(({ fmt, icon, label, color }) => (
+        <Pressable
+          key={fmt}
+          accessibilityRole="button"
+          accessibilityLabel={`Export as ${label}`}
+          onPress={() => handle(fmt)}
+          style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}
+        >
+          <FontAwesome name={icon} size={12} color={color} style={{ width: 18, textAlign: "center" }} />
+          <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "600", marginLeft: 8 }}>{label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   return (
-    <View style={{ position: "relative", zIndex: 50 }}>
-      {/* trigger */}
+    <View ref={triggerRef} style={{ zIndex: 50 }}>
       <Pressable
-        onPress={() => setOpen((p) => !p)}
+        accessibilityRole="button"
+        accessibilityLabel="Export"
+        accessibilityState={{ disabled: off, expanded: open, busy: !!busy }}
+        onPress={openMenu}
         disabled={off}
         style={({ pressed }) => ([
           st.exportTrigger,
@@ -233,23 +265,13 @@ function ExportBar({
         )}
       </Pressable>
 
-      {/* dropdown */}
-      {open && (
-        <Pressable style={st.exportOverlay} onPress={() => setOpen(false)}>
-          <View style={[st.exportDropdown, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-            {items.map(({ fmt, icon, label, color }) => (
-              <Pressable
-                key={fmt}
-                onPress={() => handle(fmt)}
-                style={({ pressed }) => ([st.exportDropItem, pressed && { backgroundColor: color + "12" }])}
-              >
-                <FontAwesome name={icon} size={12} color={color} style={{ width: 18, textAlign: "center" }} />
-                <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: "600", marginLeft: 8 }}>{label}</Text>
-              </Pressable>
-            ))}
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable accessibilityRole="none" accessibilityLabel="Close menu" style={{ flex: 1 }} onPress={() => setOpen(false)}>
+          <View style={menuPos ? { position: "absolute", top: menuPos.y, right: Platform.OS === "web" ? undefined : 16, ...(Platform.OS === "web" ? { left: menuPos.x - 160 } : {}) } : { position: "absolute", top: 60, right: 16 }}>
+            {dropdown}
           </View>
         </Pressable>
-      )}
+      </Modal>
     </View>
   );
 }
