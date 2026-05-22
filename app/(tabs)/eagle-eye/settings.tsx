@@ -10,6 +10,7 @@
 
 import { EE } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
+import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -118,6 +119,7 @@ export default function EagleEyeSettingsScreen() {
       style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}
     >
       <BackHeader title={EE.settingsTitle} colors={colors} />
+      <EagleEyeTopTabs />
 
       <ScrollView
         contentContainerStyle={[

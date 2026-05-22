@@ -10,13 +10,14 @@
 import { getRegimeColors } from "@/constants/eagleEyeColors";
 import { EE, REGIME_LABELS } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
+import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StockRow, StockRowSkeleton, computeRR } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -46,6 +47,7 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
@@ -55,12 +57,13 @@ export default function EagleEyeScannerScreen() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Lazy load: don't fetch until the user actually taps into this tab
-  const [fetchEnabled, setFetchEnabled] = useState(false);
-  useFocusEffect(
-    useCallback(() => {
-      setFetchEnabled(true);
-    }, [])
-  );
+  const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
+  useEffect(() => {
+    if (isFocused) {
+      setHasFocusedOnce(true);
+    }
+  }, [isFocused]);
+  const fetchEnabled = hasFocusedOnce || isFocused;
 
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(
@@ -285,6 +288,8 @@ export default function EagleEyeScannerScreen() {
           </View>
         </View>
       </View>
+
+      <EagleEyeTopTabs />
 
       {/* ML Experimental Disclaimer Banner */}
       {mlBandsData?.enabled ? (

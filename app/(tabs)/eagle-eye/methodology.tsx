@@ -13,6 +13,7 @@
  */
 
 import { UITokens } from "@/constants/uiTokens";
+import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { useMLMethodology } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -105,6 +106,8 @@ export default function MLMethodologyScreen() {
         </Text>
         <View style={{ width: 28 }} />
       </View>
+
+      <EagleEyeTopTabs />
 
       <ScrollView
         contentContainerStyle={[

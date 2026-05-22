@@ -6,6 +6,7 @@
  * and a recent activity feed across all three strategies.
  */
 
+import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { useThemeStore } from "@/services/themeStore";
 import {
@@ -326,86 +327,91 @@ export default function SimulatorIndexScreen() {
   }
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.bgPrimary }}
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 },
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={onRefresh}
-          tintColor={colors.accentPrimary}
-        />
-      }
-    >
-      {/* Header */}
-      <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
-        Paper Trading Simulator
-      </Text>
-      <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>
-        Three parallel strategies • 10,000 KWD each • Live forward from May 14, 2026
-      </Text>
+    <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
+      <EagleEyeTopTabs />
 
-      {/* Manual run button */}
-      <Pressable
-        onPress={handleRunNow}
-        disabled={runNow.isPending}
-        style={[
-          styles.runBtn,
-          {
-            backgroundColor:
-              runStatus === "ok"
-                ? colors.success
-                : runStatus === "err"
-                ? colors.danger
-                : colors.accentPrimary,
-            opacity: runNow.isPending ? 0.6 : 1,
-          },
-        ]}
-      >
-        {runNow.isPending ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.runBtnText}>
-            {runStatus === "ok"
-              ? "✓ Simulator ran successfully"
-              : runStatus === "err"
-              ? "✗ Run failed — check logs"
-              : "▶  Run Simulator Now"}
-          </Text>
-        )}
-      </Pressable>
-
-      {/* Strategy cards */}
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.cardsRow}
-        contentContainerStyle={styles.cardsContent}
-      >
-        {(portfolios ?? []).map((p) => (
-          <StrategyCard
-            key={p.strategy_name}
-            summary={p}
-            onPress={() => handleCardPress(p.strategy_name)}
+        style={{ backgroundColor: colors.bgPrimary }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: 16, paddingBottom: insets.bottom + 32 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={onRefresh}
+            tintColor={colors.accentPrimary}
           />
-        ))}
+        }
+      >
+        {/* Header */}
+        <Text style={[styles.pageTitle, { color: colors.textPrimary }]}> 
+          Paper Trading Simulator
+        </Text>
+        <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}> 
+          Three parallel strategies • 10,000 KWD each • Live forward from May 14, 2026
+        </Text>
+
+        {/* Manual run button */}
+        <Pressable
+          onPress={handleRunNow}
+          disabled={runNow.isPending}
+          style={[
+            styles.runBtn,
+            {
+              backgroundColor:
+                runStatus === "ok"
+                  ? colors.success
+                  : runStatus === "err"
+                  ? colors.danger
+                  : colors.accentPrimary,
+              opacity: runNow.isPending ? 0.6 : 1,
+            },
+          ]}
+        >
+          {runNow.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.runBtnText}>
+              {runStatus === "ok"
+                ? "✓ Simulator ran successfully"
+                : runStatus === "err"
+                ? "✗ Run failed — check logs"
+                : "▶  Run Simulator Now"}
+            </Text>
+          )}
+        </Pressable>
+
+        {/* Strategy cards */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.cardsRow}
+          contentContainerStyle={styles.cardsContent}
+        >
+          {(portfolios ?? []).map((p) => (
+            <StrategyCard
+              key={p.strategy_name}
+              summary={p}
+              onPress={() => handleCardPress(p.strategy_name)}
+            />
+          ))}
+        </ScrollView>
+
+        {/* Comparison table */}
+        {portfolios && <ComparisonTable portfolios={portfolios} />}
+
+        {/* Activity feed */}
+        <ActivityFeed />
       </ScrollView>
-
-      {/* Comparison table */}
-      {portfolios && <ComparisonTable portfolios={portfolios} />}
-
-      {/* Activity feed */}
-      <ActivityFeed />
-    </ScrollView>
+    </View>
   );
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   loadingText: { marginTop: 12, fontSize: 14 },
   scrollContent: { paddingHorizontal: 16, gap: 16 },
