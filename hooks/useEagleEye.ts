@@ -130,6 +130,9 @@ export interface FullStockAnalysis {
   entry_primary?: number | null;
   entry_aggressive?: number | null;
   entry_conservative?: number | null;
+  plan_state?: "ACTIVE" | "DECLINED" | "CONDITIONAL";
+  plan_reason?: string | null;
+  conditional_entry?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
   tp1_probability?: number | null;
@@ -137,6 +140,8 @@ export interface FullStockAnalysis {
   tp2_probability?: number | null;
   tp3?: number | null;
   tp3_probability?: number | null;
+  risk_reward_ratio?: number | null;
+  gain_pct_to_tp1?: number | null;
   position_size_pct?: number | null;
   position_size_kwd?: number | null;
   liquidity_capped?: boolean | null;
