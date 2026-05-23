@@ -380,7 +380,7 @@ export function BehavioralDnaScreenContent({
 
       {dna.computed_at && (
         <Text style={[styles.freshness, { color: colors.textMuted }]}>
-          Computed: {dna.computed_at.slice(0, 19).replace("T", " ")}
+          {EE.dnaUpdatedAt(dna.computed_at)}
         </Text>
       )}
     </ScrollView>

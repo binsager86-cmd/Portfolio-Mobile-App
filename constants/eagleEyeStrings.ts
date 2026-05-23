@@ -332,6 +332,12 @@ export const EE = {
       ? `Targets hit: ${targets.map((target) => `+${Math.round(target)}%`).join(", ")}.`
       : "No tracked target was hit in this window.",
   dnaNoExamples: "No historical setup charts are available yet.",
+  dnaUpdatedAt: (isoStr: string) => {
+    // e.g. "2026-05-23T14:05:00" → "May 23, 2026"
+    const d = new Date(isoStr);
+    const label = d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    return `Updated nightly · Last computed: ${label}`;
+  },
   noFakeouts: "No fakeout patterns identified yet",
   days: "days",
   bars: "bars",
