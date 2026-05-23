@@ -23,14 +23,24 @@ export type MLBandLabel =
 
 interface MLBandBadgeProps {
   band: MLBandLabel;
+  size?: "sm" | "md";
+  accessibilityHint?: string;
 }
 
 // Intentionally sub-minimum sizes: badge glyphs live inside compact scanner
 // rows and are deliberately smaller than the accessibility floor (14 px).
-const BADGE_FONT = { dot: 8, label: 9 } as const;
+const BADGE_FONT = {
+  sm: { dot: 8, label: 9, placeholder: 24 },
+  md: { dot: 12, label: 12, placeholder: 32 },
+} as const;
 
-export function MLBandBadge({ band }: MLBandBadgeProps) {
+export function MLBandBadge({
+  band,
+  size = "sm",
+  accessibilityHint,
+}: MLBandBadgeProps) {
   const { colors } = useThemeStore();
+  const metrics = BADGE_FONT[size];
 
   const bandConfig: Record<string, { color: string; dot: string; short: string }> = {
     HIGH:              { color: colors.success,   dot: "●", short: "Hi" },
@@ -40,14 +50,20 @@ export function MLBandBadge({ band }: MLBandBadgeProps) {
     NO_VARIANCE:       { color: colors.textMuted, dot: "—", short: "—" },
   };
 
-  if (!band) return <View style={styles.placeholder} />;
+  if (!band) {
+    return <View style={[styles.placeholder, { width: metrics.placeholder }]} />;
+  }
 
   const cfg = bandConfig[band] ?? bandConfig.INSUFFICIENT_DATA;
 
   return (
-    <View style={styles.container}>
-      <Text style={[styles.dot, { color: cfg.color }]}>{cfg.dot}</Text>
-      <Text style={[styles.label, { color: cfg.color }]}>{cfg.short}</Text>
+    <View
+      style={styles.container}
+      accessibilityRole="text"
+      accessibilityHint={accessibilityHint}
+    >
+      <Text style={[styles.dot, { color: cfg.color, fontSize: metrics.dot, lineHeight: metrics.dot }]}>{cfg.dot}</Text>
+      <Text style={[styles.label, { color: cfg.color, fontSize: metrics.label, lineHeight: metrics.label + 1 }]}>{cfg.short}</Text>
     </View>
   );
 }
@@ -59,14 +75,15 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   placeholder: {
-    width: 24,
+    width: BADGE_FONT.sm.placeholder,
   },
   dot: {
-    fontSize: BADGE_FONT.dot,
-    lineHeight: BADGE_FONT.dot,
+    fontSize: BADGE_FONT.sm.dot,
+    lineHeight: BADGE_FONT.sm.dot,
   },
   label: {
-    fontSize: BADGE_FONT.label,
+    fontSize: BADGE_FONT.sm.label,
+    lineHeight: BADGE_FONT.sm.label + 1,
     fontWeight: "600",
     letterSpacing: 0.2,
   },

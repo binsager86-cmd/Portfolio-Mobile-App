@@ -42,7 +42,7 @@ export interface VolumeContext {
 }
 
 export interface MLBandItem {
-  ticker: string;
+  ticker?: string;
   band: string | null;
   color: string | null;
   emoji: string | null;
@@ -183,6 +183,63 @@ export interface SignalReliabilityStat {
   discriminative_power?: number | null;
 }
 
+export interface DnaWindowProfile {
+  horizon_days: number;
+  setup_count: number;
+  history_status: string;
+  confidence_floor: number;
+  confidence_tier: "ESTABLISHED" | "BUILDING" | "EARLY" | "TOO_THIN" | string;
+  confidence_label: string;
+  percentages_visible: boolean;
+  threshold_profiles: ThresholdProfile[];
+}
+
+export interface DnaSetupObservation {
+  date: string;
+  signal: string;
+  label: string;
+  detail: string;
+  value?: number | null;
+}
+
+export interface DnaSetupForwardOutcome {
+  horizon_days: number;
+  completed: boolean;
+  max_gain_pct?: number | null;
+  max_gain_date?: string | null;
+  threshold_hits: number[];
+}
+
+export interface DnaSetupBar {
+  date: string;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
+  volume?: number | null;
+  rel_volume?: number | null;
+  rsi?: number | null;
+  macd_line?: number | null;
+  macd_signal?: number | null;
+  macd_histogram?: number | null;
+  adx?: number | null;
+  plus_di?: number | null;
+  minus_di?: number | null;
+}
+
+export interface DnaSetupExample {
+  setup_date: string;
+  setup_window_start_date: string;
+  setup_window_end_date: string;
+  setup_bar_index: number;
+  setup_window_start_index: number;
+  setup_window_end_index: number;
+  available_forward_bars: number;
+  bars: DnaSetupBar[];
+  observations: DnaSetupObservation[];
+  forward_outcomes: Record<string, DnaSetupForwardOutcome>;
+}
+
 export interface VolumeProfile {
   avg_rel_vol_t90?: number | null;
   avg_rel_vol_t60?: number | null;
@@ -201,9 +258,14 @@ export interface BehavioralDNA {
   history_status?: string | null;
   setup_signals?: string[];
   setup_horizon_days?: number | null;
+  default_window_days?: number | null;
+  available_window_days?: number[];
+  confidence_floor?: number;
   most_reliable_signals: string[];
   signal_stats?: SignalReliabilityStat[];
   threshold_profiles: ThresholdProfile[];
+  window_profiles?: DnaWindowProfile[];
+  setup_examples?: DnaSetupExample[];
   dominant_pattern?: string | null;
   computed_at?: string | null;
   pre_move_volume_profile?: VolumeProfile | null;
@@ -287,17 +349,31 @@ function buildScannerUrl(filters?: ScannerFilters): string {
 /**
  * useEagleEyeScanner
  * GET /api/v1/eagle-eye/scanner
- * staleTime: 5 minutes
+ *
+ * Always fetches the full universe (no min_confidence sent to the server).
+ * All confidence/buy/breakout filtering is done client-side in the scanner
+ * screen's useMemo so filter chip changes are instant with zero extra
+ * network round trips.
+ *
+ * staleTime: 10 minutes
  */
-export function useEagleEyeScanner(filters?: ScannerFilters, enabled = true) {
+export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
+  // Only sector/tier are forwarded to the server — they narrow the universe
+  // at the DB level. Confidence and rating filters are client-side only.
+  const serverFilters: ScannerFilters = {
+    sector: _filters?.sector,
+    tier: _filters?.tier,
+    // limit: intentionally omitted — backend now defaults to 200 (full universe)
+  };
   return useQuery<ScannerResponse>({
-    queryKey: eagleEyeKeys.scanner(filters),
+    // Key does NOT include min_confidence so filter chips hit the cache
+    queryKey: eagleEyeKeys.scanner(serverFilters),
     queryFn: async () => {
-      const { data } = await api.get<ScannerResponse>(buildScannerUrl(filters));
+      const { data } = await api.get<ScannerResponse>(buildScannerUrl(serverFilters));
       return data;
     },
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: 10 * 60_000,   // 10 min — data changes only on nightly recompute
+    gcTime: 30 * 60_000,
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
@@ -432,8 +508,8 @@ export function useMLDisplayState(enabled = true) {
       const { data } = await api.get<MLDisplayStateResponse>("/api/v1/eagle-eye/ml/display-state");
       return data;
     },
-    staleTime: 60_000,
-    gcTime: 5 * 60_000,
+    staleTime: 10 * 60_000,  // kill-switch state changes rarely; 10 min is safe
+    gcTime: 30 * 60_000,
     retry: 1,
     enabled,
     placeholderData: (prev) => prev,

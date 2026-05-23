@@ -306,6 +306,32 @@ export const EE = {
   howToReadTitle: "How to Read This",
   howToReadBody:
     "A strong signal means this stock often rose after this pattern, but past results never guarantee the future. Always check your own risk before acting. Thin-volume stocks are less reliable.",
+  dnaWindowSelector: "Review window",
+  dnaWindowTab: (days: number) => `${days}d`,
+  dnaConfidenceTitle: "Confidence",
+  dnaConfidenceLine: (count: number, label: string) =>
+    `${count} completed setup${count === 1 ? "" : "s"}. ${label}.`,
+  dnaSelectedWindowNote: (days: number) => `Viewing the next ${days} trading days after the setup.`,
+  dnaInflationNote: (days: number) =>
+    `${days}-day windows naturally look stronger because price has more time to travel. Compare them against 20d on a like-for-like basis.`,
+  dnaTooThinPercentages: (count: number, floor: number) =>
+    `Only ${count} completed setup${count === 1 ? "" : "s"} exist for this window. We need at least ${floor} before showing percentages, but the visual evidence still appears below.`,
+  dnaObservationsTitle: "What the machine saw",
+  dnaObservationsBody:
+    "Every observation marker is causal. It fired on or before the setup bar, not after the outcome was known.",
+  dnaVisualEvidenceTitle: "Visual setup evidence",
+  dnaVisualEvidenceBody:
+    "These are real historical examples of the same setup. The shaded block is the setup window and the dashed line marks the selected review window.",
+  dnaExampleTitle: (date: string) => `Historical setup from ${date}`,
+  dnaExampleOutcome: (days: number, gain: string, completed: boolean) =>
+    completed
+      ? `Within ${days} trading days, the max gain reached ${gain}.`
+      : `This example does not have a complete ${days}-day forward window yet.`,
+  dnaTargetsHit: (targets: number[]) =>
+    targets.length > 0
+      ? `Targets hit: ${targets.map((target) => `+${Math.round(target)}%`).join(", ")}.`
+      : "No tracked target was hit in this window.",
+  dnaNoExamples: "No historical setup charts are available yet.",
   noFakeouts: "No fakeout patterns identified yet",
   days: "days",
   bars: "bars",

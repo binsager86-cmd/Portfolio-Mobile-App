@@ -65,11 +65,11 @@ export default function EagleEyeScannerScreen() {
   }, [isFocused]);
   const fetchEnabled = hasFocusedOnce || isFocused;
 
+  // No min_confidence sent to the server — full universe fetched once and
+  // cached for 10 min.  Confidence filtering happens in the useMemo below
+  // so chip presses are instant with no extra network calls.
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
-    useEagleEyeScanner(
-      { min_confidence: minConfidence > 0 ? minConfidence : undefined },
-      fetchEnabled
-    );
+    useEagleEyeScanner(undefined, fetchEnabled);
 
   const { data: regimeData } = useEagleEyeRegime(fetchEnabled);
   const { data: mlBandsData } = useMLBands(fetchEnabled);
@@ -96,7 +96,9 @@ export default function EagleEyeScannerScreen() {
     const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
     if (mlBandsData?.enabled && mlBandsData.bands) {
       for (const b of mlBandsData.bands) {
-        mlMap[b.ticker] = b;
+        if (b.ticker) {
+          mlMap[b.ticker] = b;
+        }
       }
     }
 
@@ -104,6 +106,10 @@ export default function EagleEyeScannerScreen() {
       ...s,
       ml_band: mlMap[s.ticker] ?? null,
     }));
+    // Confidence filter — client-side so chip changes never trigger a new API call
+    if (minConfidence > 0) {
+      list = list.filter((s) => s.confidence >= minConfidence);
+    }
     const q = search.trim().toUpperCase();
     if (q) {
       list = list.filter(
@@ -132,7 +138,7 @@ export default function EagleEyeScannerScreen() {
       return sortDir === "asc" ? -diff : diff;
     });
     return list;
-  }, [data, search, buyOnly, breakoutOnly, sortBy, sortDir, mlBandsData]);
+  }, [data, minConfidence, search, buyOnly, breakoutOnly, sortBy, sortDir, mlBandsData]);
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
