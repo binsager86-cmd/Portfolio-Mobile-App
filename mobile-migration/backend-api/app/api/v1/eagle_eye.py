@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 import uuid
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
@@ -28,6 +30,11 @@ from app.core.security import TokenData
 from app.schemas.eagle_eye import (
     BehavioralDNAResponse,
     DNAResponse,
+    DNASetupBarResponse,
+    DNASetupExampleResponse,
+    DNASetupForwardOutcomeResponse,
+    DNASetupObservationResponse,
+    DNAWindowProfileResponse,
     EventsListResponse,
     FullStockAnalysis,
     MoveEventResponse,
@@ -37,9 +44,11 @@ from app.schemas.eagle_eye import (
     RegimeResponse,
     ScannerResponse,
     SignalBreakdown,
+    SignalReliabilityResponse,
     StockAnalysisResponse,
     SupportResistanceLevel,
     ThresholdProfileResponse,
+    VolumeContextSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,13 +61,183 @@ router = APIRouter(prefix="/eagle-eye", tags=["Eagle Eye"])
 _cache: Dict[str, dict] = {}
 _DNA_CACHE: Dict[str, dict] = {}
 _EVENTS_CACHE: Dict[str, list] = {}
+_RECOMPUTE_LOCK = threading.Lock()
+_RECOMPUTE_IN_PROGRESS = False
+_RECOMPUTE_LAST_ATTEMPT_AT = 0.0
 
 _LOOKBACK_YEARS = 5
+_RECOMPUTE_COOLDOWN_SEC = 300
+
+# ---------------------------------------------------------------------------
+# Performance caches
+# ---------------------------------------------------------------------------
+# Stock meta map: ticker → StockMeta.  Rebuilt at most once every 10 minutes.
+# Avoids hitting the analysis_stocks DB table on every /scanner request.
+_META_MAP_CACHE: Optional[Dict[str, object]] = None
+_META_MAP_CACHE_AT: float = 0.0
+_META_MAP_TTL_SEC: float = 600.0  # 10 minutes
+
+# Scanner response cache: assembled List[RatedStock] held for 30 s so
+# rapid re-fetches (focus events, filter clicks) return instantly.
+_SCANNER_RESP_CACHE: Optional[list] = None
+_SCANNER_RESP_CACHE_AT: float = 0.0
+_SCANNER_RESP_TTL_SEC: float = 30.0  # 30 seconds
+
+
+def _get_meta_map() -> Dict[str, object]:
+    """Return a cached ticker → StockMeta lookup, rebuilt at most every 10 min."""
+    global _META_MAP_CACHE, _META_MAP_CACHE_AT
+    now = time.time()
+    if _META_MAP_CACHE is not None and (now - _META_MAP_CACHE_AT) < _META_MAP_TTL_SEC:
+        return _META_MAP_CACHE
+    try:
+        from app.services.eagle_eye.adapter import TickerChartAdapter
+        adapter = TickerChartAdapter()
+        meta_map = {s.ticker: s for s in adapter.list_stocks()}
+        _META_MAP_CACHE = meta_map
+        _META_MAP_CACHE_AT = now
+        return meta_map
+    except Exception:
+        logger.warning("Could not refresh meta map; using stale cache or empty dict")
+        return _META_MAP_CACHE or {}
 
 
 def _cache_key(ticker: str, as_of: Optional[date] = None) -> str:
     d = (as_of or date.today()).isoformat()
     return f"{ticker.upper()}:{d}"
+
+
+def _safe_float(v) -> Optional[float]:
+    """Coerce to float; return None for NaN, Inf, or anything non-numeric."""
+    if v is None:
+        return None
+    try:
+        import math
+        f = float(v)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_threshold_profile_response(
+    threshold_profile: dict,
+    fallback_total_setups: int,
+) -> ThresholdProfileResponse:
+    hits = threshold_profile.get("occurrences", threshold_profile.get("hits", 0))
+    sample_count = threshold_profile.get("sample_count", hits)
+    total_setups = threshold_profile.get("sample_count", threshold_profile.get("total_count", fallback_total_setups))
+    return ThresholdProfileResponse(
+        threshold_pct=threshold_profile.get("threshold_pct", 0),
+        success_rate=threshold_profile.get("success_rate", 0),
+        sample_count=sample_count,
+        total_count=total_setups,
+        hits=hits,
+        total_setups=total_setups,
+        median_bars_to_hit=threshold_profile.get("median_bars_to_hit"),
+        avg_win_pct=threshold_profile.get("avg_gain_on_hits_pct", threshold_profile.get("avg_gain_pct", threshold_profile.get("avg_win_pct"))),
+        avg_loss_pct=threshold_profile.get("avg_loss_pct"),
+        avg_gain_all_pct=threshold_profile.get("avg_gain_all_pct"),
+        avg_gain_on_hits_pct=threshold_profile.get("avg_gain_on_hits_pct", threshold_profile.get("avg_gain_pct", threshold_profile.get("avg_win_pct"))),
+    )
+
+
+def _build_window_profile_response(window_profile: dict) -> DNAWindowProfileResponse:
+    setup_count = window_profile.get("setup_count", 0)
+    threshold_profiles = [
+        _build_threshold_profile_response(threshold_profile, setup_count)
+        for threshold_profile in window_profile.get("threshold_profiles", [])
+    ]
+    return DNAWindowProfileResponse(
+        horizon_days=window_profile.get("horizon_days", 0),
+        setup_count=setup_count,
+        history_status=window_profile.get("history_status", "ok"),
+        confidence_floor=window_profile.get("confidence_floor", 5),
+        confidence_tier=window_profile.get("confidence_tier", "TOO_THIN"),
+        confidence_label=window_profile.get("confidence_label", "Too thin"),
+        percentages_visible=window_profile.get("percentages_visible", False),
+        threshold_profiles=threshold_profiles,
+    )
+
+
+_BAR_FLOAT_FIELDS = (
+    "open", "high", "low", "close", "volume", "rel_volume",
+    "rsi", "macd_line", "macd_signal", "macd_histogram",
+    "adx", "plus_di", "minus_di",
+)
+
+
+def _build_setup_example_response(setup_example: dict) -> DNASetupExampleResponse:
+    bars: list[DNASetupBarResponse] = []
+    for raw_bar in setup_example.get("bars", []):
+        sanitized = {"date": str(raw_bar.get("date", ""))}
+        for field in _BAR_FLOAT_FIELDS:
+            sanitized[field] = _safe_float(raw_bar.get(field))
+        bars.append(DNASetupBarResponse(**sanitized))
+
+    observations = [
+        DNASetupObservationResponse(**observation)
+        for observation in setup_example.get("observations", [])
+    ]
+    forward_outcomes = {
+        key: DNASetupForwardOutcomeResponse(**outcome)
+        for key, outcome in setup_example.get("forward_outcomes", {}).items()
+    }
+    return DNASetupExampleResponse(
+        setup_date=setup_example.get("setup_date", ""),
+        setup_window_start_date=setup_example.get("setup_window_start_date", ""),
+        setup_window_end_date=setup_example.get("setup_window_end_date", ""),
+        setup_bar_index=setup_example.get("setup_bar_index", 0),
+        setup_window_start_index=setup_example.get("setup_window_start_index", 0),
+        setup_window_end_index=setup_example.get("setup_window_end_index", 0),
+        available_forward_bars=setup_example.get("available_forward_bars", 0),
+        bars=bars,
+        observations=observations,
+        forward_outcomes=forward_outcomes,
+    )
+
+
+def _trigger_eagle_eye_recompute(reason: str, *, force: bool = False) -> bool:
+    """Best-effort background recompute trigger with per-process cooldown."""
+    global _RECOMPUTE_IN_PROGRESS, _RECOMPUTE_LAST_ATTEMPT_AT
+
+    now = time.time()
+    with _RECOMPUTE_LOCK:
+        if _RECOMPUTE_IN_PROGRESS:
+            logger.info("Eagle Eye recompute already in progress; skip trigger (%s)", reason)
+            return False
+        if not force and (now - _RECOMPUTE_LAST_ATTEMPT_AT) < _RECOMPUTE_COOLDOWN_SEC:
+            logger.info("Eagle Eye recompute cooldown active; skip trigger (%s)", reason)
+            return False
+        _RECOMPUTE_IN_PROGRESS = True
+        _RECOMPUTE_LAST_ATTEMPT_AT = now
+
+    def _runner() -> None:
+        global _RECOMPUTE_IN_PROGRESS
+        try:
+            from app.services.eagle_eye.ingest import run_nightly_recompute
+
+            result = run_nightly_recompute(dna_refresh=False, verbose=False)
+            logger.info("Eagle Eye background recompute finished (%s): %s", reason, result)
+        except Exception:
+            logger.exception("Eagle Eye background recompute failed (%s)", reason)
+        finally:
+            with _RECOMPUTE_LOCK:
+                _RECOMPUTE_IN_PROGRESS = False
+
+    try:
+        thread = threading.Thread(
+            target=_runner,
+            daemon=True,
+            name=f"ee_recompute_{reason}",
+        )
+        thread.start()
+        logger.info("Eagle Eye background recompute triggered (%s)", reason)
+        return True
+    except Exception:
+        with _RECOMPUTE_LOCK:
+            _RECOMPUTE_IN_PROGRESS = False
+        logger.exception("Could not start Eagle Eye background recompute (%s)", reason)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -87,26 +266,51 @@ def _run_analysis(ticker: str) -> Optional[dict]:
             if isinstance(indicators, str):
                 import json
                 indicators = json.loads(indicators)
+            supports = cached_row.get("supports_json") or []
+            resistances = cached_row.get("resistances_json") or []
+            entry = {
+                "entry_primary": cached_row.get("entry_primary"),
+                "entry_aggressive": cached_row.get("entry_aggressive"),
+                "entry_conservative": cached_row.get("entry_conservative"),
+                "plan_state": "ACTIVE",
+                "plan_reason": None,
+                "conditional_entry": None,
+                "stop_loss": cached_row.get("stop_loss"),
+                "tp1": cached_row.get("tp1"),
+                "tp1_probability": cached_row.get("tp1_probability"),
+                "tp2": cached_row.get("tp2"),
+                "tp2_probability": cached_row.get("tp2_probability"),
+                "tp3": cached_row.get("tp3"),
+                "tp3_probability": cached_row.get("tp3_probability"),
+                "risk_reward_ratio": None,
+                "gain_pct_to_tp1": None,
+            }
+            try:
+                from app.services.eagle_eye.adapter import TickerChartAdapter
+                from app.services.eagle_eye.rating_engine import compute_entry_stop_targets
+
+                adapter = TickerChartAdapter()
+                end_d = date.today()
+                start_d = end_d - timedelta(days=_LOOKBACK_YEARS * 365 + 60)
+                df = adapter.get_ohlcv_daily(ticker, start_d, end_d)
+                if df is not None and len(df) >= 30 and isinstance(indicators, dict):
+                    entry = compute_entry_stop_targets(
+                        df,
+                        indicators,
+                        {"supports": supports, "resistances": resistances},
+                        stage=cached_row.get("stage"),
+                    )
+            except Exception as exc:
+                logger.debug("Live trade-plan refresh miss for %s: %s", ticker, exc)
             result = {
                 "ticker": ticker.upper(),
                 "stage": cached_row.get("stage"),
                 "rating": cached_row.get("rating"),
                 "confidence": cached_row.get("confidence"),
                 "thesis": cached_row.get("thesis"),
-                "supports": cached_row.get("supports_json") or [],
-                "resistances": cached_row.get("resistances_json") or [],
-                "entry": {
-                    "entry_primary": cached_row.get("entry_primary"),
-                    "entry_aggressive": cached_row.get("entry_aggressive"),
-                    "entry_conservative": cached_row.get("entry_conservative"),
-                    "stop_loss": cached_row.get("stop_loss"),
-                    "tp1": cached_row.get("tp1"),
-                    "tp1_probability": cached_row.get("tp1_probability"),
-                    "tp2": cached_row.get("tp2"),
-                    "tp2_probability": cached_row.get("tp2_probability"),
-                    "tp3": cached_row.get("tp3"),
-                    "tp3_probability": cached_row.get("tp3_probability"),
-                },
+                "supports": supports,
+                "resistances": resistances,
+                "entry": entry,
                 "indicators": indicators,
                 "days_of_history": cached_row.get("days_of_history"),
                 "computed_at": cached_row.get("computed_at"),
@@ -126,6 +330,7 @@ def _run_analysis(ticker: str) -> Optional[dict]:
             compute_entry_stop_targets,
             compute_rating,
             compute_support_resistance,
+            compute_volume_context,
             generate_thesis,
         )
 
@@ -145,6 +350,19 @@ def _run_analysis(ticker: str) -> Optional[dict]:
 
         stage = classify_stage(latest)
         confidence = compute_confidence(latest, stage, dna=None)
+
+        # Volume context + confidence multiplier
+        volume_context = compute_volume_context(df, stage)
+        _tier = volume_context["liquidity_tier"]
+        _LMUL = {"ILLIQUID": 0.50, "WATCH_ONLY": 0.70}
+        if _tier in _LMUL:
+            confidence = confidence * _LMUL[_tier]
+        elif not volume_context["is_volume_confirmed"]:
+            confidence = confidence * 0.85
+        elif volume_context["relative_volume_percentile"] > 80:
+            confidence = min(confidence * 1.10, 100)
+        confidence = round(min(confidence, 100), 2)
+
         rating = compute_rating(confidence)
         sr = compute_support_resistance(df, latest)
         et = compute_entry_stop_targets(df, latest, sr, stage=stage)
@@ -160,6 +378,7 @@ def _run_analysis(ticker: str) -> Optional[dict]:
             "resistances": sr.get("resistances", []),
             "entry": et,
             "indicators": latest,
+            "volume_context": volume_context,
             "days_of_history": len(df),
             "computed_at": datetime.utcnow().date().isoformat(),
         }
@@ -180,106 +399,105 @@ async def get_scanner(
     sector: Optional[str] = Query(None, description="Filter by sector"),
     tier: Optional[str] = Query(None, description="Filter by market tier"),
     min_confidence: float = Query(0.0, ge=0, le=100, description="Minimum confidence score"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum number of stocks to return"),
+    limit: int = Query(200, ge=1, le=500, description="Maximum number of stocks to return"),
     _user: TokenData = Depends(get_current_user),
 ):
     """
     Return a rated list of Kuwait stocks, optionally filtered by sector, tier, and
     minimum confidence. Reads from ee_ratings_cache (pre-computed nightly) for
     instant response; falls back to live per-stock computation when the cache is empty.
-    """
-    try:
-        from app.services.eagle_eye.adapter import TickerChartAdapter
-    except ImportError as exc:
-        raise HTTPException(status_code=500, detail=f"Eagle Eye service unavailable: {exc}")
 
-    # ── DB fast path: read pre-computed ratings ──────────────────────
+    Performance notes:
+    - StockMeta lookup is cached for 10 minutes (_get_meta_map).
+    - The assembled response list is cached for 30 seconds for rapid re-fetches.
+    - min_confidence filtering is pushed to SQL in load_all_ratings().
+    - limit defaults to 200 so the frontend always receives the full universe
+      and can do all secondary filtering client-side without extra round trips.
+    """
+    global _SCANNER_RESP_CACHE, _SCANNER_RESP_CACHE_AT
+
+    # ── 30-second response cache for identical unfiltered requests ───────────
+    # Sector/tier filters bypass the cache so they remain correct.
+    now = time.time()
+    use_resp_cache = (
+        not sector
+        and not tier
+        and min_confidence == 0.0
+        and _SCANNER_RESP_CACHE is not None
+        and (now - _SCANNER_RESP_CACHE_AT) < _SCANNER_RESP_TTL_SEC
+    )
+    if use_resp_cache:
+        cached = _SCANNER_RESP_CACHE
+        return ScannerResponse(status="ok", count=len(cached), stocks=cached)
+
+    # ── DB fast path: read pre-computed ratings ──────────────────────────────
+    # NOTE: Live compute fallback removed — it fetched OHLCV for 100+ stocks
+    # synchronously in an async handler, blocking the event loop for minutes.
+    # The background warmup (started at app startup) populates ee_ratings_cache.
+    # Return warming_up immediately when cache is cold so the UI stays responsive.
     try:
         from app.services.eagle_eye.store import load_all_ratings
 
-        db_rows = load_all_ratings()
-        if db_rows:
-            # Build StockMeta map for names/sectors (quick, from adapter)
-            adapter = TickerChartAdapter()
-            meta_map = {s.ticker: s for s in adapter.list_stocks()}
+        db_rows = load_all_ratings(min_confidence=min_confidence, limit=limit)
+        if not db_rows:
+            # Cache is cold — retrigger a best-effort background warmup and respond immediately.
+            _trigger_eagle_eye_recompute("scanner_cache_cold")
+            logger.info("Eagle Eye scanner: cache cold, returning warming_up status")
+            return ScannerResponse(status="warming_up", count=0, stocks=[])
 
-            results: List[RatedStock] = []
-            for row in db_rows:
-                t = str(row.get("ticker") or "").upper()
-                meta = meta_map.get(t)
-                row_sector = str(row.get("sector") or (meta.sector if meta else "Kuwait"))
-                row_name = str(row.get("name_en") or (meta.name_en if meta else t))
-                row_tier = meta.market_tier if meta else "premier"
+        # ── Use cached meta map (rebuilt at most every 10 min) ───────────────
+        meta_map = _get_meta_map()
 
-                if sector and row_sector.lower() != sector.lower():
-                    continue
-                if tier and row_tier.lower() != tier.lower():
-                    continue
-                conf = float(row.get("confidence") or 0.0)
-                if conf < min_confidence:
-                    continue
+        results: List[RatedStock] = []
+        for row in db_rows:
+            t = str(row.get("ticker") or "").upper()
+            meta = meta_map.get(t)
+            row_sector = str(row.get("sector") or (meta.sector if meta else "Kuwait"))
+            row_name = str(row.get("name_en") or (meta.name_en if meta else t))
+            row_tier = meta.market_tier if meta else "premier"
 
-                results.append(RatedStock(
-                    ticker=t,
-                    name_en=row_name,
-                    sector=row_sector,
-                    stage=row.get("stage"),
-                    rating=row.get("rating"),
-                    confidence=conf,
-                    thesis=row.get("thesis"),
-                    entry_primary=row.get("entry_primary"),
-                    stop_loss=row.get("stop_loss"),
-                    tp1=row.get("tp1"),
-                    last_price=row.get("last_price"),
-                    computed_at=row.get("computed_at"),
-                ))
-                if len(results) >= limit:
-                    break
+            if sector and row_sector.lower() != sector.lower():
+                continue
+            if tier and row_tier.lower() != tier.lower():
+                continue
 
-            if results:
-                return ScannerResponse(status="ok", count=len(results), stocks=results)
+            conf = float(row.get("confidence") or 0.0)
+
+            vc_raw = row.get("volume_context") or {}
+            vc_summary = VolumeContextSummary(
+                relative_volume=float(vc_raw.get("relative_volume") or 1.0),
+                liquidity_tier=str(vc_raw.get("liquidity_tier") or "TRADEABLE"),
+                is_volume_confirmed=bool(vc_raw.get("is_volume_confirmed", True)),
+                volume_character=str(vc_raw.get("volume_character") or "NEUTRAL"),
+                volume_trend_5d=str(vc_raw.get("volume_trend_5d") or "NEUTRAL"),
+            ) if vc_raw else None
+
+            results.append(RatedStock(
+                ticker=t,
+                name_en=row_name,
+                sector=row_sector,
+                stage=row.get("stage"),
+                rating=row.get("rating"),
+                confidence=conf,
+                thesis=row.get("thesis"),
+                entry_primary=row.get("entry_primary"),
+                stop_loss=row.get("stop_loss"),
+                tp1=row.get("tp1"),
+                last_price=row.get("last_price"),
+                computed_at=row.get("computed_at"),
+                volume_context=vc_summary,
+            ))
+
+        # Cache the unfiltered response for 30 s
+        if not sector and not tier and min_confidence == 0.0:
+            _SCANNER_RESP_CACHE = results
+            _SCANNER_RESP_CACHE_AT = now
+
+        return ScannerResponse(status="ok", count=len(results), stocks=results)
+
     except Exception as exc:
-        logger.debug("DB scanner fast path failed, using live compute: %s", exc)
-
-    # ── Live compute fallback (first run / cache empty) ───────────────
-    adapter = TickerChartAdapter()
-    stocks_meta = adapter.list_stocks()
-
-    # Apply sector / tier filter before computing
-    if sector:
-        stocks_meta = [s for s in stocks_meta if s.sector.lower() == sector.lower()]
-    if tier:
-        stocks_meta = [s for s in stocks_meta if s.market_tier.lower() == tier.lower()]
-
-    results: List[RatedStock] = []
-    for meta in stocks_meta[:limit * 2]:  # compute extra to allow confidence filter
-        analysis = _run_analysis(meta.ticker)
-        if analysis is None:
-            continue
-        if analysis["confidence"] < min_confidence:
-            continue
-
-        et = analysis.get("entry", {})
-        results.append(RatedStock(
-            ticker=analysis["ticker"],
-            name_en=meta.name_en,
-            sector=meta.sector,
-            stage=analysis["stage"],
-            rating=analysis["rating"],
-            confidence=analysis["confidence"],
-            thesis=analysis["thesis"],
-            entry_primary=et.get("entry_primary"),
-            stop_loss=et.get("stop_loss"),
-            tp1=et.get("tp1"),
-            last_price=float(analysis["indicators"].get("close") or 0) or None,
-            computed_at=analysis.get("computed_at"),
-        ))
-        if len(results) >= limit:
-            break
-
-    # Sort by confidence descending
-    results.sort(key=lambda x: -(x.confidence or 0))
-    return ScannerResponse(status="ok", count=len(results), stocks=results)
+        logger.warning("DB scanner failed: %s", exc)
+        return ScannerResponse(status="error", count=0, stocks=[])
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +548,7 @@ async def get_stock_analysis(
 
     # Position sizing (optional — only if portfolio_kwd provided)
     pos_size_pct = pos_size_kwd = liq_capped = req_confirm = None
-    if portfolio_kwd > 0:
+    if portfolio_kwd > 0 and et.get("plan_state") == "ACTIVE":
         from app.services.eagle_eye.rating_engine import compute_position_size
         entry_p = et.get("entry_primary", 0.0)
         stop_p = et.get("stop_loss", entry_p * 0.95)
@@ -359,6 +577,9 @@ async def get_stock_analysis(
         entry_primary=et.get("entry_primary"),
         entry_aggressive=et.get("entry_aggressive"),
         entry_conservative=et.get("entry_conservative"),
+        plan_state=et.get("plan_state", "ACTIVE"),
+        plan_reason=et.get("plan_reason"),
+        conditional_entry=et.get("conditional_entry"),
         stop_loss=et.get("stop_loss"),
         tp1=et.get("tp1"),
         tp1_probability=et.get("tp1_probability"),
@@ -366,6 +587,8 @@ async def get_stock_analysis(
         tp2_probability=et.get("tp2_probability"),
         tp3=et.get("tp3"),
         tp3_probability=et.get("tp3_probability"),
+        risk_reward_ratio=et.get("risk_reward_ratio"),
+        gain_pct_to_tp1=et.get("gain_pct_to_tp1"),
         position_size_pct=pos_size_pct,
         position_size_kwd=pos_size_kwd,
         liquidity_capped=liq_capped,
@@ -399,10 +622,33 @@ async def get_stock_dna(
     t = ticker.upper().strip()
     cache_key = f"dna:{t}"
 
+    try:
+        return await _get_stock_dna_inner(t, cache_key, load_dna)
+    except Exception as exc:
+        logger.exception("DNA endpoint crashed for %s — evicting cache and returning error", t)
+        # Evict potentially corrupt in-memory entry so the next request retries cleanly
+        _DNA_CACHE.pop(cache_key, None)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "error",
+                "message": f"Failed to build DNA response for {t}: {exc}",
+                "ticker": t,
+            },
+        )
+
+
+async def _get_stock_dna_inner(t: str, cache_key: str, load_dna):
+    """Inner implementation of get_stock_dna — separated so the outer function can catch all exceptions."""
     # 1. Fast path — in-memory cache
     if cache_key in _DNA_CACHE:
         dna_dict = _DNA_CACHE[cache_key]
-        return DNAResponse(status="ok", data=BehavioralDNAResponse(**dna_dict))
+        try:
+            return DNAResponse(status="ok", data=BehavioralDNAResponse(**dna_dict))
+        except Exception:
+            # Cached entry is stale/broken — fall through to rebuild
+            logger.warning("Corrupt DNA cache entry for %s; rebuilding", t)
+            _DNA_CACHE.pop(cache_key, None)
 
     # 2. Check the DB store (written by the nightly Phase-2 pipeline)
     try:
@@ -411,41 +657,133 @@ async def get_stock_dna(
         logger.warning("load_dna failed for %s: %s", t, exc)
         stored = None
 
+    needs_refresh = bool(
+        stored
+        and (
+            "history_status" not in stored
+            or "setup_signals" not in stored
+            or "setup_horizon_days" not in stored
+            or "signal_stats" not in stored
+            or "window_profiles" not in stored
+            or "setup_examples" not in stored
+            or "default_window_days" not in stored
+        )
+    )
+
+    if stored is None or needs_refresh:
+        # DNA not in DB — compute on-demand in a thread to avoid blocking the event loop
+        import asyncio
+
+        from app.services.eagle_eye.ingest import build_dna_for_ticker
+
+        logger.info("Building DNA on-demand for %s", t)
+        loop = asyncio.get_event_loop()
+        try:
+            rebuilt = await loop.run_in_executor(None, build_dna_for_ticker, t)
+            if rebuilt is not None:
+                stored = rebuilt
+        except Exception as exc:
+            logger.warning("On-demand DNA build failed for %s: %s", t, exc)
+            if stored is None:
+                stored = None
+
     if stored is None:
-        # Pipeline hasn't built the DNA for this ticker yet — return pending
         return JSONResponse(
             status_code=200,
             content={
-                "status": "pending",
+                "status": "unavailable",
                 "message": (
-                    "Behavioral DNA is still being computed for this stock. "
-                    "Check back in a few minutes."
+                    "Insufficient price history to compute Behavioral DNA "
+                    "for this stock."
                 ),
                 "ticker": t,
             },
         )
 
     # 3. Build response from stored DNA dict
-    profiles: List[ThresholdProfileResponse] = []
-    for tp in stored.get("profiles_by_threshold", []):
-        profiles.append(ThresholdProfileResponse(
-            threshold_pct=tp.get("threshold_pct", 0),
-            success_rate=tp.get("success_rate", 0),
-            sample_count=tp.get("sample_count", 0),
-            median_bars_to_hit=tp.get("median_bars_to_hit"),
-            avg_win_pct=tp.get("avg_win_pct"),
-            avg_loss_pct=tp.get("avg_loss_pct"),
-        ))
+    profiles: List[ThresholdProfileResponse] = [
+        _build_threshold_profile_response(tp, stored.get("total_events_studied", 0))
+        for tp in stored.get("profiles_by_threshold", [])
+    ]
 
+    signal_stats: List[SignalReliabilityResponse] = []
+    setup_signal_stats = stored.get("signal_stats", [])
+    if setup_signal_stats and isinstance(setup_signal_stats[0], dict):
+        signal_stats = [
+            SignalReliabilityResponse(
+                signal=s.get("signal", ""),
+                reliability_pct=s.get("reliability_pct"),
+                presence_pct=s.get("presence_pct", s.get("reliability_pct")),
+                fired_count=s.get("fired_count", 0),
+                total_events=s.get("total_events"),
+                total_setups=s.get("total_setups", stored.get("total_events_studied", 0)),
+                avg_lead_days=s.get("avg_lead_days"),
+                false_positive_rate=s.get("false_positive_rate"),
+                discriminative_power=s.get("discriminative_power"),
+            )
+            for s in setup_signal_stats
+            if s.get("signal")
+        ]
     most_reliable = stored.get("most_reliable_signals_overall", [])
+    if not signal_stats and most_reliable and isinstance(most_reliable[0], dict):
+        signal_stats = [
+            SignalReliabilityResponse(
+                signal=s.get("signal", ""),
+                reliability_pct=s.get("reliability_pct", 0),
+                presence_pct=s.get("reliability_pct", 0),
+                fired_count=s.get("fired_count", 0),
+                total_events=s.get("total_events", stored.get("total_events_studied", 0)),
+                total_setups=s.get("total_events", stored.get("total_events_studied", 0)),
+                avg_lead_days=s.get("avg_lead_days"),
+                false_positive_rate=s.get("false_positive_rate"),
+                discriminative_power=s.get("discriminative_power"),
+            )
+            for s in most_reliable
+            if s.get("signal")
+        ]
+
     if most_reliable and isinstance(most_reliable[0], dict):
-        most_reliable = [s.get("signal", "") for s in most_reliable if s.get("signal")]
+        most_reliable = [s.signal for s in signal_stats]
+
+    window_profiles = [
+        _build_window_profile_response(window_profile)
+        for window_profile in stored.get("window_profiles", [])
+    ]
+    if not window_profiles and stored.get("setup_horizon_days"):
+        window_profiles = [
+            DNAWindowProfileResponse(
+                horizon_days=stored.get("setup_horizon_days", 0),
+                setup_count=stored.get("total_events_studied", 0),
+                history_status=stored.get("history_status", "ok"),
+                confidence_floor=stored.get("confidence_floor", 20),
+                confidence_tier="ESTABLISHED" if stored.get("history_status") != "INSUFFICIENT_HISTORY" else "TOO_THIN",
+                confidence_label="Established" if stored.get("history_status") != "INSUFFICIENT_HISTORY" else "Too thin",
+                percentages_visible=stored.get("history_status") != "INSUFFICIENT_HISTORY",
+                threshold_profiles=profiles,
+            )
+        ]
+
+    setup_examples = []
+    for raw_ex in stored.get("setup_examples", []):
+        try:
+            setup_examples.append(_build_setup_example_response(raw_ex))
+        except Exception as ex_err:
+            logger.warning("Skipping malformed setup example (%s): %s", t, ex_err)
 
     dna_response = BehavioralDNAResponse(
         ticker=t,
         total_events_analyzed=stored.get("total_events_studied", 0),
+        history_status=stored.get("history_status", "ok"),
+        setup_signals=stored.get("setup_signals", []),
+        setup_horizon_days=stored.get("setup_horizon_days"),
+        default_window_days=stored.get("default_window_days", stored.get("setup_horizon_days")),
+        available_window_days=stored.get("available_window_days", [stored.get("setup_horizon_days")] if stored.get("setup_horizon_days") else []),
+        confidence_floor=stored.get("confidence_floor", 5),
         most_reliable_signals=most_reliable[:10],
+        signal_stats=signal_stats[:10],
         threshold_profiles=profiles,
+        window_profiles=window_profiles,
+        setup_examples=setup_examples,
         dominant_pattern=stored.get("dominant_pattern"),
         computed_at=stored.get("computed_at", datetime.utcnow().date().isoformat()),
     )
@@ -550,22 +888,18 @@ async def refresh_stocks(
     # Spawn a background thread to re-run the full nightly pipeline so
     # ee_ratings_cache is refreshed without blocking this response.
     try:
-        import threading
-        from app.services.eagle_eye.ingest import run_nightly_recompute
-
-        thread = threading.Thread(
-            target=run_nightly_recompute,
-            kwargs={"dna_refresh": False, "verbose": False},
-            daemon=True,
-            name="ee_refresh_bg",
-        )
-        thread.start()
-        logger.info(
-            "Eagle Eye background recompute triggered for %d ticker(s)",
-            len(body.tickers),
-        )
+        _trigger_eagle_eye_recompute("manual_refresh", force=True)
+        logger.info("Eagle Eye background recompute requested for %d ticker(s)", len(body.tickers))
     except Exception as exc:
         logger.warning("Could not start Eagle Eye background recompute: %s", exc)
+
+    job_id = str(uuid.uuid4())
+    return RefreshResponse(
+        status="ok",
+        job_id=job_id,
+        tickers_queued=len(body.tickers),
+        estimated_minutes=round(len(body.tickers) * 0.5, 1) or 0.5,
+    )
 
 
 # ===========================================================================
@@ -628,6 +962,13 @@ def _sim_portfolio_summary(portfolio: dict) -> dict:
     total = float(portfolio.get("total_value_kwd") or starting)
     cumulative_return_pct = ((total - starting) / starting * 100) if starting > 0 else 0
 
+    # live_since: date when portfolio was last reset (updated_at from DB)
+    raw_live_since = portfolio.get("updated_at") or portfolio.get("created_at")
+    if raw_live_since:
+        live_since = str(raw_live_since).split(" ")[0].split("T")[0]
+    else:
+        live_since = None
+
     return {
         "id": pid,
         "strategy_name": portfolio.get("strategy_name"),
@@ -645,6 +986,7 @@ def _sim_portfolio_summary(portfolio: dict) -> dict:
         "profit_factor": round(profit_factor, 2),
         "max_drawdown_pct": round(max_drawdown, 2),
         "equity_curve": equity_curve,
+        "live_since": live_since,
     }
 
 
@@ -1015,8 +1357,6 @@ async def get_simulator_activity(
 async def run_simulator_now(
     user: TokenData = Depends(get_current_user),
 ):
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin only")
     try:
         from app.services.eagle_eye.simulator import get_engine
         result = get_engine().run_daily()
@@ -1111,3 +1451,311 @@ async def get_market_regime(
             regime="NEUTRAL",
             last_updated=datetime.utcnow().date().isoformat(),
         )
+
+
+# ---------------------------------------------------------------------------
+# Addendum A.1 — ML eligibility summary for frontend Settings page
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/ml/eligibility-summary",
+    summary="ML eligibility coverage summary (Settings page)",
+)
+async def get_ml_eligibility_summary(
+    _user: TokenData = Depends(get_current_user),
+):
+    """
+    Return a compact summary of how many stocks are ML-eligible, rules-only,
+    and watch-only.  Used by the frontend Settings page.
+
+    Example response::
+
+        {
+            "status": "ok",
+            "total": 139,
+            "ml_eligible": 62,
+            "rules_only": 59,
+            "watch_only": 18,
+            "label": "62 of 139 stocks are ML-eligible. 59 are rules-only. 18 are watch-only."
+        }
+    """
+    from app.services.eagle_eye.ml.eligibility_report import get_eligibility_summary_for_frontend
+
+    counts = get_eligibility_summary_for_frontend()
+    label = (
+        f"{counts['ml_eligible']} of {counts['total']} stocks are ML-eligible. "
+        f"{counts['rules_only']} are rules-only. "
+        f"{counts['watch_only']} are watch-only."
+    )
+    return {"status": "ok", **counts, "label": label}
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — ML band display endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/ml/display-state", summary="ML display kill-switch state")
+async def get_ml_display_state(
+    _user: TokenData = Depends(get_current_user),
+):
+    """
+    Return the current ML display state.
+
+    Response::
+
+        {
+            "enabled": true,          // ENABLE_ML_DISPLAY setting
+            "auto_disabled": false,   // auto-disable monitor flag
+            "disabled_reason": null   // reason if auto_disabled=true
+        }
+    """
+    from app.core.config import get_settings
+    from app.core.database import query_one
+
+    settings = get_settings()
+    state = query_one("SELECT auto_disabled, disabled_reason FROM ml_display_state WHERE id = 1", ())
+    auto_disabled = bool(state and state["auto_disabled"]) if state else False
+    disabled_reason = state["disabled_reason"] if state else None
+    return {
+        "enabled": settings.ENABLE_ML_DISPLAY and not auto_disabled,
+        "config_enabled": settings.ENABLE_ML_DISPLAY,
+        "auto_disabled": auto_disabled,
+        "disabled_reason": disabled_reason,
+    }
+
+
+@router.get("/ml/bands", summary="ML band scores for all SHADOW stocks")
+async def get_ml_bands(
+    _user: TokenData = Depends(get_current_user),
+):
+    """
+    Return ML band labels for all 14 SHADOW-roster stocks.
+
+    When ML display is disabled (kill-switch or auto-disable), all band values
+    are returned as null and *enabled* is false.
+
+    Response::
+
+        {
+            "enabled": true,
+            "disclaimer": "⚠️ ML signal in evaluation...",
+            "bands": [
+                {"ticker": "AAYANRE", "band": "HIGH", "color": "#10B981", ...},
+                ...
+            ]
+        }
+    """
+    from app.core.config import get_settings
+    from app.core.database import query_one, query_all
+    from app.services.eagle_eye.ml.band_display import band_for_display, DISCLAIMER_TEXT
+    from app.services.eagle_eye.ml.shadow_runner import SHADOW_ROSTER
+
+    settings = get_settings()
+    state = query_one("SELECT auto_disabled FROM ml_display_state WHERE id = 1", ())
+    auto_disabled = bool(state and state["auto_disabled"]) if state else False
+    ml_enabled = settings.ENABLE_ML_DISPLAY and not auto_disabled
+
+    bands = []
+    for ticker in SHADOW_ROSTER:
+        if not ml_enabled:
+            bands.append({
+                "ticker": ticker,
+                "band": None,
+                "color": None,
+                "emoji": None,
+                "short_label": None,
+            })
+            continue
+
+        row = query_one(
+            """
+            SELECT band_label, calibrated_prob, log_date
+              FROM ml_shadow_log
+             WHERE stock_ticker = ?
+               AND band_label IS NOT NULL
+             ORDER BY log_date DESC
+             LIMIT 1
+            """,
+            (ticker,),
+        )
+        if row and row["band_label"]:
+            display = band_for_display(row["band_label"])
+            bands.append({
+                "ticker": ticker,
+                "band": row["band_label"],
+                "color": display["color"],
+                "emoji": display["emoji"],
+                "short_label": display["short"],
+                "as_of": row["log_date"],
+                "calibrated_prob": row["calibrated_prob"],
+            })
+        else:
+            bands.append({
+                "ticker": ticker,
+                "band": "INSUFFICIENT_DATA",
+                "color": "#9CA3AF",
+                "emoji": "—",
+                "short_label": "N/A",
+                "as_of": None,
+                "calibrated_prob": None,
+            })
+
+    return {
+        "enabled": ml_enabled,
+        "disclaimer": DISCLAIMER_TEXT,
+        "bands": bands,
+    }
+
+
+@router.get("/ml/bands/{ticker}", summary="Full ML band card for one stock")
+async def get_ml_band_for_ticker(
+    ticker: str,
+    _user: TokenData = Depends(get_current_user),
+):
+    """
+    Return the full ML band card for a single ticker.
+
+    Includes band label, thresholds, calibrated probability, a BORDERLINE
+    verdict when the stock is within 5% of a band boundary, and the
+    mandatory disclaimer text.
+
+    Returns 404 if the ticker is not in the SHADOW roster.
+    Returns null band fields if ML display is disabled.
+    """
+    from app.core.config import get_settings
+    from app.core.database import query_one
+    from app.services.eagle_eye.ml.band_display import band_for_display, DISCLAIMER_TEXT
+    from app.services.eagle_eye.ml.shadow_runner import SHADOW_ROSTER
+
+    ticker = ticker.upper()
+    if ticker not in SHADOW_ROSTER:
+        raise HTTPException(status_code=404, detail=f"{ticker} is not in the ML SHADOW roster")
+
+    settings = get_settings()
+    state = query_one("SELECT auto_disabled, disabled_reason FROM ml_display_state WHERE id = 1", ())
+    auto_disabled = bool(state and state["auto_disabled"]) if state else False
+    ml_enabled = settings.ENABLE_ML_DISPLAY and not auto_disabled
+
+    if not ml_enabled:
+        return {
+            "ticker": ticker,
+            "enabled": False,
+            "band": None,
+            "disclaimer": DISCLAIMER_TEXT
+            if not settings.ENABLE_ML_DISPLAY
+            else "⚠️ ML signals temporarily disabled.",
+        }
+
+    row = query_one(
+        """
+        SELECT band_label, calibrated_prob, raw_prob, log_date,
+               band_low_threshold, band_high_threshold, rule_stage
+          FROM ml_shadow_log
+         WHERE stock_ticker = ?
+           AND band_label IS NOT NULL
+         ORDER BY log_date DESC
+         LIMIT 1
+        """,
+        (ticker,),
+    )
+
+    if not row:
+        return {
+            "ticker": ticker,
+            "enabled": True,
+            "band": "INSUFFICIENT_DATA",
+            "calibrated_prob": None,
+            "as_of": None,
+            "disclaimer": DISCLAIMER_TEXT,
+            "verdict": None,
+        }
+
+    band_label = row["band_label"]
+    display = band_for_display(band_label)
+    cal_prob = row["calibrated_prob"]
+    low_thr = row["band_low_threshold"]
+    high_thr = row["band_high_threshold"]
+
+    # BORDERLINE verdict: within 5 percentage points of a band boundary
+    verdict = None
+    if cal_prob is not None and low_thr is not None and high_thr is not None:
+        distance_to_boundary = min(
+            abs(float(cal_prob) - float(low_thr)),
+            abs(float(cal_prob) - float(high_thr)),
+        )
+        if distance_to_boundary < 0.05:
+            verdict = "BORDERLINE"
+
+    return {
+        "ticker": ticker,
+        "enabled": True,
+        "band": band_label,
+        "color": display["color"],
+        "emoji": display["emoji"],
+        "calibrated_prob": cal_prob,
+        "raw_prob": row["raw_prob"],
+        "band_low_threshold": low_thr,
+        "band_high_threshold": high_thr,
+        "rule_stage": row["rule_stage"],
+        "verdict": verdict,
+        "as_of": row["log_date"],
+        "disclaimer": DISCLAIMER_TEXT,
+        "methodology_link": "/eagle-eye/methodology",
+    }
+
+
+@router.get("/ml/methodology", summary="ML methodology explanation")
+async def get_ml_methodology(
+    _user: TokenData = Depends(get_current_user),
+):
+    """
+    Return human-readable methodology text for the ML band display.
+
+    Used by the Methodology screen in the mobile app.
+    """
+    return {
+        "title": "Eagle Eye ML Bands — Methodology",
+        "phase": "Phase 3: Shadow Evaluation",
+        "status": "Experimental — not for trading decisions",
+        "disclaimer": "⚠️ ML signal in evaluation — do not use for trading decisions yet.",
+        "sections": [
+            {
+                "heading": "What are ML bands?",
+                "body": (
+                    "Eagle Eye ML bands classify each SHADOW-roster stock as LOW, MEDIUM, or HIGH "
+                    "based on a LightGBM binary classifier trained on historical breakout events. "
+                    "The classifier outputs a calibrated probability of a ≥10% move within 20 trading days."
+                ),
+            },
+            {
+                "heading": "How are bands computed?",
+                "body": (
+                    "Each stock's calibrated probability is compared against the 33rd and 67th percentile "
+                    "of its own last 90 days of shadow scores.  Stocks below the 33rd percentile are LOW, "
+                    "between percentiles are MEDIUM, and above the 67th are HIGH.  "
+                    "Fewer than 30 days of history returns INSUFFICIENT_DATA."
+                ),
+            },
+            {
+                "heading": "What does BORDERLINE mean?",
+                "body": (
+                    "A BORDERLINE verdict appears when a stock's probability is within 5 percentage "
+                    "points of a band boundary.  This signals that the classification is less certain "
+                    "and should be treated with extra caution."
+                ),
+            },
+            {
+                "heading": "Phase 3 constraints",
+                "body": (
+                    "No model will be promoted to LIVE status during Phase 3.  "
+                    "Shadow scoring runs daily (Sun–Thu) after Boursa market close.  "
+                    "Models are reviewed weekly.  Automatic disabling occurs if calibration "
+                    "error exceeds 30%, multiple rollbacks occur, or scoring jobs fail repeatedly."
+                ),
+            },
+            {
+                "heading": "Covered stocks (14)",
+                "body": "AAYANRE, ALTIJARIA, ARGAN, BOURSA, FACIL, IFA, JAZEERA, JTC, KCEM, KPPC, MKHZN, OOREDOO, URC, WARBACAP",
+            },
+        ],
+    }

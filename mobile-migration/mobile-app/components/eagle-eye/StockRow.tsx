@@ -18,6 +18,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { RatedStock } from "@/hooks/useEagleEye";
 import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
+import { MLBandBadge } from "./MLBandBadge";
+import type { MLBandLabel } from "./MLBandBadge";
 
 interface StockRowProps {
   item: RatedStock;
@@ -138,6 +140,25 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
           </Text>
         )}
 
+        {/* Row 4: volume indicator */}
+        {item.volume_context != null && (() => {
+          const vc = item.volume_context!;
+          const rv = vc.relative_volume;
+          const confirmed = vc.is_volume_confirmed;
+          const tier = vc.liquidity_tier;
+          const [label, volColor]: [string, string] =
+            tier === "ILLIQUID"             ? ["💧 Illiquid", colors.textMuted]
+            : tier === "WATCH_ONLY"         ? ["💧 Low liquidity", "#E6A817"]
+            : confirmed && rv >= 1.5        ? [`🔥 ${rv.toFixed(1)}× vol`, "#34D399"]
+            : !confirmed                    ? [`⚠ Low vol (${rv.toFixed(1)}×)`, "#E6A817"]
+            :                                [`${rv.toFixed(1)}× vol`, colors.textMuted];
+          return (
+            <Text style={{ fontSize: 10, color: volColor, fontVariant: ["tabular-nums"] }}>
+              {label}
+            </Text>
+          );
+        })()}
+
         <View style={styles.confLine}>
           <View
             style={[
@@ -159,6 +180,18 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
           </View>
           <Text style={[styles.confNum, { color: confColor }]}>{confPct.toFixed(0)}%</Text>
         </View>
+      </View>
+
+      {/* ── ML band column ──────────────────────────────────── */}
+      <View style={styles.mlCol}>
+        <MLBandBadge
+          band={(item.ml_band?.band ?? null) as MLBandLabel}
+          accessibilityHint={
+            item.ml_band?.band
+              ? `ML band: ${item.ml_band.band}`
+              : "ML not active for this stock"
+          }
+        />
       </View>
     </Pressable>
   );
@@ -266,5 +299,11 @@ const styles = StyleSheet.create({
   },
   skelRect: {
     borderRadius: 4,
+  },
+  mlCol: {
+    width: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 4,
   },
 });

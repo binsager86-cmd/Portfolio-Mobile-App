@@ -33,6 +33,67 @@ export interface SignalItem {
   description?: string | null;
 }
 
+export interface VolumeContext {
+  relative_volume: number;
+  liquidity_tier: "TRADEABLE" | "WATCH_ONLY" | "ILLIQUID";
+  is_volume_confirmed: boolean;
+  volume_character: "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL";
+  volume_trend_5d: "EXPANDING" | "CONTRACTING" | "NEUTRAL";
+}
+
+export interface MLBandItem {
+  ticker?: string;
+  band: string | null;
+  color: string | null;
+  emoji: string | null;
+  short_label: string | null;
+  as_of?: string | null;
+  calibrated_prob?: number | null;
+}
+
+export interface MLBandsResponse {
+  enabled: boolean;
+  disclaimer: string;
+  bands: MLBandItem[];
+}
+
+export interface MLDisplayStateResponse {
+  enabled: boolean;
+  config_enabled: boolean;
+  auto_disabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface MLMethodologySection {
+  heading: string;
+  body: string;
+}
+
+export interface MLMethodologyResponse {
+  title: string;
+  phase: string;
+  status: string;
+  disclaimer: string;
+  sections: MLMethodologySection[];
+}
+
+export interface MLBandCard {
+  ticker: string;
+  enabled: boolean;
+  band: string | null;
+  color?: string | null;
+  emoji?: string | null;
+  calibrated_prob?: number | null;
+  raw_prob?: number | null;
+  band_low_threshold?: number | null;
+  band_high_threshold?: number | null;
+  rule_stage?: string | null;
+  verdict?: string | null;
+  as_of?: string | null;
+  disclaimer: string;
+  methodology_link?: string | null;
+}
+
 export interface RatedStock {
   ticker: string;
   name_en: string;
@@ -46,6 +107,8 @@ export interface RatedStock {
   tp1?: number | null;
   last_price?: number | null;
   computed_at?: string | null;
+  volume_context?: VolumeContext | null;
+  ml_band?: MLBandItem | null;
 }
 
 export interface ScannerResponse {
@@ -67,6 +130,9 @@ export interface FullStockAnalysis {
   entry_primary?: number | null;
   entry_aggressive?: number | null;
   entry_conservative?: number | null;
+  plan_state?: "ACTIVE" | "DECLINED" | "CONDITIONAL";
+  plan_reason?: string | null;
+  conditional_entry?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
   tp1_probability?: number | null;
@@ -74,6 +140,8 @@ export interface FullStockAnalysis {
   tp2_probability?: number | null;
   tp3?: number | null;
   tp3_probability?: number | null;
+  risk_reward_ratio?: number | null;
+  gain_pct_to_tp1?: number | null;
   position_size_pct?: number | null;
   position_size_kwd?: number | null;
   liquidity_capped?: boolean | null;
@@ -93,18 +161,115 @@ export interface ThresholdProfile {
   threshold_pct: number;
   success_rate: number;
   sample_count: number;
+  total_count?: number | null;
+  hits?: number | null;
+  total_setups?: number | null;
   median_bars_to_hit?: number | null;
   avg_win_pct?: number | null;
   avg_loss_pct?: number | null;
+  avg_gain_all_pct?: number | null;
+  avg_gain_on_hits_pct?: number | null;
+}
+
+export interface SignalReliabilityStat {
+  signal: string;
+  reliability_pct?: number | null;
+  presence_pct?: number | null;
+  fired_count: number;
+  total_events?: number | null;
+  total_setups?: number | null;
+  avg_lead_days?: number | null;
+  false_positive_rate?: number | null;
+  discriminative_power?: number | null;
+}
+
+export interface DnaWindowProfile {
+  horizon_days: number;
+  setup_count: number;
+  history_status: string;
+  confidence_floor: number;
+  confidence_tier: "ESTABLISHED" | "BUILDING" | "EARLY" | "TOO_THIN" | string;
+  confidence_label: string;
+  percentages_visible: boolean;
+  threshold_profiles: ThresholdProfile[];
+}
+
+export interface DnaSetupObservation {
+  date: string;
+  signal: string;
+  label: string;
+  detail: string;
+  value?: number | null;
+}
+
+export interface DnaSetupForwardOutcome {
+  horizon_days: number;
+  completed: boolean;
+  max_gain_pct?: number | null;
+  max_gain_date?: string | null;
+  threshold_hits: number[];
+}
+
+export interface DnaSetupBar {
+  date: string;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
+  volume?: number | null;
+  rel_volume?: number | null;
+  rsi?: number | null;
+  macd_line?: number | null;
+  macd_signal?: number | null;
+  macd_histogram?: number | null;
+  adx?: number | null;
+  plus_di?: number | null;
+  minus_di?: number | null;
+}
+
+export interface DnaSetupExample {
+  setup_date: string;
+  setup_window_start_date: string;
+  setup_window_end_date: string;
+  setup_bar_index: number;
+  setup_window_start_index: number;
+  setup_window_end_index: number;
+  available_forward_bars: number;
+  bars: DnaSetupBar[];
+  observations: DnaSetupObservation[];
+  forward_outcomes: Record<string, DnaSetupForwardOutcome>;
+}
+
+export interface VolumeProfile {
+  avg_rel_vol_t90?: number | null;
+  avg_rel_vol_t60?: number | null;
+  avg_rel_vol_t30?: number | null;
+  avg_rel_vol_t14?: number | null;
+  avg_rel_vol_t7?: number | null;
+  avg_rel_vol_t3?: number | null;
+  avg_rel_vol_t0?: number | null;
+  volume_pattern?: "GRADUAL_BUILD" | "LATE_SPIKE" | "EARLY_SIGNAL" | "NO_CLEAR_PATTERN" | null;
+  min_rel_vol_for_real_move?: number | null;
 }
 
 export interface BehavioralDNA {
   ticker: string;
   total_events_analyzed: number;
+  history_status?: string | null;
+  setup_signals?: string[];
+  setup_horizon_days?: number | null;
+  default_window_days?: number | null;
+  available_window_days?: number[];
+  confidence_floor?: number;
   most_reliable_signals: string[];
+  signal_stats?: SignalReliabilityStat[];
   threshold_profiles: ThresholdProfile[];
+  window_profiles?: DnaWindowProfile[];
+  setup_examples?: DnaSetupExample[];
   dominant_pattern?: string | null;
   computed_at?: string | null;
+  pre_move_volume_profile?: VolumeProfile | null;
+  fakeout_volume_profile?: VolumeProfile | null;
 }
 
 export interface DNAResponse {
@@ -160,6 +325,10 @@ export const eagleEyeKeys = {
   dna: (ticker: string) => [...eagleEyeKeys.all, "dna", ticker.toUpperCase()] as const,
   events: (ticker: string) => [...eagleEyeKeys.all, "events", ticker.toUpperCase()] as const,
   regime: () => [...eagleEyeKeys.all, "regime"] as const,
+  mlDisplayState: () => [...eagleEyeKeys.all, "ml-display-state"] as const,
+  mlBands: () => [...eagleEyeKeys.all, "ml-bands"] as const,
+  mlBandForTicker: (ticker: string) => [...eagleEyeKeys.all, "ml-band", ticker.toUpperCase()] as const,
+  mlMethodology: () => [...eagleEyeKeys.all, "ml-methodology"] as const,
 } as const;
 
 // ── API helpers ──────────────────────────────────────────────────────────────
@@ -180,20 +349,39 @@ function buildScannerUrl(filters?: ScannerFilters): string {
 /**
  * useEagleEyeScanner
  * GET /api/v1/eagle-eye/scanner
- * staleTime: 5 minutes
+ *
+ * Always fetches the full universe (no min_confidence sent to the server).
+ * All confidence/buy/breakout filtering is done client-side in the scanner
+ * screen's useMemo so filter chip changes are instant with zero extra
+ * network round trips.
+ *
+ * staleTime: 10 minutes
  */
-export function useEagleEyeScanner(filters?: ScannerFilters, enabled = true) {
+export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
+  // Only sector/tier are forwarded to the server — they narrow the universe
+  // at the DB level. Confidence and rating filters are client-side only.
+  const serverFilters: ScannerFilters = {
+    sector: _filters?.sector,
+    tier: _filters?.tier,
+    // limit: intentionally omitted — backend now defaults to 200 (full universe)
+  };
   return useQuery<ScannerResponse>({
-    queryKey: eagleEyeKeys.scanner(filters),
+    // Key does NOT include min_confidence so filter chips hit the cache
+    queryKey: eagleEyeKeys.scanner(serverFilters),
     queryFn: async () => {
-      const { data } = await api.get<ScannerResponse>(buildScannerUrl(filters));
+      const { data } = await api.get<ScannerResponse>(buildScannerUrl(serverFilters));
       return data;
     },
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: 10 * 60_000,   // 10 min — data changes only on nightly recompute
+    gcTime: 30 * 60_000,
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
+    // Auto-poll every 30 s while the backend is still warming up
+    refetchInterval: (query) =>
+      (query.state.data as ScannerResponse | undefined)?.status === "warming_up"
+        ? 30_000
+        : false,
   });
 }
 
@@ -303,5 +491,90 @@ export function useEagleEyeRefresh() {
       queryClient.invalidateQueries({ queryKey: eagleEyeKeys.scanner() });
       queryClient.invalidateQueries({ queryKey: [...eagleEyeKeys.all, "stock"] });
     },
+  });
+}
+
+// ── Phase 3 ML hooks ─────────────────────────────────────────────────────────
+
+/**
+ * useMLDisplayState
+ * GET /api/v1/eagle-eye/ml/display-state
+ * Checks kill-switch + auto-disable state.
+ */
+export function useMLDisplayState(enabled = true) {
+  return useQuery<MLDisplayStateResponse>({
+    queryKey: eagleEyeKeys.mlDisplayState(),
+    queryFn: async () => {
+      const { data } = await api.get<MLDisplayStateResponse>("/api/v1/eagle-eye/ml/display-state");
+      return data;
+    },
+    staleTime: 10 * 60_000,  // kill-switch state changes rarely; 10 min is safe
+    gcTime: 30 * 60_000,
+    retry: 1,
+    enabled,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLBands
+ * GET /api/v1/eagle-eye/ml/bands
+ * Returns ML band labels for all 14 SHADOW-roster stocks.
+ * staleTime: 10 minutes (refreshes with market data, not real-time)
+ */
+export function useMLBands(enabled = true) {
+  return useQuery<MLBandsResponse>({
+    queryKey: eagleEyeKeys.mlBands(),
+    queryFn: async () => {
+      const { data } = await api.get<MLBandsResponse>("/api/v1/eagle-eye/ml/bands");
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLBandForTicker
+ * GET /api/v1/eagle-eye/ml/bands/{ticker}
+ * Full ML band card for a single stock.
+ */
+export function useMLBandForTicker(ticker: string, enabled = true) {
+  const t = ticker.toUpperCase().trim();
+  return useQuery<MLBandCard>({
+    queryKey: eagleEyeKeys.mlBandForTicker(t),
+    queryFn: async () => {
+      const { data } = await api.get<MLBandCard>(
+        `/api/v1/eagle-eye/ml/bands/${encodeURIComponent(t)}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    enabled: enabled && !!t,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useMLMethodology
+ * GET /api/v1/eagle-eye/ml/methodology
+ * Human-readable methodology for the band display.
+ */
+export function useMLMethodology(enabled = true) {
+  return useQuery<MLMethodologyResponse>({
+    queryKey: eagleEyeKeys.mlMethodology(),
+    queryFn: async () => {
+      const { data } = await api.get<MLMethodologyResponse>("/api/v1/eagle-eye/ml/methodology");
+      return data;
+    },
+    staleTime: 60 * 60_000,
+    gcTime: 4 * 60 * 60_000,
+    retry: 1,
+    enabled,
   });
 }

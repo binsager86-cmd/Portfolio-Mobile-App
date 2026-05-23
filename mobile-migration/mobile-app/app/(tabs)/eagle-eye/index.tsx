@@ -10,12 +10,16 @@
 import { getRegimeColors } from "@/constants/eagleEyeColors";
 import { EE, REGIME_LABELS } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
+import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StockRow, StockRowSkeleton, computeRR } from "@/components/eagle-eye/StockRow";
-import { useEagleEyeRegime, useEagleEyeScanner, type RatedStock } from "@/hooks/useEagleEye";
+import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
+import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useCallback, useMemo, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -43,6 +47,7 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
@@ -51,15 +56,60 @@ export default function EagleEyeScannerScreen() {
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
-    useEagleEyeScanner({
-      min_confidence: minConfidence > 0 ? minConfidence : undefined,
-    });
+  // Lazy load: don't fetch until the user actually taps into this tab
+  const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
+  useEffect(() => {
+    if (isFocused) {
+      setHasFocusedOnce(true);
+    }
+  }, [isFocused]);
+  const fetchEnabled = hasFocusedOnce || isFocused;
 
-  const { data: regimeData } = useEagleEyeRegime();
+  // No min_confidence sent to the server — full universe fetched once and
+  // cached for 10 min.  Confidence filtering happens in the useMemo below
+  // so chip presses are instant with no extra network calls.
+  const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
+    useEagleEyeScanner(undefined, fetchEnabled);
+
+  const { data: regimeData } = useEagleEyeRegime(fetchEnabled);
+  const { data: mlBandsData } = useMLBands(fetchEnabled);
+  const { data: mlDisplayState } = useMLDisplayState(fetchEnabled);
+  const eeRefresh = useEagleEyeRefresh();
+  const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
+  const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRunEagleEye = useCallback(async () => {
+    if (eeRefresh.isPending) return;
+    if (runStatusTimer.current) clearTimeout(runStatusTimer.current);
+    setRunStatus("idle");
+    try {
+      await eeRefresh.mutateAsync({ tickers: [] });
+      setRunStatus("ok");
+    } catch {
+      setRunStatus("err");
+    }
+    runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
+  }, [eeRefresh]);
 
   const stocks: RatedStock[] = useMemo(() => {
-    let list = data?.stocks ?? [];
+    // Build ML band lookup map (ticker → band item)
+    const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
+    if (mlBandsData?.enabled && mlBandsData.bands) {
+      for (const b of mlBandsData.bands) {
+        if (b.ticker) {
+          mlMap[b.ticker] = b;
+        }
+      }
+    }
+
+    let list = (data?.stocks ?? []).map((s) => ({
+      ...s,
+      ml_band: mlMap[s.ticker] ?? null,
+    }));
+    // Confidence filter — client-side so chip changes never trigger a new API call
+    if (minConfidence > 0) {
+      list = list.filter((s) => s.confidence >= minConfidence);
+    }
     const q = search.trim().toUpperCase();
     if (q) {
       list = list.filter(
@@ -88,7 +138,7 @@ export default function EagleEyeScannerScreen() {
       return sortDir === "asc" ? -diff : diff;
     });
     return list;
-  }, [data, search, buyOnly, breakoutOnly, sortBy, sortDir]);
+  }, [data, minConfidence, search, buyOnly, breakoutOnly, sortBy, sortDir, mlBandsData]);
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -117,6 +167,8 @@ export default function EagleEyeScannerScreen() {
   );
   const keyExtractor = useCallback((item: RatedStock) => item.ticker, []);
 
+  const isWarmingUp = data?.status === "warming_up";
+
   const renderEmpty = () => {
     if (isLoading) {
       return (
@@ -125,6 +177,19 @@ export default function EagleEyeScannerScreen() {
             <StockRowSkeleton key={i} />
           ))}
         </>
+      );
+    }
+    if (isWarmingUp) {
+      return (
+        <View style={styles.centred}>
+          <ActivityIndicator size="large" color={colors.accentPrimary} />
+          <Text style={[styles.emptyText, { color: colors.textPrimary, marginTop: 16 }]}>
+            {EE.warmingUp}
+          </Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 8, fontSize: 13 }]}>
+            {EE.warmingUpSub}
+          </Text>
+        </View>
       );
     }
     if (isError) {
@@ -197,9 +262,50 @@ export default function EagleEyeScannerScreen() {
             <Text style={[styles.countBadge, { color: colors.textMuted }]}>
               {stocks.length} stocks
             </Text>
+
+            <Pressable
+              onPress={handleRunEagleEye}
+              disabled={eeRefresh.isPending}
+              style={[
+                styles.eeRunBtn,
+                {
+                  backgroundColor:
+                    runStatus === "ok"
+                      ? colors.success
+                      : runStatus === "err"
+                      ? colors.danger
+                      : colors.accentPrimary,
+                  opacity: eeRefresh.isPending ? 0.6 : 1,
+                },
+              ]}
+            >
+              {eeRefresh.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.eeRunBtnText}>
+                  {runStatus === "ok"
+                    ? "\u2713 Running..."
+                    : runStatus === "err"
+                    ? "\u2717 Failed"
+                    : "\u25b6 Run"}
+                </Text>
+              )}
+            </Pressable>
           </View>
         </View>
       </View>
+
+      <EagleEyeTopTabs />
+
+      {/* ML Experimental Disclaimer Banner */}
+      {mlBandsData?.enabled ? (
+        <MLDisclaimerBanner
+          autoDisabled={mlDisplayState?.auto_disabled ?? false}
+          disabledReason={mlDisplayState?.disabled_reason}
+        />
+      ) : mlDisplayState?.auto_disabled ? (
+        <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
+      ) : null}
 
       {/* Search bar */}
       <View
@@ -364,6 +470,16 @@ export default function EagleEyeScannerScreen() {
             {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
           </Text>
         </Pressable>
+        {mlBandsData?.enabled ? (
+          <Text
+            style={[
+              styles.colHeaderCell,
+              { color: colors.textMuted, width: 32, textAlign: "center", marginLeft: 4 },
+            ]}
+          >
+            {EE.mlColumnHeader}
+          </Text>
+        ) : null}
       </View>
 
       {/* List */}
@@ -478,4 +594,14 @@ const styles = StyleSheet.create({
     borderRadius: UITokens.radius.md,
   },
   retryText: { fontWeight: "600", fontSize: 14 },
+  eeRunBtn: {
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 52,
+    minHeight: 28,
+  },
+  eeRunBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
 });
