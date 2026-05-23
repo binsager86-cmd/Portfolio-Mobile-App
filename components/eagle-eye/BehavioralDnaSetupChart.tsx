@@ -30,7 +30,6 @@ import React, {
 } from "react";
 import {
   PanResponder,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -976,8 +975,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderTopWidth: 1,
-    borderColor: "transparent",
   },
   legendItem: {
     flexDirection: "row",
@@ -993,7 +990,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 2,
     borderRadius: 1,
-    borderTopWidth: 2,
   },
   legendText: {
     fontSize: 11,
