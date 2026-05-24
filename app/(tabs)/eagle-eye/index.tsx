@@ -71,7 +71,8 @@ export default function EagleEyeScannerScreen() {
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);
 
-  const { data: regimeData } = useEagleEyeRegime(fetchEnabled);
+  const regimeEnabled = fetchEnabled && !!data && !isLoading && !isError;
+  const { data: regimeData } = useEagleEyeRegime(regimeEnabled);
   const { data: mlBandsData } = useMLBands(fetchEnabled);
   const { data: mlDisplayState } = useMLDisplayState(fetchEnabled);
   const eeRefresh = useEagleEyeRefresh();

@@ -62,9 +62,9 @@ const PAD_BOTTOM = 28; // room for X-axis labels
 const PANE_GAP   = 6;
 
 // Pane height ratios (must sum to 1)
-const PRICE_RATIO  = 0.56;
-const VOLUME_RATIO = 0.15;
-const IND_RATIO    = 0.29;
+const PRICE_RATIO  = 0.60;
+const VOLUME_RATIO = 0.14;
+const IND_RATIO    = 0.26;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -147,7 +147,7 @@ export const BehavioralDnaSetupChart = React.memo(
     const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
 
     const chartW = measuredW || Math.max(300, winWidth - UITokens.spacing.md * 6);
-    const chartH = 360;
+    const chartH = 400;
 
     const innerW  = chartW - PAD_LEFT - PAD_RIGHT;
     const innerH  = chartH - PAD_TOP - PAD_BOTTOM - PANE_GAP * 2;
@@ -166,15 +166,15 @@ export const BehavioralDnaSetupChart = React.memo(
 
     const count    = bars.length;
     const slotW    = count > 0 ? innerW / count : 0;
-    const barWidth = Math.max(2, Math.min(24, slotW * 0.8));
+    const barWidth = Math.max(3, Math.min(32, slotW * 0.85));
 
     // Y scales
     const [priceMin, priceMax] = useMemo(() => {
       const highs = bars.map((b) => b.high ?? b.close ?? 0);
       const lows  = bars.map((b) => b.low  ?? b.close ?? 0);
-      const yMax  = Math.max(...highs, 0.001);
-      const yMin  = Math.min(...lows,  0);
-      const pad   = (yMax - yMin) * 0.04;
+      const yMax  = Math.max(...highs);
+      const yMin  = Math.min(...lows);
+      const pad   = (yMax - yMin) * 0.03;
       return [yMin - pad, yMax + pad] as [number, number];
     }, [bars]);
 
@@ -235,11 +235,16 @@ export const BehavioralDnaSetupChart = React.memo(
     const lastBar   = bars[count - 1];
     const lastClose = lastBar?.close ?? 0;
     const lastY     = yPrice(lastClose);
-    const lastColor = lastBar && lastBar.close >= lastBar.open ? BULL_COLOR : BEAR_COLOR;
+    const prevLastClose = count >= 2 ? (bars[count - 2]?.close ?? lastClose) : lastClose;
+    const lastOpenVal = lastBar?.open ?? prevLastClose;
+    const lastColor = lastBar && lastBar.close >= lastOpenVal ? BULL_COLOR : BEAR_COLOR;
 
     // Hovered or last bar for info display
     const displayed = hoverIdx !== null ? bars[hoverIdx] : lastBar;
-    const isBullDisp = displayed ? displayed.close >= displayed.open : true;
+    const dispIdx   = hoverIdx !== null ? hoverIdx : count - 1;
+    const prevDispClose = dispIdx > 0 ? (bars[dispIdx - 1]?.close ?? displayed?.close ?? 0) : (displayed?.close ?? 0);
+    const dispOpenVal   = displayed?.open ?? prevDispClose;
+    const isBullDisp = displayed ? displayed.close >= dispOpenVal : true;
     const dispColor  = isBullDisp ? BULL_COLOR : BEAR_COLOR;
 
     // Memoized SVG element arrays ──────────────────────────────────
@@ -248,19 +253,23 @@ export const BehavioralDnaSetupChart = React.memo(
     const candleElements = useMemo(
       () =>
         bars.map((bar, i) => {
-          const cx     = PAD_LEFT + slotW * i + slotW / 2;
-          const isBull = bar.close >= bar.open;
-          const color  = isBull ? BULL_COLOR : BEAR_COLOR;
-          const yH     = yPrice(bar.high  ?? bar.close);
-          const yL     = yPrice(bar.low   ?? bar.close);
-          const yO     = yPrice(bar.open  ?? bar.close);
-          const yC     = yPrice(bar.close);
-          const bodyTop = Math.min(yO, yC);
-          const bodyH   = Math.max(Math.abs(yC - yO), 1.5);
+          const cx         = PAD_LEFT + slotW * i + slotW / 2;
+          // When open is missing fall back to the previous bar's close so
+          // bull/bear direction is still meaningful (not always true due to null≥0).
+          const prevClose  = i > 0 ? (bars[i - 1].close ?? bar.close) : bar.close;
+          const openVal    = bar.open ?? prevClose;
+          const isBull     = (bar.close ?? 0) >= openVal;
+          const color      = isBull ? BULL_COLOR : BEAR_COLOR;
+          const yH         = yPrice(bar.high  ?? bar.close);
+          const yL         = yPrice(bar.low   ?? bar.close);
+          const yO         = yPrice(openVal);
+          const yC         = yPrice(bar.close);
+          const bodyTop    = Math.min(yO, yC);
+          const bodyH      = Math.max(Math.abs(yC - yO), 2);
           return (
             <G key={`candle-${bar.date}-${i}`}>
               {/* Wick */}
-              <Line x1={cx} y1={yH} x2={cx} y2={yL} stroke={color} strokeWidth={1.5} />
+              <Line x1={cx} y1={yH} x2={cx} y2={yL} stroke={color} strokeWidth={2} />
               {/* Body */}
               <Rect
                 x={cx - barWidth / 2}
@@ -269,7 +278,7 @@ export const BehavioralDnaSetupChart = React.memo(
                 height={bodyH}
                 fill={color}
                 stroke={color}
-                strokeWidth={1}
+                strokeWidth={1.5}
               />
             </G>
           );
@@ -283,9 +292,11 @@ export const BehavioralDnaSetupChart = React.memo(
         bars.map((bar, i) => {
           const vol = bar.volume ?? null;
           if (vol == null) return null;
-          const cx     = PAD_LEFT + slotW * i + slotW / 2;
-          const isBull = bar.close >= bar.open;
-          const y      = yVol(vol);
+          const cx        = PAD_LEFT + slotW * i + slotW / 2;
+          const prevCl    = i > 0 ? (bars[i - 1].close ?? bar.close) : bar.close;
+          const openV     = bar.open ?? prevCl;
+          const isBull    = (bar.close ?? 0) >= openV;
+          const y         = yVol(vol);
           const h      = Math.max(1, volumeTop + volumeH - y);
           return (
             <Rect
@@ -761,23 +772,36 @@ export const BehavioralDnaSetupChart = React.memo(
                     cursor.x + 180 > chartW - PAD_RIGHT
                       ? Math.max(PAD_LEFT, cursor.x - 190)
                       : cursor.x + 10,
-                  top: Math.max(PAD_TOP, Math.min(cursor.y - 10, chartH - 130)),
+                  top: Math.max(PAD_TOP, Math.min(cursor.y - 10, chartH - 175)),
                 },
               ]}
             >
               <Text style={[styles.ttDate, { color: colors.textPrimary }]}>
                 {bars[hoverIdx]?.date?.slice(0, 10)}
               </Text>
-              <TooltipRow label="Open"   value={fmtPrice(bars[hoverIdx]?.open  ?? 0)} colors={colors} />
-              <TooltipRow label="High"   value={fmtPrice(bars[hoverIdx]?.high  ?? 0)} colors={colors} valueColor={BULL_COLOR} />
-              <TooltipRow label="Low"    value={fmtPrice(bars[hoverIdx]?.low   ?? 0)} colors={colors} valueColor={BEAR_COLOR} />
-              <TooltipRow label="Close"  value={fmtPrice(bars[hoverIdx]?.close ?? 0)} colors={colors} valueColor={(bars[hoverIdx]?.close ?? 0) >= (bars[hoverIdx]?.open ?? 0) ? BULL_COLOR : BEAR_COLOR} />
-              {bars[hoverIdx]?.rsi != null && (
-                <TooltipRow label="RSI" value={(bars[hoverIdx].rsi!).toFixed(1)} colors={colors} valueColor={RSI_COLOR} />
-              )}
-              {bars[hoverIdx]?.adx != null && (
-                <TooltipRow label="ADX" value={(bars[hoverIdx].adx!).toFixed(1)} colors={colors} valueColor={ADX_COLOR} />
-              )}
+              {(() => {
+                const hBar = bars[hoverIdx];
+                const hPrev = hoverIdx > 0 ? bars[hoverIdx - 1] : null;
+                const hOpenVal = hBar?.open ?? hPrev?.close ?? hBar?.close ?? 0;
+                const hCloseColor = (hBar?.close ?? 0) >= hOpenVal ? BULL_COLOR : BEAR_COLOR;
+                return (
+                  <>
+                    <TooltipRow label="Open"   value={fmtPrice(hOpenVal)} colors={colors} />
+                    <TooltipRow label="High"   value={fmtPrice(hBar?.high  ?? 0)} colors={colors} valueColor={BULL_COLOR} />
+                    <TooltipRow label="Low"    value={fmtPrice(hBar?.low   ?? 0)} colors={colors} valueColor={BEAR_COLOR} />
+                    <TooltipRow label="Close"  value={fmtPrice(hBar?.close ?? 0)} colors={colors} valueColor={hCloseColor} />
+                    {hBar?.volume != null && (
+                      <TooltipRow label="Volume" value={fmtVol(hBar.volume)} colors={colors} valueColor={colors.textSecondary} />
+                    )}
+                    {hBar?.rsi != null && (
+                      <TooltipRow label="RSI" value={(hBar.rsi!).toFixed(1)} colors={colors} valueColor={RSI_COLOR} />
+                    )}
+                    {hBar?.adx != null && (
+                      <TooltipRow label="ADX" value={(hBar.adx!).toFixed(1)} colors={colors} valueColor={ADX_COLOR} />
+                    )}
+                  </>
+                );
+              })()}
             </View>
           )}
         </View>
