@@ -23,6 +23,7 @@ export default function EagleEyeDnaScreen() {
 
   const isPending = data?.status === "pending";
   const isUnavailable = data?.status === "unavailable";
+  const isServerError = data?.status === "error";
   const dna = data?.data;
   const screenTitle = `Behavioral DNA - ${ticker}`;
 
@@ -50,7 +51,7 @@ export default function EagleEyeDnaScreen() {
     );
   }
 
-  if (isError || !dna) {
+  if (isError || isServerError || !dna) {
     if (isUnavailable) {
       return (
         <ScreenFrame title={screenTitle} colors={colors} topInset={insets.top}>
@@ -69,7 +70,9 @@ export default function EagleEyeDnaScreen() {
       <ScreenFrame title={screenTitle} colors={colors} topInset={insets.top}>
         <View style={styles.centred}>
           <FontAwesome name="exclamation-triangle" size={28} color={colors.danger} />
-          <Text style={[styles.errorText, { color: colors.textMuted }]}>{EE.errorLoading}</Text>
+          <Text style={[styles.errorText, { color: colors.textMuted }]}>
+            {isServerError && data?.message ? data.message : EE.errorLoading}
+          </Text>
           <Pressable
             onPress={() => refetch()}
             style={[styles.retryBtn, { backgroundColor: colors.accentPrimary }]}
