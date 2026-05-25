@@ -54,6 +54,7 @@ import {
 } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
+import { tokens } from "@/theme/tokens";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { getApiErrorMessage } from "@/src/features/fundamental-analysis/types";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -185,6 +186,9 @@ function OverviewScreen() {
   // Skip if user already has holdings or transactions (existing user).
   const [showSetup, setShowSetup] = useState(false);
   useEffect(() => {
+    // FIX: add mounted flag so async callbacks never call setState after unmount.
+    let mounted = true;
+
     async function checkSetup() {
       try {
         let completed: boolean;
@@ -194,15 +198,13 @@ function OverviewScreen() {
           const SecureStore = await import("expo-secure-store");
           completed = (await SecureStore.getItemAsync("onboarding_complete")) === "1";
         }
+        if (!mounted) return;
         if (completed) return;
 
-        // Existing users who have portfolio data should never see the setup wizard.
-        // Auto-set the flag so it never shows again.
+        // Existing users with a token should never see the setup wizard.
+        // Auto-mark complete so it never shows again.
         const { token } = useAuthStore.getState();
         if (token) {
-          // Wait briefly for overview data to be available via React Query cache
-          // If data already loaded, check it; otherwise mark complete for safety
-          // (an existing user with a token should never see this wizard)
           if (Platform.OS === "web") {
             localStorage.setItem("onboarding_complete", "1");
           } else {
@@ -212,12 +214,13 @@ function OverviewScreen() {
           return;
         }
 
-        setShowSetup(true);
+        if (mounted) setShowSetup(true);
       } catch {
-        setShowSetup(true);
+        if (mounted) setShowSetup(true);
       }
     }
     checkSetup();
+    return () => { mounted = false; };
   }, []);
 
   const handleSetupComplete = useCallback(async () => {
@@ -490,8 +493,9 @@ function OverviewScreen() {
     const grossLoss = Math.abs(losingTrades.reduce((s, t) => s + tradeNet(t), 0));
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
 
-    // Cash yield dividend = total dividends / total deposits
-    const cashYieldDiv = totalDeposits > 0 ? (totalDividends / totalDeposits) * 100 : 0;
+    // Cash yield = total dividends / current portfolio value (matches tooltip wording).
+    // FIX: was incorrectly dividing by totalDeposits (deposits ≠ portfolio value).
+    const cashYieldDiv = totalValue > 0 ? (totalDividends / totalValue) * 100 : 0;
 
     return {
       totalValue,
@@ -647,7 +651,7 @@ function OverviewScreen() {
         </Text>
 
         {/* Action buttons */}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, rowGap: 10, marginTop: 16 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: tokens.spacing.sm, rowGap: 10, marginTop: tokens.spacing.md }}>
           <Pressable
             onPress={onRefresh}
             disabled={refreshing || savingSnapshot}
@@ -658,9 +662,9 @@ function OverviewScreen() {
               flexDirection: "row" as const,
               alignItems: "center" as const,
               justifyContent: "center" as const,
-              gap: 7,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
+              gap: tokens.spacing.sm,
+              paddingHorizontal: tokens.spacing.md,
+              paddingVertical: tokens.spacing.sm,
               borderRadius: 10,
               backgroundColor: pressed ? colors.accentSecondary : colors.accentPrimary,
               opacity: refreshing ? 0.7 : 1,
@@ -671,7 +675,7 @@ function OverviewScreen() {
             ) : (
               <FontAwesome name="refresh" size={14} color="#fff" />
             )}
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
+            <Text style={{ color: tokens.colors.surface, fontWeight: "600", fontSize: fonts.caption + 1 }}>
               {refreshing ? t('dashboard.refreshing') : t('dashboard.refreshPrices')}
             </Text>
           </Pressable>
@@ -686,9 +690,9 @@ function OverviewScreen() {
               flexDirection: "row" as const,
               alignItems: "center" as const,
               justifyContent: "center" as const,
-              gap: 7,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
+              gap: tokens.spacing.sm,
+              paddingHorizontal: tokens.spacing.md,
+              paddingVertical: tokens.spacing.sm,
               borderRadius: 10,
               backgroundColor: pressed ? "#059669" : colors.success,
               opacity: savingSnapshot ? 0.7 : 1,
@@ -699,7 +703,7 @@ function OverviewScreen() {
             ) : (
               <FontAwesome name="camera" size={14} color="#fff" />
             )}
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
+            <Text style={{ color: tokens.colors.surface, fontWeight: "600", fontSize: fonts.caption + 1 }}>
               {savingSnapshot ? t('dashboard.saving') : t('dashboard.saveSnapshot')}
             </Text>
           </Pressable>
@@ -712,16 +716,16 @@ function OverviewScreen() {
               flexDirection: "row" as const,
               alignItems: "center" as const,
               justifyContent: "center" as const,
-              gap: 7,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
+              gap: tokens.spacing.sm,
+              paddingHorizontal: tokens.spacing.md,
+              paddingVertical: tokens.spacing.sm,
               borderRadius: 10,
               backgroundColor: pressed ? "#7c3aed" : "#8b5cf6",
             })}
           >
             <FontAwesome name="plus" size={14} color="#fff" />
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: fonts.caption + 1 }}>
-              Add Transaction
+            <Text style={{ color: tokens.colors.surface, fontWeight: "600", fontSize: fonts.caption + 1 }}>
+              {t("overview.addTransaction", "Add Transaction")}
             </Text>
           </Pressable>
         </View>
@@ -729,7 +733,7 @@ function OverviewScreen() {
 
       {/* ── Sub-tab bar ── */}
       <View style={[styles.tabBarContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, marginBottom: spacing.sectionGap }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 6 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: tokens.spacing.xs }}>
           {([
             { key: "dashboard" as OverviewTab, label: t("historical.tabDashboard"), icon: "th-large" as const },
             { key: "historical" as OverviewTab, label: t("historical.tabHistorical"), icon: "history" as const },
@@ -748,12 +752,12 @@ function OverviewScreen() {
                   name={tab.icon}
                   size={13}
                   color={active ? colors.accentPrimary : colors.textMuted}
-                  style={{ marginRight: 6 }}
+                  style={{ marginRight: tokens.spacing.xs }}
                 />
                 <Text style={{
                   color: active ? colors.accentPrimary : colors.textSecondary,
                   fontWeight: active ? "700" : "500",
-                  fontSize: 13,
+                  fontSize: tokens.typography.label.fontSize,
                 }}>
                   {tab.label}
                 </Text>
@@ -829,7 +833,7 @@ function OverviewScreen() {
       <View style={{ marginBottom: spacing.sectionGap }}>
         {/* Section Header with Accent Line */}
         <View style={[styles.holdingsSectionHeader]}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: tokens.spacing.sm, flex: 1 }}>
             <View
               style={[
                 styles.accentBar,
@@ -841,7 +845,7 @@ function OverviewScreen() {
             </Text>
           </View>
           {holdingsRows.length > 0 && (
-            <Text style={[styles.holdingCountBadge, { color: colors.textMuted, fontSize: 12 }]}>
+            <Text style={[styles.holdingCountBadge, { color: colors.textMuted, fontSize: tokens.typography.caption.fontSize }]}>
               {holdingsRows.length} holding{holdingsRows.length !== 1 ? "s" : ""}
             </Text>
           )}
@@ -883,7 +887,7 @@ function OverviewScreen() {
                       },
                     ]}
                   >
-                    <View style={[styles.companyCol, { paddingRight: 10 }]}> 
+                    <View style={[styles.companyCol, { paddingRight: tokens.spacing.sm }]}> 
                       <Text style={[styles.companyText, { color: colors.textPrimary }]} numberOfLines={1}>{row.company}</Text>
                       <Text style={[styles.symbolText, { color: colors.textMuted }]}>
                         {row.symbol} • {row.priceBasis === "persisted" ? "live" : row.priceBasis === "estimated" ? "estimated" : "no baseline"}
@@ -946,7 +950,7 @@ function OverviewScreen() {
           </View>
         ) : (
           /* Mobile: Professional card-based layout */
-          <View style={{ gap: 10, paddingHorizontal: spacing.pagePx }}>
+          <View style={{ gap: tokens.spacing.sm, paddingHorizontal: spacing.pagePx }}>
             {holdingsRows.length > 0 ? (
               holdingsRows.map((row) => (
                 <HoldingCard
@@ -1103,7 +1107,7 @@ function OverviewScreen() {
         <PortfolioChart
           data={chartData}
           title={t('dashboard.totalPortfolioOverTime')}
-          style={{ marginTop: 8, marginBottom: 24 }}
+          style={{ marginTop: tokens.spacing.sm, marginBottom: tokens.spacing.lg }}
           height={300}
         />
       )}
@@ -1222,7 +1226,7 @@ function OverviewScreen() {
 }
 
 // ── Styles ──────────────────────────────────────────────────────────
-
+/* eslint-disable custom-styles/no-hardcoded-styles */
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingVertical: 16, paddingBottom: 40 },
@@ -1473,5 +1477,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+/* eslint-enable custom-styles/no-hardcoded-styles */
 
 export default withErrorBoundary(OverviewScreen, "Unable to load the Overview dashboard. Please try again.");

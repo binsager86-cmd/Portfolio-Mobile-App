@@ -24,6 +24,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { formatCurrency, formatSignedCurrency } from "@/lib/currency";
 import type { RealizedProfitDetail, SnapshotRecord } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
+import { tokens } from "@/theme/tokens";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -112,6 +113,11 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
     if (!years.length) return [];
 
     let prevYearEndValue = 0;
+    // FIX: track the prior year-end deposit_cash so net-deposits uses the correct
+    // cumulative baseline — not the first snapshot of the current year, which
+    // silently drops any deposits made between the prior year's last snapshot and
+    // this year's first snapshot.
+    let prevYearEndDepositCash = 0;
     let cumulativeCost = 0;
 
     return years.map((year) => {
@@ -121,7 +127,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       cumulativeCost += txnCostByYear.get(year) ?? 0;
 
       if (yearSnaps) {
-        const sorted = yearSnaps.sort((a, b) =>
+        const sorted = [...yearSnaps].sort((a, b) =>
           a.snapshot_date.localeCompare(b.snapshot_date),
         );
         const yearEnd = sorted[sorted.length - 1];
@@ -133,25 +139,34 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
         // Dividends
         const dividends = divByYear.get(year) ?? 0;
 
-        // Appreciation = (year-end value − year-start value) − (net deposits during year)
+        // Appreciation = (year-end − year-start) minus net new cash injected this year.
+        // startValue: use prior year-end to bridge cross-year continuity.
         const startValue = prevYearEndValue > 0 ? prevYearEndValue : yearStart.portfolio_value;
-        const netDepositsThisYear = yearEnd.deposit_cash - (prevYearEndValue > 0 ? (sorted[0].deposit_cash) : yearStart.deposit_cash);
+        // FIX: baseline for deposits is the prior year-end deposit_cash (not this
+        // year's first snapshot — which misses year-boundary deposits).
+        const depositBaseline = prevYearEndDepositCash > 0
+          ? prevYearEndDepositCash
+          : yearStart.deposit_cash;
+        const netDepositsThisYear = yearEnd.deposit_cash - depositBaseline;
         const appreciation = (yearEnd.portfolio_value - startValue) - netDepositsThisYear;
 
         // Realized P&L
         const realizedPnl = realByYear.get(year) ?? 0;
 
         prevYearEndValue = yearEnd.portfolio_value;
+        prevYearEndDepositCash = yearEnd.deposit_cash;
 
         return { year, portfolioValue, dividends, appreciation, realizedPnl };
       }
 
-      // Year has no snapshots — use cumulative cost basis as portfolio value proxy
+      // Year has no snapshots — appreciation is indeterminate; do NOT use cost basis
+      // as a portfolio-value proxy (cost basis ≠ market value, would be misleading).
+      // Do NOT update prevYear* so the next snapshot year picks up from the last
+      // real snapshot rather than from a gap-year estimate.
       const dividends = divByYear.get(year) ?? 0;
       const realizedPnl = realByYear.get(year) ?? 0;
-      const portfolioValue = cumulativeCost > 0 ? cumulativeCost : 0;
 
-      return { year, portfolioValue, dividends, appreciation: 0, realizedPnl };
+      return { year, portfolioValue: 0, dividends, appreciation: 0, realizedPnl };
     });
   }, [snapshotData, allDivData, realizedData, allTxnData]);
 
@@ -184,13 +199,21 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
 
   // ── Chart data ──────────────────────────────────────────────────
 
+  // FIX: use filter().pop() to get the immediately prior year in yearlyData,
+  // not find() which returns the FIRST year less-than (could be 2020 when
+  // the first filtered year is 2023, skipping 2021/2022 in between).
   const growthChartData: ChartDataPoint[] = useMemo(
-    () => filteredData.map((d, i) => ({
-      label: d.year,
-      value: i === 0
-        ? d.portfolioValue - (yearlyData.find((y) => y.year < d.year)?.portfolioValue ?? 0)
-        : d.portfolioValue - filteredData[i - 1].portfolioValue,
-    })),
+    () => filteredData.map((d, i) => {
+      let prevValue: number;
+      if (i === 0) {
+        // Find the last year in the full dataset that is strictly before d.year
+        const prevEntry = yearlyData.filter((y) => y.year < d.year).pop();
+        prevValue = prevEntry?.portfolioValue ?? 0;
+      } else {
+        prevValue = filteredData[i - 1].portfolioValue;
+      }
+      return { label: d.year, value: d.portfolioValue - prevValue };
+    }),
     [filteredData, yearlyData],
   );
 
@@ -246,7 +269,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.filterRow}
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: tokens.spacing.md }}
       >
         <Pressable
           onPress={clearFilter}
@@ -334,7 +357,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
         {t("historical.portfolioGrowthChart")}
       </Text>
-      {growthChartData.length >= 1 ? (
+      {growthChartData.length >= 2 ? (
         <SnapshotLineChart
           data={growthChartData}
           title=""
@@ -349,13 +372,13 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       )}
 
       {/* ── Chart: Dividends by Year (bar chart) ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: 16 }]}>
+      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
         {t("historical.dividendsByYear")}
       </Text>
       <DividendYearlyChart data={dividendBarData} currency="KWD" height={260} />
 
       {/* ── Chart: Appreciation by Year ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: 16 }]}>
+      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
         {t("historical.appreciationChart")}
       </Text>
       {appreciationChartData.length >= 2 ? (
@@ -373,7 +396,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       )}
 
       {/* ── Chart: Realized P/L by Year ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: 16 }]}>
+      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
         {t("historical.realizedPLChart")}
       </Text>
       {realizedChartData.length >= 2 ? (
@@ -395,6 +418,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
 
 // ── Styles ──────────────────────────────────────────────────────────
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
 const s = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
@@ -448,3 +472,4 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
 });
+/* eslint-enable custom-styles/no-hardcoded-styles */

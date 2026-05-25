@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * SnapshotLineChart — Premium area chart for portfolio tracker.
  *
@@ -48,6 +49,7 @@ import { CHART_WIDE_LABEL_MIN } from "@/constants/layout";
 import type { ThemePalette } from "@/constants/theme";
 import { formatFullDate, formatShortDate } from "@/lib/dateUtils";
 import { fmtAxisVal } from "@/lib/formatting";
+import { tokens } from "@/theme/tokens";
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -165,6 +167,7 @@ export default React.memo(function SnapshotLineChart({
   formatValue,
 }: SnapshotLineChartProps) {
   const isDark = colors.mode === "dark";
+  const { t } = useTranslation();
 
   // Unique SVG gradient IDs per component instance
   const [uid] = useState(() => `slc_${++_chartInstanceCounter}`);
@@ -377,7 +380,7 @@ export default React.memo(function SnapshotLineChart({
         onLayout={onLayout}
       >
         <Text style={[placeholderS.text, { color: colors.textMuted }]}>
-          📊 Chart will appear when history data is available
+          {t("chart.noDataPlaceholder", "Chart will appear when history data is available")}
         </Text>
       </View>
     );
@@ -386,7 +389,7 @@ export default React.memo(function SnapshotLineChart({
   // ── Render ───────────────────────────────────────────────────────
 
   return (
-    <View style={[{ width: "100%", marginBottom: 16 }]} onLayout={onLayout}>
+    <View style={[{ width: "100%", marginBottom: tokens.spacing.md }]} onLayout={onLayout}>
       {title && (
         <Text style={[chartS.title, { color: colors.textSecondary }]}>
           {title}
@@ -589,6 +592,7 @@ export default React.memo(function SnapshotLineChart({
 
 // ── Styles ──────────────────────────────────────────────────────────
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
 const chartS = StyleSheet.create({
   title: {
     fontSize: 13,
@@ -654,3 +658,4 @@ const placeholderS = StyleSheet.create({
     textAlign: "center",
   },
 });
+/* eslint-enable custom-styles/no-hardcoded-styles */

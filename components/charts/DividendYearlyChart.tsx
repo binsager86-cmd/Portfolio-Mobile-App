@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * DividendYearlyChart — Modern bar chart showing dividend income by year.
  *
@@ -43,6 +44,7 @@ import Svg, {
 
 import { formatCurrency } from "@/lib/currency";
 import { useThemeStore } from "@/services/themeStore";
+import { tokens } from "@/theme/tokens";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -94,6 +96,8 @@ function propsAreEqual(prev: Props, next: Props): boolean {
 
 // ── Component ───────────────────────────────────────────────────────
 
+let _divChartInstanceCounter = 0;
+
 export default React.memo(function DividendYearlyChart({
   data,
   projectedData,
@@ -102,7 +106,14 @@ export default React.memo(function DividendYearlyChart({
 }: Props) {
   const { colors } = useThemeStore();
   const [width, setWidth] = useState(0);
+  // Unique gradient IDs per instance — avoids SVG ID collision when multiple
+  // DividendYearlyChart components are mounted simultaneously.
+  const [uid] = useState(() => `dyc_${++_divChartInstanceCounter}`);
+  const gradId = `${uid}_bar`;
+  const gradActiveId = `${uid}_barActive`;
+  const gradProjectedId = `${uid}_barProjected`;
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   // Entrance animation
   const animProgress = useSharedValue(0);
@@ -221,7 +232,7 @@ export default React.memo(function DividendYearlyChart({
         {width > 0 && (
           <View style={[s.emptyContainer, { height: chartHeight }]}>
             <Text style={[s.emptyText, { color: colors.textMuted }]}>
-              No dividend data to chart
+              {t("chart.noDividendData", "No dividend data to chart")}
             </Text>
           </View>
         )}
@@ -236,7 +247,7 @@ export default React.memo(function DividendYearlyChart({
       {/* Title */}
       <View style={s.titleRow}>
         <Text style={[s.title, { color: colors.textPrimary }]}>
-          Dividends by Year
+          {t("chart.dividendsByYear", "Dividends by Year")}
         </Text>
         {activeBar && (
           <Text style={[s.tooltipValue, { color: colors.success }]}>
@@ -264,15 +275,15 @@ export default React.memo(function DividendYearlyChart({
           accessibilityLabel={`Dividend income bar chart showing ${data.length} years`}
         >
           <Defs>
-            <LinearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+            <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={colors.success} stopOpacity={0.95} />
               <Stop offset="100%" stopColor={colors.accentPrimary} stopOpacity={0.7} />
             </LinearGradient>
-            <LinearGradient id="barGradActive" x1="0" y1="0" x2="0" y2="1">
+            <LinearGradient id={gradActiveId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={colors.success} stopOpacity={1} />
               <Stop offset="100%" stopColor={colors.accentPrimary} stopOpacity={1} />
             </LinearGradient>
-            <LinearGradient id="barGradProjected" x1="0" y1="0" x2="0" y2="1">
+            <LinearGradient id={gradProjectedId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={colors.warning} stopOpacity={0.5} />
               <Stop offset="100%" stopColor={colors.accentSecondary ?? colors.accentPrimary} stopOpacity={0.3} />
             </LinearGradient>
@@ -312,8 +323,8 @@ export default React.memo(function DividendYearlyChart({
             const isActive = activeIdx === i;
             const radius = Math.min(6, bar.w / 3);
             const fillId = bar.isProjected
-              ? "url(#barGradProjected)"
-              : isActive ? "url(#barGradActive)" : "url(#barGrad)";
+              ? `url(#${gradProjectedId})`
+              : isActive ? `url(#${gradActiveId})` : `url(#${gradId})`;
             return (
               <G key={`bar-${i}`}>
                 {/* Bar body (rect) */}
@@ -408,6 +419,7 @@ export default React.memo(function DividendYearlyChart({
   );
 }, propsAreEqual);
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
 const s = StyleSheet.create({
   container: {
     width: "100%",
@@ -435,3 +447,4 @@ const s = StyleSheet.create({
     fontSize: 14,
   },
 });
+/* eslint-enable custom-styles/no-hardcoded-styles */

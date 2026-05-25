@@ -237,14 +237,14 @@ export const BehavioralDnaSetupChart = React.memo(
     const lastY     = yPrice(lastClose);
     const prevLastClose = count >= 2 ? (bars[count - 2]?.close ?? lastClose) : lastClose;
     const lastOpenVal = lastBar?.open ?? prevLastClose;
-    const lastColor = lastBar && lastBar.close >= lastOpenVal ? BULL_COLOR : BEAR_COLOR;
+    const lastColor = lastBar && (lastBar.close ?? 0) >= lastOpenVal ? BULL_COLOR : BEAR_COLOR;
 
     // Hovered or last bar for info display
     const displayed = hoverIdx !== null ? bars[hoverIdx] : lastBar;
     const dispIdx   = hoverIdx !== null ? hoverIdx : count - 1;
     const prevDispClose = dispIdx > 0 ? (bars[dispIdx - 1]?.close ?? displayed?.close ?? 0) : (displayed?.close ?? 0);
     const dispOpenVal   = displayed?.open ?? prevDispClose;
-    const isBullDisp = displayed ? displayed.close >= dispOpenVal : true;
+    const isBullDisp = displayed ? (displayed.close ?? 0) >= dispOpenVal : true;
     const dispColor  = isBullDisp ? BULL_COLOR : BEAR_COLOR;
 
     // Memoized SVG element arrays ──────────────────────────────────
@@ -257,13 +257,13 @@ export const BehavioralDnaSetupChart = React.memo(
           // When open is missing fall back to the previous bar's close so
           // bull/bear direction is still meaningful (not always true due to null≥0).
           const prevClose  = i > 0 ? (bars[i - 1].close ?? bar.close) : bar.close;
-          const openVal    = bar.open ?? prevClose;
+          const openVal    = bar.open ?? prevClose ?? 0;
           const isBull     = (bar.close ?? 0) >= openVal;
           const color      = isBull ? BULL_COLOR : BEAR_COLOR;
-          const yH         = yPrice(bar.high  ?? bar.close);
-          const yL         = yPrice(bar.low   ?? bar.close);
+          const yH         = yPrice(bar.high  ?? bar.close ?? 0);
+          const yL         = yPrice(bar.low   ?? bar.close ?? 0);
           const yO         = yPrice(openVal);
-          const yC         = yPrice(bar.close);
+          const yC         = yPrice(bar.close ?? 0);
           const bodyTop    = Math.min(yO, yC);
           const bodyH      = Math.max(Math.abs(yC - yO), 2);
           return (
@@ -294,7 +294,7 @@ export const BehavioralDnaSetupChart = React.memo(
           if (vol == null) return null;
           const cx        = PAD_LEFT + slotW * i + slotW / 2;
           const prevCl    = i > 0 ? (bars[i - 1].close ?? bar.close) : bar.close;
-          const openV     = bar.open ?? prevCl;
+          const openV     = bar.open ?? prevCl ?? 0;
           const isBull    = (bar.close ?? 0) >= openV;
           const y         = yVol(vol);
           const h      = Math.max(1, volumeTop + volumeH - y);
