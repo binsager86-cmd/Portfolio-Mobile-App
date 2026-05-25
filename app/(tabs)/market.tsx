@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles, max-lines */
 /**
  * Market Tab — Boursa Kuwait live market data.
  *
@@ -19,7 +20,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import type { MarketIndex, MarketMover, PerMarketSummary, SectorIndex } from "@/services/market/marketApi";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import {
     Pressable,
     RefreshControl,
@@ -130,33 +131,41 @@ function SummaryCard({
   summary,
   colors,
   t,
+  isCompact,
 }: {
   summary: SummaryTotals;
   colors: AppColors;
   t: (key: string) => string;
+  isCompact: boolean;
 }) {
   return (
     <View style={[s.summaryCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
       <Text style={[s.sectionLabel, { color: colors.textSecondary }]}>{t("market.todaysActivity")}</Text>
-      <View style={s.summaryRow}>
-        <View style={s.summaryItem}>
-          <FontAwesome name="bar-chart" size={16} color={colors.accentSecondary} style={{ marginBottom: 6 }} />
+      <View style={[s.summaryRow, isCompact && s.summaryRowCompact]}>
+        <View style={[s.summaryItem, s.summaryItemCard, isCompact && s.summaryItemCompact, { backgroundColor: colors.bgSecondary + "55" }]}> 
+          <View style={[s.summaryIconWrap, { backgroundColor: colors.accentSecondary + "15" }]}>
+            <FontAwesome name="bar-chart" size={16} color={colors.accentSecondary} />
+          </View>
           <Text style={[s.summaryValue, { color: colors.textPrimary }]}>
             {fmtCompact(summary.volume)}
           </Text>
           <Text style={[s.summaryLabel, { color: colors.textMuted }]}>{t("market.sharesTraded")}</Text>
         </View>
-        <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />
-        <View style={s.summaryItem}>
-          <FontAwesome name="money" size={16} color={colors.accentPrimary} style={{ marginBottom: 6 }} />
+        {!isCompact && <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />}
+        <View style={[s.summaryItem, s.summaryItemCard, isCompact && s.summaryItemCompact, { backgroundColor: colors.bgSecondary + "55" }]}> 
+          <View style={[s.summaryIconWrap, { backgroundColor: colors.accentPrimary + "15" }]}>
+            <FontAwesome name="money" size={16} color={colors.accentPrimary} />
+          </View>
           <Text style={[s.summaryValue, { color: colors.textPrimary }]}>
             {fmtCompact(summary.value_traded)}
           </Text>
           <Text style={[s.summaryLabel, { color: colors.textMuted }]}>{t("market.valueKWD")}</Text>
         </View>
-        <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />
-        <View style={s.summaryItem}>
-          <FontAwesome name="exchange" size={14} color={colors.accentTertiary} style={{ marginBottom: 6 }} />
+        {!isCompact && <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />}
+        <View style={[s.summaryItem, s.summaryItemCard, isCompact && s.summaryItemCompact, { backgroundColor: colors.bgSecondary + "55" }]}> 
+          <View style={[s.summaryIconWrap, { backgroundColor: colors.accentTertiary + "15" }]}>
+            <FontAwesome name="exchange" size={14} color={colors.accentTertiary} />
+          </View>
           <Text style={[s.summaryValue, { color: colors.textPrimary }]}>
             {fmtInt(summary.trades)}
           </Text>
@@ -180,6 +189,7 @@ function MarketDetailCard({
   totalSummary,
   colors,
   t,
+  isCompact,
 }: {
   title: string;
   icon: React.ComponentProps<typeof FontAwesome>["name"];
@@ -188,6 +198,7 @@ function MarketDetailCard({
   totalSummary: SummaryTotals;
   colors: AppColors;
   t: (key: string) => string;
+  isCompact: boolean;
 }) {
   const chgColor = index ? changeColor(index.changePercent, colors) : colors.textMuted;
   const volPct = pct(perMarket.volume, totalSummary.volume);
@@ -215,24 +226,24 @@ function MarketDetailCard({
           )}
         </View>
       </View>
-      <View style={s.detailStats}>
-        <View style={s.detailStatItem}>
+      <View style={[s.detailStats, isCompact && s.detailStatsCompact]}>
+        <View style={[s.detailStatItem, isCompact && s.detailStatItemCompact]}>
           <Text style={[s.detailStatLabel, { color: colors.textMuted }]}>{t("market.volume")}</Text>
           <Text style={[s.detailStatValue, { color: colors.textPrimary }]}>
             {fmtCompact(perMarket.volume)}
           </Text>
           {volPct && <Text style={[s.detailPct, { color: colors.accentSecondary }]}>{volPct}</Text>}
         </View>
-        <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />
-        <View style={s.detailStatItem}>
+        {!isCompact && <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />}
+        <View style={[s.detailStatItem, isCompact && s.detailStatItemCompact]}>
           <Text style={[s.detailStatLabel, { color: colors.textMuted }]}>{t("market.valueKWD")}</Text>
           <Text style={[s.detailStatValue, { color: colors.textPrimary }]}>
             {fmtCompact(perMarket.value_traded)}
           </Text>
           {valPct && <Text style={[s.detailPct, { color: colors.accentPrimary }]}>{valPct}</Text>}
         </View>
-        <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />
-        <View style={s.detailStatItem}>
+        {!isCompact && <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />}
+        <View style={[s.detailStatItem, isCompact && s.detailStatItemCompact]}>
           <Text style={[s.detailStatLabel, { color: colors.textMuted }]}>{t("market.trades")}</Text>
           <Text style={[s.detailStatValue, { color: colors.textPrimary }]}>
             {fmtInt(perMarket.trades)}
@@ -241,8 +252,8 @@ function MarketDetailCard({
         </View>
         {perMarket.market_cap != null && perMarket.market_cap > 0 && (
           <>
-            <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />
-            <View style={s.detailStatItem}>
+            {!isCompact && <View style={[s.summaryDivider, { backgroundColor: colors.borderColor }]} />}
+            <View style={[s.detailStatItem, isCompact && s.detailStatItemCompact]}>
               <Text style={[s.detailStatLabel, { color: colors.textMuted }]}>{t("market.marketCap")}</Text>
               <Text style={[s.detailStatValue, { color: colors.textPrimary }]}>
                 {fmtCompact(perMarket.market_cap)}
@@ -261,12 +272,14 @@ function GainersLosersBar({
   losers,
   colors,
   t,
+  isCompact,
 }: {
   gainers: number;
   neutral: number;
   losers: number;
   colors: AppColors;
   t: TFunction;
+  isCompact: boolean;
 }) {
   const total = gainers + neutral + losers || 1;
   const gPct = Math.round((gainers / total) * 100);
@@ -289,24 +302,33 @@ function GainersLosersBar({
           <View style={[s.glSegment, { flex: losers / total, backgroundColor: colors.danger, borderTopRightRadius: 5, borderBottomRightRadius: 5 }]} />
         )}
       </View>
-      <View style={s.glLabels}>
+      <View style={[s.glLabels, isCompact && s.glLabelsCompact]}>
         <View style={s.glLabelItem}>
           <View style={[s.glDot, { backgroundColor: colors.success }]} />
-          <Text style={[s.glLabelText, { color: colors.success }]}>
-            {gainers} {t("market.up")} ({gPct}%)
-          </Text>
+          <View>
+            <Text style={[s.glLabelText, { color: colors.success }]}>
+              {gainers} {t("market.up")}
+            </Text>
+            <Text style={[s.glPctText, { color: colors.success }]}>{gPct}%</Text>
+          </View>
         </View>
         <View style={s.glLabelItem}>
           <View style={[s.glDot, { backgroundColor: colors.textMuted }]} />
-          <Text style={[s.glLabelText, { color: colors.textMuted }]}>
-            {neutral} {t("market.flat")} ({nPct}%)
-          </Text>
+          <View>
+            <Text style={[s.glLabelText, { color: colors.textMuted }]}>
+              {neutral} {t("market.flat")}
+            </Text>
+            <Text style={[s.glPctText, { color: colors.textMuted }]}>{nPct}%</Text>
+          </View>
         </View>
         <View style={s.glLabelItem}>
           <View style={[s.glDot, { backgroundColor: colors.danger }]} />
-          <Text style={[s.glLabelText, { color: colors.danger }]}>
-            {losers} {t("market.down")} ({lPct}%)
-          </Text>
+          <View>
+            <Text style={[s.glLabelText, { color: colors.danger }]}>
+              {losers} {t("market.down")}
+            </Text>
+            <Text style={[s.glPctText, { color: colors.danger }]}>{lPct}%</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -321,6 +343,9 @@ function MoverTable({
   accentColor,
   colors,
   t,
+  isCompact,
+  isWide,
+  isMostTraded,
 }: {
   title: string;
   subtitle: string;
@@ -329,10 +354,22 @@ function MoverTable({
   accentColor: string;
   colors: AppColors;
   t: (key: string) => string;
+  isCompact: boolean;
+  isWide: boolean;
+  isMostTraded?: boolean;
 }) {
   if (!movers.length) return null;
+  const stockFlex = isMostTraded ? 1.7 : 1.4;
+  const volumeFlex = isMostTraded ? 1.15 : 0.9;
+
   return (
-    <View style={[s.moverCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
+    <View
+      style={[
+        s.moverCard,
+        isMostTraded && s.featuredMoverCard,
+        { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+      ]}
+    >
       <View style={s.moverHeader}>
         <View style={[s.moverIconBg, { backgroundColor: accentColor + "15" }]}>
           <FontAwesome name={icon} size={13} color={accentColor} />
@@ -346,57 +383,124 @@ function MoverTable({
           </Text>
         </View>
       </View>
-      {/* Header row */}
-      <View style={[s.tableRow, s.tableHeaderRow]}>
-        <View style={s.colStock}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted }]}>{t("market.stock")}</Text>
-        </View>
-        <View style={s.colPrice}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.price")}</Text>
-        </View>
-        <View style={s.colChange}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.change")}</Text>
-        </View>
-        <View style={s.colVolume}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.volume")}</Text>
-        </View>
-      </View>
-      {movers.map((m, i) => {
-        const chg = changeColor(m.changePercent, colors);
-        return (
-          <View
-            key={m.symbol}
-            style={[
-              s.tableRow,
-              i % 2 === 0 && { backgroundColor: colors.bgSecondary + "40" },
-            ]}
-          >
-            <View style={s.colStock}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "600", fontSize: 13 }} numberOfLines={1}>
-                {m.symbol}
-              </Text>
-            </View>
-            <View style={s.colPrice}>
-              <Text style={{ color: colors.textPrimary, fontSize: 13, textAlign: "right" }}>
-                {fmt(m.last, 0)}
-              </Text>
-            </View>
-            <View style={[s.colChange, { alignItems: "flex-end" }]}>
-              <View style={[s.changePill, { backgroundColor: chg + "12" }]}>
-                <Text style={{ color: chg, fontSize: 12, fontWeight: "700" }}>
-                  {changePrefix(m.changePercent)}
-                  {fmt(m.changePercent)}%
-                </Text>
+      {isCompact ? (
+        movers.map((m, i) => {
+          const chg = changeColor(m.changePercent, colors);
+          return (
+            <View
+              key={m.symbol}
+              style={[
+                s.moverItemCard,
+                {
+                  backgroundColor: i % 2 === 0 ? colors.bgSecondary + "50" : colors.bgPrimary,
+                  borderColor: colors.borderColor,
+                },
+              ]}
+            >
+              <View style={s.moverItemTop}>
+                <View style={s.stockCell}>
+                  {isMostTraded && (
+                    <View style={[s.rankBadge, { backgroundColor: accentColor + "16" }]}>
+                      <Text style={[s.rankBadgeText, { color: accentColor }]}>{i + 1}</Text>
+                    </View>
+                  )}
+                  <View style={s.stockTextWrap}>
+                    <Text style={[s.tableSymbolText, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {m.symbol}
+                    </Text>
+                    <Text style={[s.miniMetaText, { color: colors.textMuted }]}>{subtitle}</Text>
+                  </View>
+                </View>
+                <Text style={[s.tablePriceText, { color: colors.textPrimary }]}>{fmt(m.last, 0)}</Text>
+              </View>
+              <View style={s.moverItemBottom}>
+                <View style={[s.changePill, s.changePillLarge, { backgroundColor: chg + "12" }]}>
+                  <Text style={[s.changePillText, { color: chg }]}>
+                    {changePrefix(m.changePercent)}
+                    {fmt(m.changePercent)}%
+                  </Text>
+                </View>
+                <View style={[s.metricPill, { backgroundColor: colors.bgSecondary + "80" }]}>
+                  <Text style={[s.metricLabel, { color: colors.textMuted }]}>{t("market.volume")}</Text>
+                  <Text style={[s.metricValue, { color: isMostTraded ? accentColor : colors.textPrimary }]}>
+                    {fmtCompact(m.volume)}
+                  </Text>
+                </View>
               </View>
             </View>
-            <View style={s.colVolume}>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: "right" }}>
-                {fmtCompact(m.volume)}
-              </Text>
+          );
+        })
+      ) : (
+        <>
+          <View style={[s.tableRow, s.tableHeaderRow, isMostTraded && s.tableHeaderFeatured]}>
+            <View style={[s.colStock, { flex: stockFlex }]}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted }]}>{t("market.stock")}</Text>
+            </View>
+            <View style={s.colPrice}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.price")}</Text>
+            </View>
+            <View style={s.colChange}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.change")}</Text>
+            </View>
+            <View style={[s.colVolume, { flex: volumeFlex }]}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.volume")}</Text>
             </View>
           </View>
-        );
-      })}
+          {movers.map((m, i) => {
+            const chg = changeColor(m.changePercent, colors);
+            return (
+              <View
+                key={m.symbol}
+                style={[
+                  s.tableRow,
+                  isWide && s.tableRowWide,
+                  i % 2 === 0 && { backgroundColor: colors.bgSecondary + "40" },
+                ]}
+              >
+                <View style={[s.colStock, { flex: stockFlex }]}>
+                  <View style={s.stockCell}>
+                    {isMostTraded && (
+                      <View style={[s.rankBadge, { backgroundColor: accentColor + "16" }]}>
+                        <Text style={[s.rankBadgeText, { color: accentColor }]}>{i + 1}</Text>
+                      </View>
+                    )}
+                    <View style={s.stockTextWrap}>
+                      <Text style={[s.tableSymbolText, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {m.symbol}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={s.colPrice}>
+                  <Text style={[s.tablePriceText, { color: colors.textPrimary, textAlign: "right" }]}>
+                    {fmt(m.last, 0)}
+                  </Text>
+                </View>
+                <View style={[s.colChange, { alignItems: "flex-end" }]}>
+                  <View style={[s.changePill, s.changePillLarge, { backgroundColor: chg + "12" }]}>
+                    <Text style={[s.changePillText, { color: chg }]}>
+                      {changePrefix(m.changePercent)}
+                      {fmt(m.changePercent)}%
+                    </Text>
+                  </View>
+                </View>
+                <View style={[s.colVolume, { flex: volumeFlex, alignItems: "flex-end" }]}>
+                  {isMostTraded ? (
+                    <View style={[s.metricPill, { backgroundColor: accentColor + "12" }]}>
+                      <Text style={[s.metricLabel, { color: colors.textMuted }]}>{t("market.volume")}</Text>
+                      <Text style={[s.metricValue, { color: accentColor }]}>{fmtCompact(m.volume)}</Text>
+                    </View>
+                  ) : (
+                    <Text style={[s.tableVolumeText, { color: colors.textSecondary, textAlign: "right" }]}>
+                      {fmtCompact(m.volume)}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
     </View>
   );
 }
@@ -405,10 +509,12 @@ function SectorTable({
   sectors,
   colors,
   t,
+  isCompact,
 }: {
   sectors: SectorIndex[];
   colors: AppColors;
   t: (key: string) => string;
+  isCompact: boolean;
 }) {
   if (!sectors.length) return null;
   // Sort: biggest gainers first, then losers
@@ -428,52 +534,89 @@ function SectorTable({
           </Text>
         </View>
       </View>
-      {/* Header */}
-      <View style={[s.tableRow, s.tableHeaderRow]}>
-        <View style={s.colSector}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted }]}>{t("market.sector")}</Text>
-        </View>
-        <View style={s.colChange}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.change")}</Text>
-        </View>
-        <View style={s.colIndex}>
-          <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.index")}</Text>
-        </View>
-      </View>
-      {sorted.map((sec, i) => {
-        const chg = changeColor(sec.changePercent, colors);
-        return (
-          <View
-            key={sec.name}
-            style={[
-              s.tableRow,
-              i % 2 === 0 && { backgroundColor: colors.bgSecondary + "40" },
-            ]}
-          >
-            <View style={s.colSector}>
-              <Text
-                style={{ color: colors.textPrimary, fontWeight: "500", fontSize: 13 }}
-                numberOfLines={1}
-              >
-                {sec.name}
-              </Text>
-            </View>
-            <View style={[s.colChange, { alignItems: "flex-end" }]}>
-              <View style={[s.changePill, { backgroundColor: chg + "12" }]}>
-                <Text style={{ color: chg, fontSize: 12, fontWeight: "700" }}>
-                  {changePrefix(sec.changePercent)}
-                  {fmt(sec.changePercent)}%
-                </Text>
+      {isCompact ? (
+        sorted.map((sec, i) => {
+          const chg = changeColor(sec.changePercent, colors);
+          return (
+            <View
+              key={sec.name}
+              style={[
+                s.moverItemCard,
+                {
+                  backgroundColor: i % 2 === 0 ? colors.bgSecondary + "50" : colors.bgPrimary,
+                  borderColor: colors.borderColor,
+                },
+              ]}
+            >
+              <View style={s.moverItemTop}>
+                <View style={s.stockTextWrap}>
+                  <Text style={[s.tableSymbolText, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {sec.name}
+                  </Text>
+                  <Text style={[s.miniMetaText, { color: colors.textMuted }]}>{t("market.sector")}</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={[s.metricLabel, { color: colors.textMuted }]}>{t("market.index")}</Text>
+                  <Text style={[s.tablePriceText, { color: colors.textPrimary }]}>{fmt(sec.last)}</Text>
+                </View>
+              </View>
+              <View style={s.moverItemBottom}>
+                <View style={[s.changePill, s.changePillLarge, { backgroundColor: chg + "12" }]}>
+                  <Text style={[s.changePillText, { color: chg }]}>
+                    {changePrefix(sec.changePercent)}
+                    {fmt(sec.changePercent)}%
+                  </Text>
+                </View>
               </View>
             </View>
+          );
+        })
+      ) : (
+        <>
+          <View style={[s.tableRow, s.tableHeaderRow]}>
+            <View style={s.colSector}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted }]}>{t("market.sector")}</Text>
+            </View>
+            <View style={s.colChange}>
+              <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.change")}</Text>
+            </View>
             <View style={s.colIndex}>
-              <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "right" }}>
-                {fmt(sec.last)}
-              </Text>
+              <Text style={[s.colHeaderText, { color: colors.textMuted, textAlign: "right" }]}>{t("market.index")}</Text>
             </View>
           </View>
-        );
-      })}
+          {sorted.map((sec, i) => {
+            const chg = changeColor(sec.changePercent, colors);
+            return (
+              <View
+                key={sec.name}
+                style={[
+                  s.tableRow,
+                  i % 2 === 0 && { backgroundColor: colors.bgSecondary + "40" },
+                ]}
+              >
+                <View style={s.colSector}>
+                  <Text style={[s.tableSymbolText, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {sec.name}
+                  </Text>
+                </View>
+                <View style={[s.colChange, { alignItems: "flex-end" }]}>
+                  <View style={[s.changePill, s.changePillLarge, { backgroundColor: chg + "12" }]}>
+                    <Text style={[s.changePillText, { color: chg }]}>
+                      {changePrefix(sec.changePercent)}
+                      {fmt(sec.changePercent)}%
+                    </Text>
+                  </View>
+                </View>
+                <View style={s.colIndex}>
+                  <Text style={[s.tablePriceText, { color: colors.textSecondary, textAlign: "right" }]}>
+                    {fmt(sec.last)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
     </View>
   );
 }
@@ -482,21 +625,20 @@ function SectorTable({
 
 export default withErrorBoundary(function MarketScreen() {
   const { colors } = useThemeStore();
-  const { isDesktop, isPhone, spacing, maxContentWidth } = useResponsive();
+  const { isDesktop, isPhone, isTablet, spacing, maxContentWidth } = useResponsive();
   const { data, isLoading, isError, refetch, isFetching, dataUpdatedAt } = useMarketSummary();
   const refreshMarket = useMarketRefresh();
-  const [refreshing, setRefreshing] = useState(false);
   const { t } = useTranslation();
+  const isWide = isDesktop || isTablet;
+  const isManualRefreshing = refreshMarket.isPending;
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
     try {
-      await refreshMarket();
+      await refreshMarket.mutateAsync();
     } catch {
-      // ignore
+      await refetch();
     }
-    setRefreshing(false);
-  }, [refreshMarket]);
+  }, [refreshMarket, refetch]);
 
   if (isLoading) {
     return <MarketSkeleton />;
@@ -519,7 +661,7 @@ export default withErrorBoundary(function MarketScreen() {
       ]}
       refreshControl={
         <RefreshControl
-          refreshing={refreshing}
+          refreshing={isManualRefreshing}
           onRefresh={onRefresh}
           tintColor={colors.accentPrimary}
           colors={[colors.accentPrimary]}
@@ -544,15 +686,15 @@ export default withErrorBoundary(function MarketScreen() {
           onPress={onRefresh}
           accessibilityRole="button"
           accessibilityLabel={t("market.refresh", "Refresh market data")}
-          accessibilityState={{ disabled: isFetching }}
+          accessibilityState={{ disabled: isManualRefreshing }}
           style={[s.refreshBtn, { backgroundColor: colors.accentPrimary + "15" }]}
-          disabled={isFetching}
+          disabled={isManualRefreshing}
         >
           <FontAwesome
             name="refresh"
             size={16}
             color={colors.accentPrimary}
-            style={isFetching ? { opacity: 0.4 } : undefined}
+            style={isManualRefreshing ? { opacity: 0.4 } : undefined}
           />
         </Pressable>
       </View>
@@ -567,21 +709,29 @@ export default withErrorBoundary(function MarketScreen() {
       )}
 
       {/* ── Index Cards Row ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.indexRow}
-      >
-        {data.indices.map((idx) => (
-          <IndexCard key={idx.name} index={idx} colors={colors} isCompact={isPhone} />
-        ))}
-      </ScrollView>
+      {isWide ? (
+        <View style={s.indexGrid}>
+          {data.indices.map((idx) => (
+            <IndexCard key={idx.name} index={idx} colors={colors} isCompact={false} />
+          ))}
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.indexRow}
+        >
+          {data.indices.map((idx) => (
+            <IndexCard key={idx.name} index={idx} colors={colors} isCompact={isPhone} />
+          ))}
+        </ScrollView>
+      )}
 
       {/* ── Today's Summary ── */}
-      <SummaryCard summary={summary} colors={colors} t={t} />
+      <SummaryCard summary={summary} colors={colors} t={t} isCompact={isPhone} />
 
       {/* ── Premier & Main Market Detail Cards ── */}
-      <View style={[s.detailRow, isDesktop && { flexDirection: "row", gap: 16 }]}>
+      <View style={[s.detailRow, isWide && { flexDirection: "row", gap: 16 }]}>
         {data.premier_summary && (
           <MarketDetailCard
             title={t("market.premierMarket")}
@@ -591,6 +741,7 @@ export default withErrorBoundary(function MarketScreen() {
             totalSummary={summary}
             colors={colors}
             t={t}
+            isCompact={isPhone}
           />
         )}
         {data.main_summary && (
@@ -602,6 +753,7 @@ export default withErrorBoundary(function MarketScreen() {
             totalSummary={summary}
             colors={colors}
             t={t}
+            isCompact={isPhone}
           />
         )}
       </View>
@@ -613,10 +765,11 @@ export default withErrorBoundary(function MarketScreen() {
         losers={summary.losers ?? 0}
         colors={colors}
         t={t}
+        isCompact={isPhone}
       />
 
       {/* ── Top movers (side by side on desktop) ── */}
-      <View style={[s.moversRow, isDesktop && { flexDirection: "row", gap: 16 }]}>
+      <View style={[s.moversRow, isWide && { flexDirection: "row", gap: 16 }]}>
         <MoverTable
           title={t("market.topRisers")}
           subtitle={t("market.risersSubtitle")}
@@ -625,6 +778,8 @@ export default withErrorBoundary(function MarketScreen() {
           accentColor={colors.success}
           colors={colors}
           t={t}
+          isCompact={isPhone}
+          isWide={isWide}
         />
         <MoverTable
           title={t("market.biggestDrops")}
@@ -634,6 +789,8 @@ export default withErrorBoundary(function MarketScreen() {
           accentColor={colors.danger}
           colors={colors}
           t={t}
+          isCompact={isPhone}
+          isWide={isWide}
         />
       </View>
 
@@ -646,10 +803,13 @@ export default withErrorBoundary(function MarketScreen() {
         accentColor={colors.accentPrimary}
         colors={colors}
         t={t}
+        isCompact={isPhone}
+        isWide={isWide}
+        isMostTraded
       />
 
       {/* ── Sector Performance ── */}
-      <SectorTable sectors={data.sectors} colors={colors} t={t} />
+      <SectorTable sectors={data.sectors} colors={colors} t={t} isCompact={isPhone} />
 
       {/* Footer spacing */}
       <View style={{ height: 40 }} />
@@ -675,11 +835,12 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   screenTitle: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "800",
+    letterSpacing: -0.4,
   },
   headerMeta: {
     flexDirection: "row",
@@ -693,13 +854,13 @@ const s = StyleSheet.create({
     borderRadius: 4,
   },
   headerDate: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
   },
   refreshBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -726,23 +887,30 @@ const s = StyleSheet.create({
     paddingVertical: 4,
     marginBottom: 16,
   },
+  indexGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 16,
+  },
   indexCard: {
-    padding: 14,
-    borderRadius: 12,
+    padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
     minWidth: 155,
+    flexGrow: 1,
   },
   indexName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.7,
+    marginBottom: 6,
   },
   indexValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "800",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   changeRow: {
     flexDirection: "row",
@@ -750,46 +918,69 @@ const s = StyleSheet.create({
     gap: 6,
   },
   changeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   changeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   changePct: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
   },
 
   /* Summary card */
   summaryCard: {
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
+    padding: 18,
+    marginBottom: 18,
   },
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
+    gap: 12,
+  },
+  summaryRowCompact: {
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   summaryItem: {
     alignItems: "center",
     flex: 1,
     paddingVertical: 4,
   },
+  summaryItemCard: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    minHeight: 112,
+  },
+  summaryItemCompact: {
+    flexBasis: "48%",
+  },
+  summaryIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
   summaryValue: {
-    fontSize: 17,
+    fontSize: 21,
     fontWeight: "800",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   summaryLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.6,
+    textAlign: "center",
   },
   summaryDivider: {
     width: 1,
@@ -802,9 +993,9 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   detailCard: {
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
+    padding: 18,
     marginBottom: 12,
     flex: 1,
   },
@@ -822,25 +1013,34 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   detailTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   detailChangeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   detailStats: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
   },
+  detailStatsCompact: {
+    flexWrap: "wrap",
+    rowGap: 12,
+    justifyContent: "space-between",
+  },
   detailStatItem: {
     alignItems: "center",
     flex: 1,
     paddingVertical: 4,
+  },
+  detailStatItemCompact: {
+    flexBasis: "48%",
+    alignItems: "flex-start",
   },
   detailStatLabel: {
     fontSize: 10,
@@ -850,21 +1050,21 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   detailStatValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
   },
   detailPct: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
     marginTop: 2,
   },
 
   /* Gainers/Losers bar */
   glCard: {
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
+    padding: 18,
+    marginBottom: 18,
   },
   glSubtitle: {
     fontSize: 12,
@@ -885,6 +1085,11 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
   },
+  glLabelsCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 10,
+  },
   glLabelItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -897,20 +1102,28 @@ const s = StyleSheet.create({
   },
   glLabelText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  glPctText: {
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 20,
   },
 
   /* Mover / Sector tables */
   moversRow: {
     gap: 12,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   moverCard: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
+    padding: 16,
+    marginBottom: 14,
+  },
+  featuredMoverCard: {
+    padding: 16,
   },
   moverHeader: {
     flexDirection: "row",
@@ -926,12 +1139,14 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "700",
+    letterSpacing: -0.2,
   },
   moverSubtitle: {
-    fontSize: 11,
-    marginTop: 1,
+    fontSize: 12,
+    marginTop: 3,
+    lineHeight: 16,
   },
 
   /* Table grid — View-based cells for reliable alignment */
@@ -939,15 +1154,22 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     borderRadius: 6,
-    gap: 8,
+    gap: 10,
+  },
+  tableRowWide: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
   },
   tableHeaderRow: {
     borderBottomWidth: 1,
     borderBottomColor: "rgba(128,128,128,0.15)",
-    marginBottom: 2,
-    paddingVertical: 8,
+    marginBottom: 6,
+    paddingVertical: 10,
+  },
+  tableHeaderFeatured: {
+    marginBottom: 6,
   },
   colHeaderText: {
     fontSize: 11,
@@ -959,28 +1181,119 @@ const s = StyleSheet.create({
   /* Mover table columns */
   colStock: {
     flex: 1.4,
+    minWidth: 0,
   },
   colPrice: {
     flex: 0.9,
+    minWidth: 0,
   },
   colChange: {
     flex: 1.0,
+    minWidth: 0,
   },
   colVolume: {
     flex: 0.9,
+    minWidth: 0,
   },
 
   /* Sector table columns */
   colSector: {
     flex: 2,
+    minWidth: 0,
   },
   colIndex: {
     flex: 1,
+    minWidth: 0,
   },
 
   changePill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+  },
+  changePillLarge: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  changePillText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  stockCell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  stockTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tableSymbolText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  tablePriceText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  tableVolumeText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  miniMetaText: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  moverItemCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  moverItemTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  },
+  moverItemBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  rankBadge: {
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  metricPill: {
+    minWidth: 108,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "flex-end",
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  metricValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 2,
   },
 });

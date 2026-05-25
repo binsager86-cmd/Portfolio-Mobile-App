@@ -3,7 +3,7 @@
  */
 
 import { marketApi, type MarketData } from "@/services/market/marketApi";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const MARKET_KEYS = {
   all: ["market"] as const,
@@ -18,6 +18,8 @@ export function useMarketSummary(enabled = true) {
     gcTime: 30 * 60_000,
     retry: 2,
     enabled,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
     // Keep last successful payload visible while refetching so the
     // Market screen never flashes a skeleton when the user navigates
     // back to it within gcTime.
@@ -27,9 +29,10 @@ export function useMarketSummary(enabled = true) {
 
 export function useMarketRefresh() {
   const queryClient = useQueryClient();
-  return async () => {
-    const data = await marketApi.refresh();
-    queryClient.setQueryData(MARKET_KEYS.summary(), data);
-    return data;
-  };
+  return useMutation({
+    mutationFn: () => marketApi.refresh(),
+    onSuccess: (data) => {
+      queryClient.setQueryData(MARKET_KEYS.summary(), data);
+    },
+  });
 }
