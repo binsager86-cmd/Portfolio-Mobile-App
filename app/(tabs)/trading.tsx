@@ -61,7 +61,7 @@ import {
     txnToEditRow,
 } from "@/components/trading/TradingEditableRow";
 import { FilterChip, PORTFOLIOS, TXN_TYPES } from "@/components/trading/TradingFilters";
-import { TradingSummaryCards } from "@/components/trading/TradingSummary";
+import { TradingSummaryCards, type SummaryTab } from "@/components/trading/TradingSummary";
 import { KpiCard } from "@/components/portfolio/KpiWidgets";
 import { GLOSSARY, InfoTip } from "@/components/ui/InfoTip";
 import { formatCurrency } from "@/lib/currency";
@@ -89,6 +89,7 @@ function TradingScreen() {
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [summaryTab, setSummaryTab] = useState<SummaryTab>("capitalFlow");
 
   const debouncedSearch = useDebouncedValue(search);
   const debouncedDateFrom = useDebouncedValue(dateFrom);
@@ -98,14 +99,6 @@ function TradingScreen() {
 
   const { data: riskData } = useRiskMetrics();
   const { data: realizedData } = useRealizedProfit();
-  const [expandedRealized, setExpandedRealized] = useState<Set<number>>(new Set());
-  const toggleRealized = useCallback((id: number) => {
-    setExpandedRealized((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
 
   const clearAllFilters = useCallback(() => {
     setPortfolios([]);
@@ -426,7 +419,16 @@ function TradingScreen() {
       </View>
 
       {/* Summary metrics */}
-      {summary && <TradingSummaryCards summary={summary} dateFrom={dateFrom} dateTo={dateTo} />}
+      {summary && (
+        <TradingSummaryCards
+          summary={summary}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          realizedData={realizedData}
+          activeTab={summaryTab}
+          onTabChange={setSummaryTab}
+        />
+      )}
 
       {/* ── Risk Metrics card hidden per request (sharpe / sortino) ── */}
       {/* eslint-disable-next-line no-constant-binary-expression */}
@@ -444,8 +446,8 @@ function TradingScreen() {
         </View>
       )}
 
-      {/* ── Realized Profit card removed per request ──────── */}
-
+      {summaryTab === "capitalFlow" && (
+        <>
       {/* Section header: Filters */}
       <View style={[s.sectionHeader, { borderBottomColor: colors.borderColor }]}>
         <FontAwesome name="filter" size={14} color={colors.accentSecondary} />
@@ -782,6 +784,8 @@ function TradingScreen() {
           {t('trading.switchToEdit')}
         </Text>
       )}
+        </>
+      )}
     </View>
   );
 
@@ -804,7 +808,7 @@ function TradingScreen() {
         {renderHeader()}
 
         {/* ── Data Table (horizontal scroll) ─────────────────────── */}
-        {sortedTransactions.length === 0 ? (
+        {summaryTab !== "capitalFlow" ? null : sortedTransactions.length === 0 ? (
           <View style={s.empty}>
             <FontAwesome name="bar-chart" size={48} color={colors.textMuted} />
             <Text style={[s.emptyText, { color: colors.textSecondary }]}>
@@ -885,7 +889,7 @@ function TradingScreen() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {summaryTab === "capitalFlow" && totalPages > 1 && (
           <View style={s.pagination}>
             <Pressable
               accessibilityRole="button"
@@ -930,7 +934,7 @@ function TradingScreen() {
       </KeyboardAvoidingView>
 
       {/* Footer stats bar */}
-      {summary && (
+      {summary && summaryTab === "capitalFlow" && (
         <View style={[s.footer, { backgroundColor: colors.bgSecondary, borderTopColor: colors.borderColor }]}>
           <View style={s.footerStat}>
             <Text style={[s.footerValue, { color: colors.accentPrimary }]}>

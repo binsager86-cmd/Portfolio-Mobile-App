@@ -13,6 +13,8 @@ interface DateInputProps {
   value: string;
   onChangeText: (text: string) => void;
   hasError?: boolean;
+  compact?: boolean;
+  placeholder?: string;
 }
 
 function toIsoDate(date: Date): string {
@@ -26,11 +28,12 @@ function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-export function DateInput({ value, onChangeText, hasError }: DateInputProps) {
+export function DateInput({ value, onChangeText, hasError, compact = false, placeholder }: DateInputProps) {
   const { colors } = useThemeStore();
   const [showPicker, setShowPicker] = useState(false);
   const selectedDate = isIsoDate(value) ? value : undefined;
   const today = toIsoDate(new Date());
+  const displayValue = value || placeholder || "YYYY-MM-DD";
 
   const markedDates = useMemo(() => {
     const marks: Record<string, { selected?: boolean; selectedColor?: string; selectedTextColor?: string; marked?: boolean; dotColor?: string }> = {
@@ -55,7 +58,7 @@ export function DateInput({ value, onChangeText, hasError }: DateInputProps) {
     <View style={styles.row}>
       <Pressable
         style={[
-          styles.displayBox,
+          compact ? styles.compactDisplayBox : styles.displayBox,
           {
             backgroundColor: colors.bgInput,
             borderColor: hasError ? colors.danger : colors.borderColor,
@@ -63,20 +66,23 @@ export function DateInput({ value, onChangeText, hasError }: DateInputProps) {
         ]}
         onPress={() => setShowPicker(true)}
       >
-        <FontAwesome name="calendar" size={16} color={colors.accentPrimary} />
-        <Text style={[styles.displayText, { color: value ? colors.textPrimary : colors.textMuted }]}>
-          {value || "YYYY-MM-DD"}
+        <FontAwesome name="calendar" size={compact ? 14 : 16} color={colors.accentPrimary} />
+        <Text style={[compact ? styles.compactDisplayText : styles.displayText, { color: value ? colors.textPrimary : colors.textMuted }]}>
+          {displayValue}
         </Text>
+        {compact ? <FontAwesome name="chevron-down" size={12} color={colors.textMuted} style={styles.compactChevron} /> : null}
       </Pressable>
-      <Pressable
-        style={[
-          styles.iconBox,
-          { backgroundColor: colors.bgInput, borderColor: colors.borderColor },
-        ]}
-        onPress={() => setShowPicker(true)}
-      >
-        <FontAwesome name="calendar" size={18} color={colors.accentPrimary} />
-      </Pressable>
+      {!compact ? (
+        <Pressable
+          style={[
+            styles.iconBox,
+            { backgroundColor: colors.bgInput, borderColor: colors.borderColor },
+          ]}
+          onPress={() => setShowPicker(true)}
+        >
+          <FontAwesome name="calendar" size={18} color={colors.accentPrimary} />
+        </Pressable>
+      ) : null}
 
       <Modal visible={showPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -134,9 +140,28 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 48,
   },
+  compactDisplayBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
   displayText: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  compactDisplayText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  compactChevron: {
+    marginLeft: "auto",
   },
   iconBox: {
     borderWidth: 1,
