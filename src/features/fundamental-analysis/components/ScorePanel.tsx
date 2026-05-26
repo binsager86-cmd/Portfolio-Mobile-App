@@ -18,7 +18,7 @@ import { showErrorAlert } from "@/lib/errorHandling";
 import { calculateMetrics, type CategoryBreakdown } from "@/services/api";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { st } from "../styles";
-import { SCORE_WEIGHTS, type PanelWithSymbolProps } from "../types";
+import { METRIC_CATEGORY_SCORE_ORDER, METRIC_CATEGORY_SCORE_WEIGHTS, SCORE_WEIGHTS, type PanelWithSymbolProps } from "../types";
 import { formatScoreDate, INTERPRETATION_SCALE, safeFormatMetric, scoreColor, scoreLabel } from "../utils";
 import { Card, ExportBar, FadeIn, NetworkErrorState, SectionHeader } from "./shared";
 
@@ -28,6 +28,16 @@ function beginnerScoreLabel(score: number): string {
   if (score >= 60) return "Okay";
   if (score >= 40) return "Weak";
   return "Risky";
+}
+
+interface ScoreCategoryRow {
+  key: string;
+  label: string;
+  weight: string;
+  value: number | null | undefined;
+  iconColor: string;
+  breakdown?: CategoryBreakdown;
+  penaltyPct?: number | null;
 }
 
 export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: PanelWithSymbolProps) {
@@ -83,6 +93,45 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
   const score = data;
   const scoreHistory = historyQ.data?.scores ?? [];
   const valuations = valuationsQ.data?.valuations ?? [];
+  const hasMetricCategoryScores = useMemo(
+    () => METRIC_CATEGORY_SCORE_ORDER.every((key) => typeof score?.metric_category_scores?.[key] === "number"),
+    [score],
+  );
+
+  const scoreCategoryRows = useMemo<ScoreCategoryRow[]>(() => {
+    if (hasMetricCategoryScores && score?.metric_category_scores) {
+      return METRIC_CATEGORY_SCORE_ORDER.map((key) => ({
+        key,
+        label: METRIC_CATEGORY_SCORE_WEIGHTS[key].label,
+        weight: METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel,
+        value: score.metric_category_scores?.[key] ?? null,
+        iconColor: METRIC_CATEGORY_SCORE_WEIGHTS[key].iconColor,
+        breakdown: score.metric_category_breakdown?.[key],
+      }));
+    }
+
+    return [
+      { key: "fundamental", label: "Fundamental", weight: SCORE_WEIGHTS.FUNDAMENTAL.label, value: score?.fundamental_score, iconColor: SCORE_WEIGHTS.FUNDAMENTAL.iconColor, breakdown: score?.score_breakdown?.fundamental },
+      { key: "quality", label: "Quality", weight: SCORE_WEIGHTS.QUALITY.label, value: score?.quality_score, iconColor: SCORE_WEIGHTS.QUALITY.iconColor, breakdown: score?.score_breakdown?.quality },
+      { key: "growth", label: "Growth", weight: SCORE_WEIGHTS.GROWTH.label, value: score?.growth_score, iconColor: SCORE_WEIGHTS.GROWTH.iconColor, breakdown: score?.score_breakdown?.growth },
+      { key: "valuation", label: "Valuation", weight: SCORE_WEIGHTS.VALUATION.label, value: score?.valuation_score, iconColor: SCORE_WEIGHTS.VALUATION.iconColor, breakdown: score?.score_breakdown?.valuation },
+      { key: "risk", label: "Risk", weight: SCORE_WEIGHTS.RISK.label, value: score?.risk_score, iconColor: SCORE_WEIGHTS.RISK.iconColor, breakdown: score?.score_breakdown?.risk, penaltyPct: score?.risk_penalty_pct },
+    ];
+  }, [hasMetricCategoryScores, score]);
+
+  const scoreSummaryText = useMemo(() => {
+    if (!hasMetricCategoryScores) {
+      return `CFA-Based Composite Score\nFundamentals ${SCORE_WEIGHTS.FUNDAMENTAL.label} · Quality ${SCORE_WEIGHTS.QUALITY.label} · Growth ${SCORE_WEIGHTS.GROWTH.label} · Valuation ${SCORE_WEIGHTS.VALUATION.label}\nRisk penalty up to ${SCORE_WEIGHTS.RISK.label}`;
+    }
+
+    const firstLine = METRIC_CATEGORY_SCORE_ORDER.slice(0, 4)
+      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel}`)
+      .join(" · ");
+    const secondLine = METRIC_CATEGORY_SCORE_ORDER.slice(4)
+      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel}`)
+      .join(" · ");
+    return `Metrics-Aligned Composite Score\n${firstLine}\n${secondLine}`;
+  }, [hasMetricCategoryScores]);
 
   // Average IV across latest per-model valuations (same logic as Valuation Summary)
   const avgIV = useMemo(() => {
@@ -123,13 +172,17 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
       <Text style={[st.scoreHistCell, { width: 52, fontWeight: "800", color: scoreColor(sh.overall_score ?? 0, colors) }]}>
         {sh.overall_score?.toFixed(0) ?? "–"}
       </Text>
-      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.fundamental_score?.toFixed(0) ?? "–"}</Text>
-      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.valuation_score?.toFixed(0) ?? "–"}</Text>
-      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.growth_score?.toFixed(0) ?? "–"}</Text>
-      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.quality_score?.toFixed(0) ?? "–"}</Text>
-      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.risk_score?.toFixed(0) ?? "–"}</Text>
+      {!hasMetricCategoryScores && (
+        <>
+          <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.fundamental_score?.toFixed(0) ?? "–"}</Text>
+          <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.valuation_score?.toFixed(0) ?? "–"}</Text>
+          <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.growth_score?.toFixed(0) ?? "–"}</Text>
+          <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.quality_score?.toFixed(0) ?? "–"}</Text>
+          <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>{sh.risk_score?.toFixed(0) ?? "–"}</Text>
+        </>
+      )}
     </View>
-  ), [colors]);
+  ), [colors, hasMetricCategoryScores]);
 
   const exportTables = useCallback((): TableData[] => {
     const tables: TableData[] = [];
@@ -139,27 +192,27 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
         headers: ["Component", "Weight", "Score"],
         rows: [
           ["Overall", "100%", score.overall_score.toFixed(0)],
-          ["Fundamental", SCORE_WEIGHTS.FUNDAMENTAL.label, score.fundamental_score?.toFixed(0) ?? "–"],
-          ["Quality", SCORE_WEIGHTS.QUALITY.label, score.quality_score?.toFixed(0) ?? "–"],
-          ["Growth", SCORE_WEIGHTS.GROWTH.label, score.growth_score?.toFixed(0) ?? "–"],
-          ["Valuation", SCORE_WEIGHTS.VALUATION.label, score.valuation_score?.toFixed(0) ?? "–"],
-          ["Risk (penalty)", SCORE_WEIGHTS.RISK.label, score.risk_penalty_pct != null ? `−${score.risk_penalty_pct.toFixed(1)}%` : (score.risk_score?.toFixed(0) ?? "–")],
+          ...scoreCategoryRows.map((row) => [row.label, row.weight, row.value?.toFixed(0) ?? "–"]),
         ],
       });
     }
     if (scoreHistory.length > 0) {
       tables.push({
         title: "Score History",
-        headers: ["Date", "Overall", "Fundamental", "Valuation", "Growth", "Quality", "Risk"],
-        rows: scoreHistory.map((sh) => [
-          formatScoreDate(sh.scoring_date),
-          sh.overall_score?.toFixed(0) ?? "–",
-          sh.fundamental_score?.toFixed(0) ?? "–",
-          sh.valuation_score?.toFixed(0) ?? "–",
-          sh.growth_score?.toFixed(0) ?? "–",
-          sh.quality_score?.toFixed(0) ?? "–",
-          sh.risk_score?.toFixed(0) ?? "–",
-        ]),
+        headers: hasMetricCategoryScores ? ["Date", "Overall"] : ["Date", "Overall", "Fundamental", "Valuation", "Growth", "Quality", "Risk"],
+        rows: scoreHistory.map((sh) => (
+          hasMetricCategoryScores
+            ? [formatScoreDate(sh.scoring_date), sh.overall_score?.toFixed(0) ?? "–"]
+            : [
+                formatScoreDate(sh.scoring_date),
+                sh.overall_score?.toFixed(0) ?? "–",
+                sh.fundamental_score?.toFixed(0) ?? "–",
+                sh.valuation_score?.toFixed(0) ?? "–",
+                sh.growth_score?.toFixed(0) ?? "–",
+                sh.quality_score?.toFixed(0) ?? "–",
+                sh.risk_score?.toFixed(0) ?? "–",
+              ]
+        )),
       });
     }
     if (score?.details && Object.keys(score.details).length > 0) {
@@ -173,7 +226,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
       });
     }
     return tables;
-  }, [score, scoreHistory]);
+  }, [hasMetricCategoryScores, score, scoreCategoryRows, scoreHistory]);
 
   return (
     <ScrollView
@@ -295,8 +348,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
                     {scoreLabel(score.overall_score ?? 0)}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 6, textAlign: "center", lineHeight: 18 }}>
-                    CFA-Based Composite Score{"\n"}
-                    Fundamentals {SCORE_WEIGHTS.FUNDAMENTAL.label} · Quality {SCORE_WEIGHTS.QUALITY.label} · Growth {SCORE_WEIGHTS.GROWTH.label} · Valuation {SCORE_WEIGHTS.VALUATION.label}{"\n"}Risk penalty up to {SCORE_WEIGHTS.RISK.label}
+                    {scoreSummaryText}
                   </Text>
                 </>
               )}
@@ -316,7 +368,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
               {/* Risk disclaimer */}
               {!isBeginner && (
                 <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 10, textAlign: "center", lineHeight: 16 }}>
-                  * Fundamental score only. Not risk-adjusted.{"\n"}
+                  {hasMetricCategoryScores ? "Built from the same ratio families shown on the Metrics tab." : "Legacy five-pillar score shown for compatibility."}{"\n"}
                   Past performance ≠ future results.
                 </Text>
               )}
@@ -411,13 +463,20 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
           {/* Sub-scores */}
           {(!isBeginner || showAdvanced) && (
           <FadeIn delay={100}>
-            <SectionHeader title="Sub-Scores" icon="sliders" iconColor={colors.accentSecondary} colors={colors} />
+            <SectionHeader title={hasMetricCategoryScores ? "Score Categories" : "Sub-Scores"} icon="sliders" iconColor={colors.accentSecondary} colors={colors} />
             <Card colors={colors} style={{ marginBottom: 16 }}>
-              <ScoreBarPremium label="Fundamental" weight={SCORE_WEIGHTS.FUNDAMENTAL.label} value={score.fundamental_score} colors={colors} iconColor={SCORE_WEIGHTS.FUNDAMENTAL.iconColor} breakdown={score.score_breakdown?.fundamental} />
-              <ScoreBarPremium label="Quality" weight={SCORE_WEIGHTS.QUALITY.label} value={score.quality_score} colors={colors} iconColor={SCORE_WEIGHTS.QUALITY.iconColor} breakdown={score.score_breakdown?.quality} />
-              <ScoreBarPremium label="Growth" weight={SCORE_WEIGHTS.GROWTH.label} value={score.growth_score} colors={colors} iconColor={SCORE_WEIGHTS.GROWTH.iconColor} breakdown={score.score_breakdown?.growth} />
-              <ScoreBarPremium label="Valuation" weight={SCORE_WEIGHTS.VALUATION.label} value={score.valuation_score} colors={colors} iconColor={SCORE_WEIGHTS.VALUATION.iconColor} breakdown={score.score_breakdown?.valuation} />
-              <ScoreBarPremium label="Risk" weight={SCORE_WEIGHTS.RISK.label} value={score.risk_score} colors={colors} iconColor={SCORE_WEIGHTS.RISK.iconColor} breakdown={score.score_breakdown?.risk} penaltyPct={score.risk_penalty_pct} />
+              {scoreCategoryRows.map((row) => (
+                <ScoreBarPremium
+                  key={row.key}
+                  label={row.label}
+                  weight={row.weight}
+                  value={row.value}
+                  colors={colors}
+                  iconColor={row.iconColor}
+                  breakdown={row.breakdown}
+                  penaltyPct={row.penaltyPct}
+                />
+              ))}
             </Card>
           </FadeIn>
           )}
@@ -426,16 +485,25 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
           {(!isBeginner || showAdvanced) && scoreHistory.length > 1 && (
             <FadeIn delay={200}>
               <SectionHeader title="Score History" icon="history" iconColor={colors.warning} badge={scoreHistory.length} colors={colors} />
+              {hasMetricCategoryScores && (
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 8, paddingHorizontal: 4 }}>
+                  Historical category-level breakdowns are not stored yet, so history tracks the composite score only.
+                </Text>
+              )}
               <Card colors={colors} noPadding style={{ marginBottom: 16 }}>
                 {/* Header */}
                 <View style={[st.scoreHistRow, { borderBottomWidth: 1, borderBottomColor: colors.borderColor, backgroundColor: colors.bgInput + "40" }]}>
                   <Text style={[st.scoreHistCell, { flex: 1, fontWeight: "800", color: colors.textPrimary }]}>Date</Text>
                   <Text style={[st.scoreHistCell, { width: 52, fontWeight: "800", color: colors.textPrimary }]}>Score</Text>
-                  <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>F</Text>
-                  <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>V</Text>
-                  <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>G</Text>
-                  <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>Q</Text>
-                  <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>R</Text>
+                  {!hasMetricCategoryScores && (
+                    <>
+                      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>F</Text>
+                      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>V</Text>
+                      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>G</Text>
+                      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>Q</Text>
+                      <Text style={[st.scoreHistCell, { width: 38, color: colors.textMuted }]}>R</Text>
+                    </>
+                  )}
                 </View>
                 {scoreHistory.length > VIRTUALIZE_THRESHOLD ? (
                   <View style={{ height: Math.min(scoreHistory.length * 36, 400) }}>

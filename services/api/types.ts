@@ -612,6 +612,19 @@ export interface ScoreBreakdown {
   risk: CategoryBreakdown;
 }
 
+export type MetricCategoryScoreKey =
+  | "profitability"
+  | "liquidity"
+  | "capital_structure"
+  | "efficiency"
+  | "valuation"
+  | "cashflow"
+  | "growth";
+
+export type MetricCategoryScores = Record<MetricCategoryScoreKey, number>;
+
+export type MetricCategoryBreakdown = Record<MetricCategoryScoreKey, CategoryBreakdown>;
+
 export interface StockScoreSummary {
   overall_score: number | null;
   fundamental_score: number | null;
@@ -623,6 +636,8 @@ export interface StockScoreSummary {
   scoring_date?: string;
   sector_percentile?: number | null;
   sector_name?: string | null;
+  metric_category_scores?: MetricCategoryScores;
+  metric_category_breakdown?: MetricCategoryBreakdown;
   score_breakdown?: ScoreBreakdown;
 }
 

@@ -99,6 +99,35 @@ export const MODEL_INFO: Record<string, { title: string; formula: string; icon: 
   multiples: { title: "Comparable Multiples", formula: "e.g., P/E × EPS",             icon: "balance-scale" },
 };
 
+export type MetricCategoryScoreKey =
+  | "profitability"
+  | "liquidity"
+  | "capital_structure"
+  | "efficiency"
+  | "valuation"
+  | "cashflow"
+  | "growth";
+
+export const METRIC_CATEGORY_SCORE_ORDER: MetricCategoryScoreKey[] = [
+  "profitability",
+  "liquidity",
+  "capital_structure",
+  "efficiency",
+  "valuation",
+  "cashflow",
+  "growth",
+];
+
+export const METRIC_CATEGORY_SCORE_WEIGHTS: Record<MetricCategoryScoreKey, { value: number; weightLabel: string; label: string; iconColor: string }> = {
+  profitability: { value: 0.20, weightLabel: "20%", label: "Profitability", iconColor: CATEGORY_LABELS.profitability.color },
+  liquidity: { value: 0.08, weightLabel: "8%", label: "Liquidity", iconColor: CATEGORY_LABELS.liquidity.color },
+  capital_structure: { value: 0.12, weightLabel: "12%", label: "Capital Structure", iconColor: CATEGORY_LABELS.leverage.color },
+  efficiency: { value: 0.10, weightLabel: "10%", label: "Efficiency", iconColor: CATEGORY_LABELS.efficiency.color },
+  valuation: { value: 0.15, weightLabel: "15%", label: "Valuation", iconColor: CATEGORY_LABELS.valuation.color },
+  cashflow: { value: 0.20, weightLabel: "20%", label: "Cash Flow", iconColor: CATEGORY_LABELS.cashflow.color },
+  growth: { value: 0.15, weightLabel: "15%", label: "Growth", iconColor: CATEGORY_LABELS.growth.color },
+};
+
 /**
  * CFA-Based Composite Scoring Model v2.1
  *
