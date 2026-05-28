@@ -7,11 +7,16 @@
  * Sortable by confidence or R:R ratio.
  */
 
-import { getRegimeColors } from "@/constants/eagleEyeColors";
-import { EE, REGIME_LABELS } from "@/constants/eagleEyeStrings";
+import { getRegimeColors, getStageColors } from "@/constants/eagleEyeColors";
+import { EE, REGIME_LABELS, getStageLabelShort } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
-import { StockRow, StockRowSkeleton, computeRR } from "@/components/eagle-eye/StockRow";
+import {
+  STOCK_TABLE_COL_WIDTHS,
+  StockRow,
+  StockRowSkeleton,
+  computeRR,
+} from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
@@ -21,6 +26,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -33,8 +39,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── Filter / sort types ──────────────────────────────────────────────────────
 const CONFIDENCE_STEPS = [0, 40, 60, 75] as const;
+const HIGH_VOLUME_RVOL_THRESHOLD = 1.5;
+const STAGE_FILTER_ORDER = [
+  "DORMANT",
+  "STEALTH_ACCUMULATION",
+  "EARLY_BREAKOUT",
+  "MARKUP_TRENDING",
+  "ACCELERATION_CLIMAX",
+  "DISTRIBUTION_TOPPING",
+  "MARKDOWN_DECLINE",
+  "CAPITULATION_EXHAUSTION",
+] as const;
 type SortField = "conf" | "rr";
 type SortDir = "asc" | "desc";
+type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
 
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
@@ -48,11 +66,15 @@ export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
+  const isTableView = Platform.OS === "web";
+  const rowHeight = isTableView ? 54 : 72;
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
-  const [buyOnly, setBuyOnly] = useState(false);
-  const [breakoutOnly, setBreakoutOnly] = useState(false);
+  const [buyRatingOnly, setBuyRatingOnly] = useState(false);
+  const [sellRatingOnly, setSellRatingOnly] = useState(false);
+  const [highVolumeOnly, setHighVolumeOnly] = useState(false);
+  const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -118,13 +140,24 @@ export default function EagleEyeScannerScreen() {
           s.ticker.toUpperCase().includes(q) || s.name_en.toUpperCase().includes(q)
       );
     }
-    if (buyOnly) {
+    if (buyRatingOnly) {
       list = list.filter(
         (s) => s.rating === "BUY" || s.rating === "STRONG_BUY"
       );
     }
-    if (breakoutOnly) {
-      list = list.filter((s) => s.stage === "EARLY_BREAKOUT");
+    if (sellRatingOnly) {
+      list = list.filter(
+        (s) => s.rating === "SELL" || s.rating === "STRONG_SELL"
+      );
+    }
+    if (highVolumeOnly) {
+      list = list.filter((s) => {
+        const vc = s.volume_context;
+        return !!vc && vc.is_volume_confirmed && vc.relative_volume >= HIGH_VOLUME_RVOL_THRESHOLD;
+      });
+    }
+    if (stageFilter) {
+      list = list.filter((s) => s.stage === stageFilter);
     }
     // sort
     list = [...list].sort((a, b) => {
@@ -139,7 +172,18 @@ export default function EagleEyeScannerScreen() {
       return sortDir === "asc" ? -diff : diff;
     });
     return list;
-  }, [data, minConfidence, search, buyOnly, breakoutOnly, sortBy, sortDir, mlBandsData]);
+  }, [
+    data,
+    minConfidence,
+    search,
+    buyRatingOnly,
+    sellRatingOnly,
+    highVolumeOnly,
+    stageFilter,
+    sortBy,
+    sortDir,
+    mlBandsData,
+  ]);
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -162,9 +206,13 @@ export default function EagleEyeScannerScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: RatedStock; index: number }) => (
-      <StockRow item={item} isFirst={index === 0} />
+      <StockRow
+        item={item}
+        isFirst={index === 0}
+        variant={isTableView ? "table" : "default"}
+      />
     ),
-    []
+    [isTableView]
   );
   const keyExtractor = useCallback((item: RatedStock) => item.ticker, []);
 
@@ -175,7 +223,10 @@ export default function EagleEyeScannerScreen() {
       return (
         <>
           {Array.from({ length: 10 }).map((_, i) => (
-            <StockRowSkeleton key={i} />
+            <StockRowSkeleton
+              key={i}
+              variant={isTableView ? "table" : "default"}
+            />
           ))}
         </>
       );
@@ -215,6 +266,153 @@ export default function EagleEyeScannerScreen() {
       </View>
     );
   };
+
+  const renderFilterChips = () => (
+    <>
+      {CONFIDENCE_STEPS.map((step) => {
+        const active = minConfidence === step;
+        return (
+          <Pressable
+            key={step}
+            onPress={() => setMinConfidence(step)}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: active ? colors.accentPrimary : colors.bgCard,
+                borderColor: active ? colors.accentPrimary : colors.borderColor,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: active ? colors.bgPrimary : colors.textPrimary },
+              ]}
+            >
+              {step === 0 ? "All" : `${step}%+`}
+            </Text>
+          </Pressable>
+        );
+      })}
+
+      <Pressable
+        onPress={() => {
+          setBuyRatingOnly((v) => !v);
+          setSellRatingOnly(false);
+        }}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: buyRatingOnly ? colors.success : colors.bgCard,
+            borderColor: buyRatingOnly ? colors.success : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: buyRatingOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          BUY RATING
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setSellRatingOnly((v) => !v);
+          setBuyRatingOnly(false);
+        }}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: sellRatingOnly ? colors.danger : colors.bgCard,
+            borderColor: sellRatingOnly ? colors.danger : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: sellRatingOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          SELL RATING
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => setHighVolumeOnly((v) => !v)}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: highVolumeOnly ? colors.accentSecondary : colors.bgCard,
+            borderColor: highVolumeOnly ? colors.accentSecondary : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: highVolumeOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          HIGH VOL
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => setStageFilter(null)}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: stageFilter == null ? colors.accentPrimary : colors.bgCard,
+            borderColor: stageFilter == null ? colors.accentPrimary : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: stageFilter == null ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          ALL STAGES
+        </Text>
+      </Pressable>
+
+      {STAGE_FILTER_ORDER.map((stage) => {
+        const active = stageFilter === stage;
+        const stageColors = getStageColors(stage, colors);
+
+        return (
+          <Pressable
+            key={stage}
+            onPress={() =>
+              setStageFilter((prev) => (prev === stage ? null : stage))
+            }
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: stageColors.bg,
+                borderColor: stageColors.dot,
+                borderWidth: active ? 1.5 : 1.25,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: stageColors.text },
+              ]}
+            >
+              {getStageLabelShort(stage)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </>
+  );
 
   return (
     <View
@@ -340,91 +538,25 @@ export default function EagleEyeScannerScreen() {
       </View>
 
       {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
+      <View
         style={[
-          styles.filterBar,
+          styles.filterBarWrap,
           { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
         ]}
-        contentContainerStyle={styles.filterBarContent}
       >
-        {CONFIDENCE_STEPS.map((step) => {
-          const active = minConfidence === step && !buyOnly && !breakoutOnly;
-          return (
-            <Pressable
-              key={step}
-              onPress={() => {
-                setMinConfidence(step);
-                setBuyOnly(false);
-                setBreakoutOnly(false);
-              }}
-              style={[
-                styles.filterChip,
-                {
-                  backgroundColor: active ? colors.accentPrimary : colors.bgCard,
-                  borderColor: active ? colors.accentPrimary : colors.borderColor,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  { color: active ? colors.bgPrimary : colors.textSecondary },
-                ]}
-              >
-                {step === 0 ? "All" : `${step}%+`}
-              </Text>
-            </Pressable>
-          );
-        })}
-
-        <Pressable
-          onPress={() => {
-            setBuyOnly((v) => !v);
-            setBreakoutOnly(false);
-          }}
-          style={[
-            styles.filterChip,
-            {
-              backgroundColor: buyOnly ? colors.success : colors.bgCard,
-              borderColor: buyOnly ? colors.success : colors.borderColor,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterChipText,
-              { color: buyOnly ? colors.successText : colors.textSecondary },
-            ]}
+        {Platform.OS === "web" ? (
+          <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterBar}
+            contentContainerStyle={styles.filterBarContent}
           >
-            BUY+
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            setBreakoutOnly((v) => !v);
-            setBuyOnly(false);
-          }}
-          style={[
-            styles.filterChip,
-            {
-              backgroundColor: breakoutOnly ? colors.accentSecondary : colors.bgCard,
-              borderColor: breakoutOnly ? colors.accentSecondary : colors.borderColor,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.filterChipText,
-              { color: breakoutOnly ? colors.bgPrimary : colors.textSecondary },
-            ]}
-          >
-            BREAKOUT
-          </Text>
-        </Pressable>
-      </ScrollView>
+            {renderFilterChips()}
+          </ScrollView>
+        )}
+      </View>
 
       {/* Sortable column header */}
       <View
@@ -433,54 +565,179 @@ export default function EagleEyeScannerScreen() {
           { backgroundColor: colors.bgSecondary, borderBottomColor: colors.borderColor },
         ]}
       >
-        <Text style={[styles.colHeaderCell, { color: colors.textMuted, width: 68 }]}>
-          RATING
-        </Text>
-        <Text style={[styles.colHeaderCell, { color: colors.textMuted, flex: 1 }]}>
-          STOCK · STAGE
-        </Text>
-        <Pressable
-          onPress={() => toggleSort("rr")}
-          style={styles.colHeaderBtn}
-          hitSlop={6}
-        >
-          <Text
-            style={[
-              styles.colHeaderCell,
-              { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
-            ]}
-          >
-            {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => toggleSort("conf")}
-          style={styles.colHeaderBtn}
-          hitSlop={6}
-        >
-          <Text
-            style={[
-              styles.colHeaderCell,
-              {
-                color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                width: 72,
-                textAlign: "right",
-              },
-            ]}
-          >
-            {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-          </Text>
-        </Pressable>
-        {mlBandsData?.enabled ? (
-          <Text
-            style={[
-              styles.colHeaderCell,
-              { color: colors.textMuted, width: 32, textAlign: "center", marginLeft: 4 },
-            ]}
-          >
-            {EE.mlColumnHeader}
-          </Text>
-        ) : null}
+        {isTableView ? (
+          <>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.rating },
+              ]}
+            >
+              Rating
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.ticker },
+              ]}
+            >
+              Ticker
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.stage },
+              ]}
+            >
+              Stage
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.volume },
+              ]}
+            >
+              Volume
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                {
+                  color: colors.textMuted,
+                  width: STOCK_TABLE_COL_WIDTHS.entry,
+                  textAlign: "right",
+                },
+              ]}
+            >
+              Entry
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                {
+                  color: colors.textMuted,
+                  width: STOCK_TABLE_COL_WIDTHS.tp1,
+                  textAlign: "right",
+                },
+              ]}
+            >
+              TP1
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                {
+                  color: colors.textMuted,
+                  width: STOCK_TABLE_COL_WIDTHS.bvps,
+                  textAlign: "right",
+                },
+              ]}
+            >
+              BVPS
+            </Text>
+            <Text
+              style={[
+                styles.colHeaderCell,
+                {
+                  color: colors.textMuted,
+                  width: STOCK_TABLE_COL_WIDTHS.pe,
+                  textAlign: "right",
+                },
+              ]}
+            >
+              P/E
+            </Text>
+            <Pressable
+              onPress={() => toggleSort("rr")}
+              style={[styles.colHeaderBtn, styles.colHeaderSortBtn, { width: STOCK_TABLE_COL_WIDTHS.rr }]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("conf")}
+              style={[
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.confidence },
+              ]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Conf${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.colHeaderCell, { color: colors.textMuted, width: 68 }]}>
+              RATING
+            </Text>
+            <Text style={[styles.colHeaderCell, { color: colors.textMuted, flex: 1 }]}>
+              STOCK · STAGE
+            </Text>
+            <Pressable
+              onPress={() => toggleSort("rr")}
+              style={styles.colHeaderBtn}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("conf")}
+              style={styles.colHeaderBtn}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                    width: 72,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
+            </Pressable>
+            {mlBandsData?.enabled ? (
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: colors.textMuted, width: 32, textAlign: "center", marginLeft: 4 },
+                ]}
+              >
+                {EE.mlColumnHeader}
+              </Text>
+            ) : null}
+          </>
+        )}
       </View>
 
       {/* List */}
@@ -505,7 +762,11 @@ export default function EagleEyeScannerScreen() {
         initialNumToRender={15}
         maxToRenderPerBatch={15}
         windowSize={5}
-        getItemLayout={(_data, index) => ({ length: 72, offset: 72 * index, index })}
+        getItemLayout={(_data, index) => ({
+          length: rowHeight,
+          offset: rowHeight * index,
+          index,
+        })}
       />
     </View>
   );
@@ -550,20 +811,47 @@ const styles = StyleSheet.create({
     height: 38,
   },
   searchText: { flex: 1, fontSize: 14 },
-  filterBar: { borderBottomWidth: StyleSheet.hairlineWidth, maxHeight: 42 },
+  filterBarWrap: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 56,
+    justifyContent: "center",
+  },
+  filterBar: {
+    flexGrow: 0,
+  },
   filterBarContent: {
     paddingHorizontal: UITokens.spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    paddingRight: UITokens.spacing.md,
     gap: 6,
     alignItems: "center",
+    minHeight: 52,
+  },
+  filterBarContentWeb: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: UITokens.spacing.sm,
+    paddingVertical: 8,
+    minHeight: 52,
   },
   filterChip: {
     paddingHorizontal: 11,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: UITokens.radius.pill,
-    borderWidth: 1,
+    borderWidth: 1.25,
+    minHeight: Platform.OS === "web" ? 34 : UITokens.filter.chipHeight,
+    minWidth: 58,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  filterChipText: { fontSize: 11, fontWeight: "600", letterSpacing: 0.2 },
+  filterChipText: {
+    fontSize: UITokens.filter.chipFontSize,
+    fontWeight: UITokens.filter.chipFontWeight,
+    letterSpacing: 0.25,
+    lineHeight: Platform.OS === "web" ? 16 : undefined,
+  },
   colHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -578,6 +866,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   colHeaderBtn: { paddingHorizontal: 2 },
+  colHeaderSortBtn: { alignItems: "flex-end" },
   listContent: { flexGrow: 1 },
   listEmpty: { flex: 1 },
   centred: {

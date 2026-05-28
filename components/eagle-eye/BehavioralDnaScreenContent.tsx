@@ -1,20 +1,53 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 
 import { BehavioralDnaSetupChart } from "@/components/eagle-eye/BehavioralDnaSetupChart";
-import { EE, signalLabel } from "@/constants/eagleEyeStrings";
+import { EE, RATING_LABELS, getStageLabelFull, signalLabel } from "@/constants/eagleEyeStrings";
 import type { ThemePalette } from "@/constants/theme";
 import { UITokens } from "@/constants/uiTokens";
 import type {
   BehavioralDNA,
   DnaSetupExample,
+  DnaSetupBar,
   DnaWindowProfile,
+  FullStockAnalysis,
   SignalReliabilityStat,
   ThresholdProfile,
 } from "@/hooks/useEagleEye";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 const MAX_INITIAL_EXAMPLES = 3;
+
+const CURRENT_RANGE_OPTIONS = [
+  { key: "1M", bars: 22 },
+  { key: "3M", bars: 66 },
+  { key: "6M", bars: 132 },
+  { key: "9M", bars: 198 },
+  { key: "1Y", bars: 252 },
+  { key: "2Y", bars: 504 },
+] as const;
+
+type CurrentRangeKey = (typeof CURRENT_RANGE_OPTIONS)[number]["key"];
+const DEFAULT_CURRENT_RANGE: CurrentRangeKey = "1Y";
+
+function getCurrentRangeLabel(range: CurrentRangeKey): string {
+  switch (range) {
+    case "1M":
+      return EE.dnaCurrentRange1m;
+    case "3M":
+      return EE.dnaCurrentRange3m;
+    case "6M":
+      return EE.dnaCurrentRange6m;
+    case "9M":
+      return EE.dnaCurrentRange9m;
+    case "1Y":
+      return EE.dnaCurrentRange1y;
+    case "2Y":
+      return EE.dnaCurrentRange2y;
+    default:
+      return EE.dnaCurrentRange1y;
+  }
+}
 
 function formatSignedWholePct(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return "-";
@@ -24,6 +57,36 @@ function formatSignedWholePct(value?: number | null): string {
 function formatSignedPrecisePct(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return "-";
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatRatingLabel(rating?: string | null): string {
+  if (!rating) return "-";
+  const fromMap = RATING_LABELS[rating];
+  if (fromMap) return fromMap;
+  return rating
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function buildRecommendationExplanation(stock: FullStockAnalysis): string {
+  const confidence = Math.round(stock.confidence ?? 0);
+  switch (stock.rating) {
+    case "STRONG_BUY":
+      return EE.recommendationStrongBuy(confidence);
+    case "BUY":
+      return EE.recommendationBuy(confidence);
+    case "HOLD":
+      return EE.recommendationHold(confidence);
+    case "SELL":
+      return EE.recommendationSell(confidence);
+    case "STRONG_SELL":
+      return EE.recommendationStrongSell(confidence);
+    case "INSUFFICIENT_DATA":
+      return EE.recommendationInsufficientData;
+    default:
+      return EE.recommendationFallback(formatRatingLabel(stock.rating), confidence);
+  }
 }
 
 function pickDisplayedProfiles(profiles: ThresholdProfile[]): ThresholdProfile[] {
@@ -123,20 +186,87 @@ function findSelectedProfile(dna: BehavioralDNA, selectedWindow: number): DnaWin
   return dna.window_profiles?.find((profile) => profile.horizon_days === selectedWindow) ?? null;
 }
 
+function buildCurrentComparisonExample(bars: DnaSetupBar[], selectedWindow: number): DnaSetupExample | null {
+  const cleanBars = bars.filter((bar) => bar.close != null && !Number.isNaN(bar.close));
+  if (cleanBars.length < 8) {
+    return null;
+  }
+
+  const horizonDays = Math.max(5, selectedWindow);
+  const forwardReserve = Math.max(3, Math.min(horizonDays, Math.floor(cleanBars.length / 3)));
+  const setupBarIndex = Math.max(0, cleanBars.length - forwardReserve - 1);
+  const setupWindowLen = Math.min(25, setupBarIndex + 1);
+  const setupWindowStartIndex = Math.max(0, setupBarIndex - setupWindowLen + 1);
+  const setupWindowEndIndex = setupBarIndex;
+  const availableForwardBars = cleanBars.length - setupWindowEndIndex - 1;
+  const inspectedForwardBars = Math.min(availableForwardBars, horizonDays);
+  const forwardEndIndex = setupWindowEndIndex + inspectedForwardBars;
+
+  const setupClose = cleanBars[setupWindowEndIndex]?.close ?? null;
+  let maxGainPct: number | null = null;
+  let maxGainDate: string | null = null;
+
+  if (setupClose != null && setupClose > 0) {
+    for (let index = setupWindowEndIndex + 1; index <= forwardEndIndex; index += 1) {
+      const candidateHigh = cleanBars[index]?.high ?? cleanBars[index]?.close ?? null;
+      if (candidateHigh == null) continue;
+      const gainPct = ((candidateHigh - setupClose) / setupClose) * 100;
+      if (maxGainPct == null || gainPct > maxGainPct) {
+        maxGainPct = gainPct;
+        maxGainDate = cleanBars[index]?.date ?? null;
+      }
+    }
+  }
+
+  const thresholdHits = maxGainPct == null
+    ? []
+    : [15, 25, 50].filter((threshold) => maxGainPct >= threshold);
+
+  return {
+    setup_date: cleanBars[setupWindowEndIndex]?.date ?? "",
+    setup_window_start_date: cleanBars[setupWindowStartIndex]?.date ?? "",
+    setup_window_end_date: cleanBars[setupWindowEndIndex]?.date ?? "",
+    setup_bar_index: setupBarIndex,
+    setup_window_start_index: setupWindowStartIndex,
+    setup_window_end_index: setupWindowEndIndex,
+    available_forward_bars: availableForwardBars,
+    bars: cleanBars,
+    observations: [],
+    forward_outcomes: {
+      [String(selectedWindow)]: {
+        horizon_days: selectedWindow,
+        completed: availableForwardBars >= selectedWindow,
+        max_gain_pct: maxGainPct,
+        max_gain_date: maxGainDate,
+        threshold_hits: thresholdHits,
+      },
+    },
+  };
+}
+
 export function BehavioralDnaScreenContent({
   ticker,
   dna,
+  stock,
+  recentBars,
+  recentBarsLoading,
+  recentBarsError,
   colors,
   bottomInset,
 }: {
   ticker: string;
   dna: BehavioralDNA;
+  stock?: FullStockAnalysis | null;
+  recentBars: DnaSetupBar[];
+  recentBarsLoading: boolean;
+  recentBarsError: boolean;
   colors: ThemePalette;
   bottomInset: number;
 }) {
   const availableWindows = useMemo(() => buildWindowList(dna), [dna]);
   const defaultWindow = dna.default_window_days ?? dna.setup_horizon_days ?? availableWindows[0] ?? 20;
   const [selectedWindow, setSelectedWindow] = useState(defaultWindow);
+  const [currentRange, setCurrentRange] = useState<CurrentRangeKey>(DEFAULT_CURRENT_RANGE);
   const [showAllExamples, setShowAllExamples] = useState(false);
 
   useEffect(() => {
@@ -178,6 +308,73 @@ export function BehavioralDnaScreenContent({
     [selectedProfile, colors],
   );
   const setupSignals = dna.setup_signals ?? [];
+  const matchedSetupSignals = useMemo(
+    () => setupSignals.map((signal) => signalLabel(signal)).slice(0, 4),
+    [setupSignals],
+  );
+  const liveFiredSignals = useMemo(
+    () =>
+      (stock?.signals ?? [])
+        .filter((signal) => signal.fired)
+        .map((signal) => signalLabel(signal.signal))
+        .slice(0, 4),
+    [stock?.signals],
+  );
+  const scoreDrivers = useMemo(() => {
+    const drivers: string[] = [];
+
+    if (primaryProfile && totalSetups > 0) {
+      const hits = primaryProfile.hits ?? primaryProfile.sample_count ?? 0;
+      const successRate = Math.round(primaryProfile.success_rate ?? 0);
+      drivers.push(
+        EE.scoreDriverHitRate(primaryProfile.threshold_pct, hits, totalSetups, successRate),
+      );
+    }
+
+    if (avgGainAll != null && !Number.isNaN(avgGainAll)) {
+      drivers.push(EE.scoreDriverAvgMove(formatSignedPrecisePct(avgGainAll)));
+    }
+
+    drivers.push(
+      EE.scoreDriverDataConfidence(totalSetups, selectedProfile?.confidence_label ?? "Too thin"),
+    );
+
+    if (matchedSetupSignals.length > 0) {
+      drivers.push(EE.scoreDriverPatternSignals(matchedSetupSignals.join(", ")));
+    }
+
+    if (liveFiredSignals.length > 0) {
+      drivers.push(EE.scoreDriverLiveSignals(liveFiredSignals.join(", ")));
+    }
+
+    return drivers;
+  }, [
+    avgGainAll,
+    liveFiredSignals,
+    matchedSetupSignals,
+    primaryProfile,
+    selectedProfile?.confidence_label,
+    totalSetups,
+  ]);
+  const recommendationExplanation = useMemo(
+    () => (stock ? buildRecommendationExplanation(stock) : null),
+    [stock],
+  );
+  const currentRangeConfig = useMemo(
+    () => CURRENT_RANGE_OPTIONS.find((option) => option.key === currentRange) ?? CURRENT_RANGE_OPTIONS[4],
+    [currentRange],
+  );
+  const scopedRecentBars = useMemo(() => {
+    if (recentBars.length <= currentRangeConfig.bars) return recentBars;
+    return recentBars.slice(-currentRangeConfig.bars);
+  }, [recentBars, currentRangeConfig.bars]);
+  const currentComparisonExample = useMemo(
+    () => buildCurrentComparisonExample(scopedRecentBars, selectedWindow),
+    [scopedRecentBars, selectedWindow],
+  );
+  const currentChartStartDate = currentComparisonExample?.bars[0]?.date;
+  const currentChartLatestDate = currentComparisonExample?.bars[currentComparisonExample.bars.length - 1]?.date;
+  const currentChartBarCount = currentComparisonExample?.bars.length ?? 0;
   const setupExamples = useMemo(() => dna.setup_examples ?? [], [dna.setup_examples]);
   const visibleExamples = useMemo(
     () => (showAllExamples ? setupExamples : setupExamples.slice(0, MAX_INITIAL_EXAMPLES)),
@@ -301,6 +498,126 @@ export function BehavioralDnaScreenContent({
               ))}
             </View>
           </>
+        )}
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.dnaCurrentChartTitle}</Text>
+        <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaCurrentChartBody(selectedWindow, getCurrentRangeLabel(currentRange))}</Text>
+
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.dnaCurrentRangeLabel}</Text>
+        <View style={styles.windowTabs}>
+          {CURRENT_RANGE_OPTIONS.map((option) => {
+            const isActive = option.key === currentRange;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => setCurrentRange(option.key)}
+                style={[
+                  styles.windowTab,
+                  {
+                    backgroundColor: isActive ? colors.accentPrimary : colors.bgCardHover,
+                    borderColor: isActive ? colors.accentPrimary : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text style={[styles.windowTabText, { color: isActive ? "#fff" : colors.textPrimary }]}>
+                  {getCurrentRangeLabel(option.key)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {recentBarsLoading ? (
+          <View style={styles.currentChartState}>
+            <ActivityIndicator color={colors.accentPrimary} size="small" />
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaCurrentChartLoading}</Text>
+          </View>
+        ) : recentBarsError ? (
+          <View style={styles.currentChartState}>
+            <Text style={[styles.helperText, { color: colors.textSecondary, textAlign: "center" }]}>{EE.dnaCurrentChartError}</Text>
+          </View>
+        ) : currentComparisonExample ? (
+          <>
+            <BehavioralDnaSetupChart
+              example={currentComparisonExample}
+              selectedWindowDays={selectedWindow}
+              colors={colors}
+            />
+            {currentChartLatestDate && (
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                {EE.dnaCurrentChartFootnote(currentComparisonExample.setup_window_end_date, currentChartLatestDate)}
+              </Text>
+            )}
+            {currentChartStartDate && currentChartLatestDate && (
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                {EE.dnaCurrentChartCoverage(
+                  getCurrentRangeLabel(currentRange),
+                  currentChartStartDate,
+                  currentChartLatestDate,
+                  currentChartBarCount,
+                )}
+              </Text>
+            )}
+          </>
+        ) : (
+          <View style={styles.currentChartState}>
+            <Text style={[styles.helperText, { color: colors.textSecondary, textAlign: "center" }]}>{EE.dnaCurrentChartNoData}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.scoreExplainTitle}</Text>
+        <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.scoreExplainBody}</Text>
+
+        {stock ? (
+          <>
+            <View style={styles.summaryGrid}>
+              <SummaryFact
+                label={EE.scoreExplainRecommendationLabel}
+                value={formatRatingLabel(stock.rating)}
+                colors={colors}
+              />
+              <SummaryFact
+                label={EE.scoreExplainConfidenceLabel}
+                value={`${Math.round(stock.confidence)}%`}
+                colors={colors}
+              />
+              <SummaryFact
+                label={EE.scoreExplainStageLabel}
+                value={getStageLabelFull(stock.stage ?? "")}
+                colors={colors}
+              />
+            </View>
+
+            <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.scoreExplainThesisLabel}</Text>
+              <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{stock.thesis}</Text>
+            </View>
+
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.scoreExplainDriversLabel}</Text>
+            <View style={styles.reasonList}>
+              {scoreDrivers.map((driver, index) => (
+                <View key={`${index}-${driver}`} style={styles.reasonRow}>
+                  <View style={[styles.reasonDot, { backgroundColor: colors.accentPrimary }]} />
+                  <Text style={[styles.reasonText, { color: colors.textSecondary }]}>{driver}</Text>
+                </View>
+              ))}
+            </View>
+
+            {recommendationExplanation && (
+              <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+                <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.scoreExplainRecommendationWhyLabel}</Text>
+                <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{recommendationExplanation}</Text>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+            <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.scoreExplainNoRecommendation}</Text>
+          </View>
         )}
       </View>
 
@@ -754,5 +1071,31 @@ const styles = StyleSheet.create({
   showMoreText: {
     fontSize: 13,
     fontWeight: "700",
+  },
+  reasonList: {
+    gap: UITokens.spacing.xs,
+  },
+  reasonRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: UITokens.spacing.sm,
+  },
+  reasonDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    marginTop: 5,
+  },
+  reasonText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  currentChartState: {
+    minHeight: 110,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: UITokens.spacing.sm,
+    paddingVertical: UITokens.spacing.sm,
   },
 });

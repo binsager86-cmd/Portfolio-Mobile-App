@@ -112,6 +112,18 @@ function fmtN(v: number | null | undefined): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtN3(v: number | null | undefined): string {
+  if (v == null) return "—";
+  return v.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+
+function isPerShareValuationMetric(key: string, params?: Record<string, unknown>): boolean {
+  if (key === "eps") return true;
+  if (key !== "metric_value") return false;
+  const multipleType = String(params?.multiple_type ?? "").toUpperCase();
+  return multipleType === "P/E" || multipleType === "P/B";
+}
+
 function fmtBig(v: number | null | undefined): string {
   if (v == null) return "—";
   const abs = Math.abs(v);
@@ -161,7 +173,7 @@ function fmtParamValue(model: string, key: string, val: unknown): string {
   if (_PCT_KEYS.has(key)) return (val * 100).toFixed(2) + "%";
   if (_BIG_KEYS.has(key)) return fmtBig(val);
   if (_INT_KEYS.has(key)) return String(Math.round(val));
-  return fmtN(val);
+  return isPerShareValuationMetric(key) ? fmtN3(val) : fmtN(val);
 }
 
 // ── Main Export ──────────────────────────────────────────────────────
@@ -452,7 +464,7 @@ export async function exportValuationPdf(
       // Input parameters card
       const gRate = typeof params.growth_rate === "number" ? params.growth_rate as number : null;
       const inputItems: [string, string][] = [
-        ["EPS (TTM)", fmtN(params.eps as number | null)],
+        ["EPS (TTM)", fmtN3(params.eps as number | null)],
         ["Growth Rate (g)", gRate != null ? `${gRate.toFixed(1)}%` : "—"],
         ["AAA Bond Yield (Y)", typeof params.aaa_yield === "number" ? `${(params.aaa_yield as number).toFixed(2)}%` : "—"],
       ];
@@ -780,7 +792,7 @@ export async function exportValuationPdf(
       const metricLabel = multipleType === "P/E" ? "EPS" : "Metric Value";
       const multParams: [string, string][] = [
         ["Multiple Type", multipleType],
-        [metricLabel, fmtN(params.metric_value as number | null)],
+        [metricLabel, isPerShareValuationMetric("metric_value", params) ? fmtN3(params.metric_value as number | null) : fmtN(params.metric_value as number | null)],
         [`Avg ${multipleType}`, fmtN(params.peer_multiple as number | null)],
       ];
       if (params.shares_outstanding != null) multParams.push(["Shares Outstanding", fmtBig(params.shares_outstanding as number | null)]);
@@ -802,7 +814,7 @@ export async function exportValuationPdf(
         ensureSpace(18);
         drawRoundedRect(doc, mx, y, cw, 14, 3, lightTint(mColor));
         doc.setFontSize(9).setFont("helvetica", "bold").setTextColor(C.textDark);
-        const calcText = `${metricLabel} ${fmtN(mv)}  \u00D7  Avg ${multipleType} ${fmtN(pm)}  =`;
+        const calcText = `${metricLabel} ${isPerShareValuationMetric("metric_value", params) ? fmtN3(mv) : fmtN(mv)}  \u00D7  Avg ${multipleType} ${fmtN(pm)}  =`;
         doc.text(calcText, mx + 8, y + 6.5);
         doc.setFontSize(12).setTextColor(mColor);
         doc.text(fmtN(impliedTotal ?? mv * pm), mx + cw - 8, y + 7, { align: "right" });
@@ -900,7 +912,7 @@ export function buildValuationExcelTables(
     if (m === "graham") {
       rows.push([]);
       rows.push(["--- Input Parameters ---", null]);
-      rows.push(["EPS (TTM)", typeof params.eps === "number" ? Number((params.eps as number).toFixed(2)) : null]);
+      rows.push(["EPS (TTM)", typeof params.eps === "number" ? Number((params.eps as number).toFixed(3)) : null]);
       rows.push(["Growth Rate (g)", typeof params.growth_rate === "number" ? `${(params.growth_rate as number).toFixed(2)}%` : null]);
       rows.push(["AAA Bond Yield (Y)", typeof params.aaa_yield === "number" ? `${(params.aaa_yield as number).toFixed(2)}%` : null]);
       rows.push([]);
@@ -1033,7 +1045,9 @@ export function buildValuationExcelTables(
       const multipleType = (params.multiple_type as string) ?? "P/E";
       const metricLabel = multipleType === "P/E" ? "EPS" : "Metric Value";
       rows.push(["Multiple Type", multipleType]);
-      rows.push([metricLabel, typeof params.metric_value === "number" ? Number((params.metric_value as number).toFixed(2)) : null]);
+      rows.push([metricLabel, typeof params.metric_value === "number"
+        ? Number((params.metric_value as number).toFixed(isPerShareValuationMetric("metric_value", params) ? 3 : 2))
+        : null]);
       rows.push([`Avg ${multipleType}`, typeof params.peer_multiple === "number" ? Number((params.peer_multiple as number).toFixed(2)) : null]);
       if (params.shares_outstanding != null) rows.push(["Shares Outstanding", Number(params.shares_outstanding)]);
 

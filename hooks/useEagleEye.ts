@@ -9,6 +9,10 @@
  */
 
 import api from "@/services/api/client";
+import {
+  getWhaleTrackerCandles,
+  type WhaleTrackerCandle,
+} from "@/services/api/analytics/whaleTracker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ── Type definitions ─────────────────────────────────────────────────────────
@@ -106,6 +110,8 @@ export interface RatedStock {
   stop_loss?: number | null;
   tp1?: number | null;
   last_price?: number | null;
+  book_value_per_share?: number | null;
+  pe_ratio?: number | null;
   computed_at?: string | null;
   volume_context?: VolumeContext | null;
   ml_band?: MLBandItem | null;
@@ -279,6 +285,12 @@ export interface DNAResponse {
   data?: BehavioralDNA;
 }
 
+export interface DnaRecentBarsResponse {
+  ticker: string;
+  bars: DnaSetupBar[];
+  fetched_at: string;
+}
+
 export interface MoveEvent {
   date: string;
   event_type: string;
@@ -323,6 +335,7 @@ export const eagleEyeKeys = {
   stock: (ticker: string, portfolioKwd?: number) =>
     [...eagleEyeKeys.all, "stock", ticker.toUpperCase(), portfolioKwd ?? 0] as const,
   dna: (ticker: string) => [...eagleEyeKeys.all, "dna", ticker.toUpperCase()] as const,
+  dnaRecentBars: (ticker: string) => [...eagleEyeKeys.all, "dna-recent-bars-v2", ticker.toUpperCase()] as const,
   events: (ticker: string) => [...eagleEyeKeys.all, "events", ticker.toUpperCase()] as const,
   regime: () => [...eagleEyeKeys.all, "regime"] as const,
   mlDisplayState: () => [...eagleEyeKeys.all, "ml-display-state"] as const,
@@ -342,6 +355,239 @@ function buildScannerUrl(filters?: ScannerFilters): string {
   if (filters?.limit != null) params.set("limit", String(filters.limit));
   const qs = params.toString();
   return `/api/v1/eagle-eye/scanner${qs ? `?${qs}` : ""}`;
+}
+
+function formatIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function computeSimpleMovingAverage(values: number[], period: number): Array<number | null> {
+  const out: Array<number | null> = new Array(values.length).fill(null);
+  if (values.length === 0 || period <= 0) return out;
+
+  let rollingSum = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    rollingSum += values[index];
+    if (index >= period) {
+      rollingSum -= values[index - period];
+    }
+    if (index >= period - 1) {
+      out[index] = rollingSum / period;
+    }
+  }
+  return out;
+}
+
+function computeEMA(values: number[], period: number): Array<number | null> {
+  const out: Array<number | null> = new Array(values.length).fill(null);
+  if (values.length < period || period <= 0) return out;
+
+  let seed = 0;
+  for (let index = 0; index < period; index += 1) {
+    seed += values[index];
+  }
+
+  let prev = seed / period;
+  out[period - 1] = prev;
+  const alpha = 2 / (period + 1);
+
+  for (let index = period; index < values.length; index += 1) {
+    prev = values[index] * alpha + prev * (1 - alpha);
+    out[index] = prev;
+  }
+
+  return out;
+}
+
+function computeRSI(closes: number[], period = 14): Array<number | null> {
+  const out: Array<number | null> = new Array(closes.length).fill(null);
+  if (closes.length <= period) return out;
+
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const delta = closes[index] - closes[index - 1];
+    avgGain += Math.max(delta, 0);
+    avgLoss += Math.max(-delta, 0);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+
+  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+  for (let index = period + 1; index < closes.length; index += 1) {
+    const delta = closes[index] - closes[index - 1];
+    const gain = Math.max(delta, 0);
+    const loss = Math.max(-delta, 0);
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    out[index] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+
+  return out;
+}
+
+function computeMACD(closes: number[]): {
+  macdLine: Array<number | null>;
+  signalLine: Array<number | null>;
+  histogram: Array<number | null>;
+} {
+  const ema12 = computeEMA(closes, 12);
+  const ema26 = computeEMA(closes, 26);
+  const macdLine: Array<number | null> = closes.map((_, index) => {
+    if (ema12[index] == null || ema26[index] == null) return null;
+    return (ema12[index] as number) - (ema26[index] as number);
+  });
+
+  const signalLine: Array<number | null> = new Array(closes.length).fill(null);
+  const histogram: Array<number | null> = new Array(closes.length).fill(null);
+  const alpha = 2 / (9 + 1);
+  let prevSignal: number | null = null;
+
+  for (let index = 0; index < macdLine.length; index += 1) {
+    const value = macdLine[index];
+    if (value == null) continue;
+    if (prevSignal == null) {
+      prevSignal = value;
+      signalLine[index] = value;
+    } else {
+      prevSignal = value * alpha + prevSignal * (1 - alpha);
+      signalLine[index] = prevSignal;
+    }
+    histogram[index] = value - (signalLine[index] as number);
+  }
+
+  return { macdLine, signalLine, histogram };
+}
+
+function computeADX(candles: WhaleTrackerCandle[], period = 14): {
+  adx: Array<number | null>;
+  plusDi: Array<number | null>;
+  minusDi: Array<number | null>;
+} {
+  const count = candles.length;
+  const adx: Array<number | null> = new Array(count).fill(null);
+  const plusDi: Array<number | null> = new Array(count).fill(null);
+  const minusDi: Array<number | null> = new Array(count).fill(null);
+
+  if (count <= period) {
+    return { adx, plusDi, minusDi };
+  }
+
+  const tr = new Array<number>(count).fill(0);
+  const plusDm = new Array<number>(count).fill(0);
+  const minusDm = new Array<number>(count).fill(0);
+  const dx: Array<number | null> = new Array(count).fill(null);
+
+  for (let index = 1; index < count; index += 1) {
+    const current = candles[index];
+    const prev = candles[index - 1];
+    const upMove = current.high - prev.high;
+    const downMove = prev.low - current.low;
+
+    plusDm[index] = upMove > downMove && upMove > 0 ? upMove : 0;
+    minusDm[index] = downMove > upMove && downMove > 0 ? downMove : 0;
+
+    const highLow = current.high - current.low;
+    const highClose = Math.abs(current.high - prev.close);
+    const lowClose = Math.abs(current.low - prev.close);
+    tr[index] = Math.max(highLow, highClose, lowClose);
+  }
+
+  let trSmooth = 0;
+  let plusSmooth = 0;
+  let minusSmooth = 0;
+
+  for (let index = 1; index <= period; index += 1) {
+    trSmooth += tr[index];
+    plusSmooth += plusDm[index];
+    minusSmooth += minusDm[index];
+  }
+
+  for (let index = period; index < count; index += 1) {
+    if (index > period) {
+      trSmooth = trSmooth - trSmooth / period + tr[index];
+      plusSmooth = plusSmooth - plusSmooth / period + plusDm[index];
+      minusSmooth = minusSmooth - minusSmooth / period + minusDm[index];
+    }
+
+    if (trSmooth <= 0) continue;
+
+    const plus = (100 * plusSmooth) / trSmooth;
+    const minus = (100 * minusSmooth) / trSmooth;
+    plusDi[index] = plus;
+    minusDi[index] = minus;
+
+    const denom = plus + minus;
+    if (denom > 0) {
+      dx[index] = (100 * Math.abs(plus - minus)) / denom;
+    }
+  }
+
+  const firstAdxIndex = period * 2 - 1;
+  if (firstAdxIndex < count) {
+    let seed = 0;
+    let seedCount = 0;
+    for (let index = period; index <= firstAdxIndex; index += 1) {
+      if (dx[index] != null) {
+        seed += dx[index] as number;
+        seedCount += 1;
+      }
+    }
+
+    if (seedCount === period) {
+      let prevAdx = seed / period;
+      adx[firstAdxIndex] = prevAdx;
+
+      for (let index = firstAdxIndex + 1; index < count; index += 1) {
+        if (dx[index] == null) continue;
+        prevAdx = ((prevAdx * (period - 1)) + (dx[index] as number)) / period;
+        adx[index] = prevAdx;
+      }
+    }
+  }
+
+  return { adx, plusDi, minusDi };
+}
+
+function buildDnaBarsFromCandles(candles: WhaleTrackerCandle[]): DnaSetupBar[] {
+  if (!Array.isArray(candles) || candles.length === 0) return [];
+
+  const sorted = [...candles]
+    .filter((candle) => Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close))
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  if (sorted.length === 0) return [];
+
+  const closes = sorted.map((candle) => candle.close);
+  const volumes = sorted.map((candle) => candle.volume);
+  const rsi = computeRSI(closes, 14);
+  const { macdLine, signalLine, histogram } = computeMACD(closes);
+  const { adx, plusDi, minusDi } = computeADX(sorted, 14);
+  const avgVolume20 = computeSimpleMovingAverage(volumes, 20);
+
+  return sorted.map((candle, index) => {
+    const prevClose = index > 0 ? sorted[index - 1].close : candle.close;
+    const avgVol = avgVolume20[index];
+    const relVol = avgVol != null && avgVol > 0 ? candle.volume / avgVol : null;
+
+    return {
+      date: candle.date.slice(0, 10),
+      open: candle.open > 0 ? candle.open : prevClose,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+      rel_volume: relVol,
+      rsi: rsi[index],
+      macd_line: macdLine[index],
+      macd_signal: signalLine[index],
+      macd_histogram: histogram[index],
+      adx: adx[index],
+      plus_di: plusDi[index],
+      minus_di: minusDi[index],
+    };
+  });
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -427,6 +673,44 @@ export function useEagleEyeDna(ticker: string, enabled = true) {
     staleTime: 60 * 60_000,
     gcTime: 4 * 60 * 60_000,
     retry: 2,
+    enabled: enabled && !!t,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * useEagleEyeDnaRecentBars
+ * Fetches recent candles and computes the same indicator stack used in DNA setup charts.
+ */
+export function useEagleEyeDnaRecentBars(ticker: string, enabled = true) {
+  const t = ticker.toUpperCase().trim();
+  return useQuery<DnaRecentBarsResponse>({
+    queryKey: eagleEyeKeys.dnaRecentBars(t),
+    queryFn: async () => {
+      const to = new Date();
+      const from = new Date(to);
+      // Pull ~2+ years so the DNA screen can support up to a 2Y visual range.
+      from.setDate(from.getDate() - 780);
+
+      const candles = await getWhaleTrackerCandles({
+        // Use explicit Kuwait suffix to avoid accidental .US fallback symbol resolution.
+        symbol: `${t}.KW`,
+        exchange: "KW",
+        country: "KW",
+        from: formatIsoDate(from),
+        to: formatIsoDate(to),
+      });
+
+      const bars = buildDnaBarsFromCandles(candles).slice(-560);
+      return {
+        ticker: t,
+        bars,
+        fetched_at: new Date().toISOString(),
+      };
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
     enabled: enabled && !!t,
     placeholderData: (prev) => prev,
   });

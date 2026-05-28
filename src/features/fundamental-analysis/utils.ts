@@ -7,6 +7,8 @@ import type { FinancialStatement, StockMetric } from "@/services/api";
 import { format, parseISO } from "date-fns";
 import { SCORE_THRESHOLDS } from "./types";
 
+const DEBT_EQUITY_METRIC_NAME = "Debt / Equity";
+
 /** Group metrics by category with yearly history. */
 export function buildHistoricalMetrics(allMetrics: StockMetric[]) {
   const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
@@ -30,8 +32,22 @@ export function formatNumber(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
-export function formatMetricValue(name: string, value: number): string {
+export function isPerShareMetricName(name: string): boolean {
   const lc = name.toLowerCase();
+  return lc.includes("eps")
+    || lc.includes("earnings per share")
+    || lc.includes("book value per share")
+    || lc.includes("book value/share")
+    || lc.includes("bvps");
+}
+
+export function formatLineItemValue(name: string, value: number): string {
+  return isPerShareMetricName(name) ? value.toFixed(3) : formatNumber(value);
+}
+
+export function formatMetricValue(name: string, value: number): string {
+  const lc = name.toLowerCase().trim();
+  const hasRatioWord = /(^|\s)ratio(\s|$)/.test(lc);
   // True percentage metrics (stored as decimals, display ×100 as %)
   const isPct = ["margin", "roe", "roa", "roic", "growth", "payout", "retention", "cagr"].some((k) => lc.includes(k))
     || lc.includes("dupont") || lc.includes("sustainable");
@@ -40,10 +56,13 @@ export function formatMetricValue(name: string, value: number): string {
   if (lc.includes("days") || lc.includes("cycle")) return value.toFixed(0) + " days";
   // Multiplier metrics (turnover, coverage, liquidity & leverage ratios)
   const isMult = ["turnover", "coverage", "multiplier"].some((k) => lc.includes(k))
-    || ["current ratio", "quick ratio", "cash ratio"].some((k) => lc === k);
+    || lc.includes("debt / equity")
+    || lc.includes("debt-to-equity")
+    || lc.includes("debt to equity")
+    || (hasRatioWord && !["payout", "retention"].some((k) => lc.includes(k)));
   if (isMult) return value.toFixed(2) + "x";
   // Per-share metrics
-  if (lc.includes("eps") || lc.includes("earnings per share") || lc.includes("book value")) return value.toFixed(3);
+  if (isPerShareMetricName(name) || lc.includes("book value")) return value.toFixed(3);
   return formatNumber(value);
 }
 
@@ -108,6 +127,19 @@ function extractLineItem(statement: FinancialStatement, ...codes: string[]): num
   return null;
 }
 
+function sumLineItems(statement: FinancialStatement, ...codes: string[]): number | null {
+  const upperCodes = new Set(codes.map((c) => c.toUpperCase()));
+  let total = 0;
+  let found = false;
+  for (const li of statement.line_items ?? []) {
+    if (upperCodes.has(li.line_item_code.toUpperCase()) && li.amount != null) {
+      total += li.amount;
+      found = true;
+    }
+  }
+  return found ? total : null;
+}
+
 /**
  * Compute missing valuation metrics from uploaded financial statements
  * using standard CFA Level 1/2 formulas:
@@ -127,16 +159,18 @@ export function enrichMetricsWithFallbacks(
   allMetrics: StockMetric[],
   statements: FinancialStatement[],
 ): StockMetric[] {
-  // Normalize backend metric names: server stores "Debt-to-Equity" but the
-  // UI/Capital Structure section should display it as "Debt/Equity Ratio".
+  // Normalize leverage metric aliases so old backend rows, new backend rows,
+  // and frontend fallbacks land on one stable display name.
   // Skip the map() allocation when nothing needs renaming (most common case).
   const needsRename = allMetrics.some(
-    (m) => m.metric_type === "leverage" && m.metric_name === "Debt-to-Equity",
+    (m) => m.metric_type === "leverage"
+      && (m.metric_name === "Debt-to-Equity" || m.metric_name === "Debt/Equity Ratio"),
   );
   const normalized: StockMetric[] = needsRename
     ? allMetrics.map((m) =>
-        m.metric_type === "leverage" && m.metric_name === "Debt-to-Equity"
-          ? { ...m, metric_name: "Debt/Equity Ratio" }
+        m.metric_type === "leverage"
+          && (m.metric_name === "Debt-to-Equity" || m.metric_name === "Debt/Equity Ratio")
+          ? { ...m, metric_name: DEBT_EQUITY_METRIC_NAME }
           : m,
       )
     : allMetrics;
@@ -326,29 +360,69 @@ export function enrichMetricsWithFallbacks(
     const periodEndDate = (income ?? balance)?.period_end_date ?? `${fiscalYear}-12-31`;
 
     // Debt/Equity Ratio = (ST debt + LT debt) / Total Equity
-    if (!existingLeverage.has(`${fiscalYear}::Debt/Equity Ratio`)) {
-      const stDebt = balance
-        ? extractLineItem(balance, "SHORT_TERM_DEBT", "SHORT_TERM_BORROWINGS",
-            "CURRENT_PORTION_OF_LONG_TERM_DEBT", "NOTES_PAYABLE")
+    if (!existingLeverage.has(`${fiscalYear}::${DEBT_EQUITY_METRIC_NAME}`)) {
+      const bankBorrowings = balance
+        ? sumLineItems(
+            balance,
+            "CURRENT_BANK_BORROWINGS",
+            "BANK_BORROWINGS_CURRENT",
+            "BANK_BORROWING_CURRENT",
+            "CURRENT_BORROWINGS",
+            "CURRENT_PORTION_OF_BANK_BORROWINGS",
+            "CURRENTPORTDEBT",
+            "SHORT_TERM_BORROWINGS",
+            "SHORT_TERM_LOANS",
+            "SHORT_TERM_LOAN",
+            "BANK_OVERDRAFT",
+            "BANK_OVERDRAFTS",
+            "OVERDRAFT",
+            "OVERDRAFTS",
+            "LONG_TERM_BANK_BORROWINGS",
+            "BANK_BORROWINGS_NON_CURRENT",
+            "BANK_BORROWING_NON_CURRENT",
+            "NON_CURRENT_BANK_BORROWINGS",
+            "NON_CURRENT_BORROWINGS",
+            "DEBTNC",
+            "LONG_TERM_BORROWINGS",
+            "LONG_TERM_LOANS",
+            "LONG_TERM_LOAN",
+            "TERM_LOAN",
+            "TERM_LOANS",
+            "NON_CURRENT_MURABAHA_PAYABLE",
+            "DUE_TO_BANK",
+            "DUE_TO_BANKS",
+            "BANK_FACILITY",
+            "BANK_FACILITIES",
+            "BANKING_FACILITY",
+            "BANKING_FACILITIES",
+            "MURABAHA_PAYABLE",
+          )
         : null;
-      const ltDebt = balance
-        ? extractLineItem(balance, "LONG_TERM_DEBT", "LONG_TERM_BORROWINGS",
-            "BONDS_PAYABLE")
+      const fallbackDebt = balance
+        ? sumLineItems(
+            balance,
+            "SHORT_TERM_DEBT",
+            "SHORT_TERM_BORROWINGS",
+            "CURRENT_PORTION_OF_LONG_TERM_DEBT",
+            "NOTES_PAYABLE",
+            "LONG_TERM_DEBT",
+            "LONG_TERM_BORROWINGS",
+            "BONDS_PAYABLE",
+          )
         : null;
       const equity = balance
         ? extractLineItem(balance, "TOTAL_EQUITY", "SHAREHOLDERS_EQUITY",
             "TOTAL_SHAREHOLDERS_EQUITY", "STOCKHOLDERS_EQUITY")
         : null;
-      const totalDebt = (stDebt ?? 0) + (ltDebt ?? 0);
-      const hasDebt = stDebt != null || ltDebt != null;
-      if (hasDebt && equity != null && equity !== 0) {
+      const totalDebt = bankBorrowings ?? fallbackDebt;
+      if (totalDebt != null && equity != null && equity !== 0) {
         computed.push({
           id: syntheticId--, stock_id: 0, fiscal_year: fiscalYear,
           fiscal_quarter: null, period_end_date: periodEndDate,
-          metric_type: "leverage", metric_name: "Debt/Equity Ratio",
+          metric_type: "leverage", metric_name: DEBT_EQUITY_METRIC_NAME,
           metric_value: totalDebt / equity, created_at: 0,
         });
-        existingLeverage.add(`${fiscalYear}::Debt/Equity Ratio`);
+        existingLeverage.add(`${fiscalYear}::${DEBT_EQUITY_METRIC_NAME}`);
       }
     }
 

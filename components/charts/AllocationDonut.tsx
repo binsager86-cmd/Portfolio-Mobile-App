@@ -17,7 +17,7 @@
 import type { ThemePalette } from "@/constants/theme";
 import { useA11yChart } from "@/hooks/useA11yChart";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle, useWindowDimensions } from "react-native";
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -26,6 +26,7 @@ import Animated, {
 
 import { Motion } from "@/constants/motion";
 import { useShouldAnimate } from "@/hooks/useShouldAnimate";
+import { tokens } from "@/theme/tokens";
 import Svg, { Defs, G, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 
 // ── Gradient slice palettes (matches PortfolioChart purple→blue language) ──
@@ -57,6 +58,7 @@ export interface AllocationSlice {
   company: string;
   weight: number; // 0–1 range (fractional)
   pnl_pct?: number;
+  shares?: number;
 }
 
 interface AllocationDonutProps {
@@ -110,6 +112,18 @@ function describeArc(
   ].join(" ");
 }
 
+function formatShares(value: number | undefined) {
+  const safeValue = Number(value ?? 0);
+  if (!Number.isFinite(safeValue)) {
+    return "0";
+  }
+  const fractionDigits = Math.abs(safeValue) >= 100 ? 0 : 2;
+  return safeValue.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 export const AllocationDonut = React.memo(function AllocationDonut({
@@ -121,6 +135,7 @@ export const AllocationDonut = React.memo(function AllocationDonut({
 }: AllocationDonutProps) {
   const isDark = colors.mode === "dark";
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
 
   const dismissTooltip = useCallback(() => setActiveSlice(null), []);
 
@@ -151,7 +166,7 @@ export const AllocationDonut = React.memo(function AllocationDonut({
   }));
 
   const filteredData = useMemo(
-    () => data.filter((d) => d.weight > 0),
+    () => data.filter((d) => d.weight > 0).sort((left, right) => right.weight - left.weight),
     [data],
   );
 
@@ -171,6 +186,19 @@ export const AllocationDonut = React.memo(function AllocationDonut({
     [filteredData],
   );
 
+  const compactLayout = showLegend && windowWidth < 460;
+  const donutSize = useMemo(() => {
+    const availableWidth = compactLayout ? windowWidth - 104 : size;
+    return Math.max(200, Math.min(size, availableWidth));
+  }, [compactLayout, size, windowWidth]);
+
+  const canvasPadding = compactLayout ? 30 : 24;
+  const canvasSize = donutSize + canvasPadding * 2;
+  const showSharesColumn = useMemo(
+    () => filteredData.some((slice) => (slice.shares ?? 0) > 0),
+    [filteredData],
+  );
+
   // Build arc data
   const arcs = useMemo(() => {
     if (totalWeight <= 0) return [];
@@ -184,6 +212,7 @@ export const AllocationDonut = React.memo(function AllocationDonut({
       const endAngle = currentAngle + sweepDeg;
       currentAngle = endAngle + GAP_DEG;
       const pal = SLICE_PALETTE[i % SLICE_PALETTE.length];
+      const pctValue = (slice.weight / totalWeight) * 100;
       return {
         ...slice,
         startAngle,
@@ -191,11 +220,12 @@ export const AllocationDonut = React.memo(function AllocationDonut({
         gradFrom: pal.from,
         gradTo: pal.to,
         flatColor: pal.from,
-        pull: slice.weight === maxWeight ? size * 0.015 : 0,
-        pct: ((slice.weight / totalWeight) * 100).toFixed(1),
+        pull: slice.weight === maxWeight ? donutSize * 0.015 : 0,
+        pctValue,
+        pctLabel: `${pctValue.toFixed(1)}%`,
       };
     });
-  }, [filteredData, totalWeight, maxWeight, size]);
+  }, [filteredData, totalWeight, maxWeight, donutSize]);
 
   if (filteredData.length === 0) {
     return (
@@ -207,11 +237,11 @@ export const AllocationDonut = React.memo(function AllocationDonut({
     );
   }
 
-  const cx = size / 2;
-  const cy = size / 2;
-  const outerR = size * 0.40;
+  const cx = canvasSize / 2;
+  const cy = canvasSize / 2;
+  const outerR = donutSize * 0.40;
   const innerR = outerR * 0.55; // slightly thicker ring than original
-  const labelR = outerR + 18;
+  const labelR = outerR + (compactLayout ? 12 : 18);
 
   return (
     <Animated.View style={[styles.wrapper, animStyle]} {...a11yProps}>
@@ -219,13 +249,13 @@ export const AllocationDonut = React.memo(function AllocationDonut({
       <Text style={[styles.title, { color: colors.textSecondary }]}>{title}</Text>
 
       <View style={[styles.chartBackground, { backgroundColor: isDark ? "#0F0F0F" : "#F7F8FC", borderWidth: isDark ? 0 : 1, borderColor: isDark ? "transparent" : colors.borderColor }]}>
-        <View style={styles.chartRow}>
+        <View style={[styles.chartRow, compactLayout && styles.chartRowCompact]}>
           {/* Donut */}
-          <Pressable style={styles.chartContainer} onPress={dismissTooltip}>
+          <Pressable style={[styles.chartContainer, compactLayout && styles.chartContainerCompact]} onPress={dismissTooltip}>
             <Svg
-              width={size}
-              height={size}
-              viewBox={`0 0 ${size} ${size}`}
+              width={canvasSize}
+              height={canvasSize}
+              viewBox={`0 0 ${canvasSize} ${canvasSize}`}
               accessibilityRole="image"
               accessibilityLabel={`Portfolio allocation donut chart with ${arcs.length} holdings`}
             >
@@ -277,8 +307,7 @@ export const AllocationDonut = React.memo(function AllocationDonut({
                 {arcs.map((arc, i) => {
                   const midAngle = (arc.startAngle + arc.endAngle) / 2;
                   const sweepDeg = arc.endAngle - arc.startAngle;
-                  // Only show label if slice is big enough
-                  if (sweepDeg < 15) return null;
+                  if (sweepDeg < (compactLayout ? 12 : 15) && arc.pctValue < 4) return null;
                   const pos = polarToCartesian(cx, cy, labelR, midAngle);
                   return (
                     <SvgText
@@ -286,12 +315,12 @@ export const AllocationDonut = React.memo(function AllocationDonut({
                       x={pos.x}
                       y={pos.y}
                       fill={colors.textPrimary}
-                      fontSize={10}
-                      fontWeight="600"
+                      fontSize={compactLayout ? 11 : 10}
+                      fontWeight="700"
                       textAnchor="middle"
                       alignmentBaseline="central"
                     >
-                      {arc.pct}%
+                      {arc.pctLabel}
                     </SvgText>
                   );
                 })}
@@ -302,26 +331,38 @@ export const AllocationDonut = React.memo(function AllocationDonut({
             {activeSlice != null && arcs[activeSlice] && (
               <View style={[styles.tooltip, Platform.OS === "web" ? ({ pointerEvents: "none" } as ViewStyle) : null]}>
                 <Text style={styles.tooltipCompany}>{arcs[activeSlice].company}</Text>
-                <Text style={styles.tooltipPct}>{arcs[activeSlice].pct}%</Text>
+                <Text style={styles.tooltipPct}>{arcs[activeSlice].pctLabel}</Text>
               </View>
             )}
           </Pressable>
 
           {/* Legend table */}
           {showLegend && (
-            <View style={styles.legendContainer}>
+            <View style={[styles.legendContainer, compactLayout && styles.legendContainerCompact]}>
               <Text style={[styles.legendTitle, { color: colors.textMuted }]}>
                 Breakdown
               </Text>
-              <ScrollView style={styles.legendScroll} nestedScrollEnabled>
+              {showSharesColumn && (
+                <View style={[styles.legendHeaderRow, { borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : colors.borderColor }]}> 
+                  <Text style={[styles.legendHeaderCompany, { color: colors.textMuted }]}>Holding</Text>
+                  <Text style={[styles.legendHeaderShares, { color: colors.textMuted }]}>Shares</Text>
+                  <Text style={[styles.legendHeaderWeight, { color: colors.textMuted }]}>Weight</Text>
+                </View>
+              )}
+              <ScrollView style={[styles.legendScroll, compactLayout && styles.legendScrollCompact]} nestedScrollEnabled>
                 {arcs.map((arc, i) => (
                   <View key={i} style={[styles.legendRow, { borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : colors.borderColor }]}>
                     <View style={[styles.legendDot, { backgroundColor: arc.flatColor }]} />
                     <Text style={[styles.legendCompany, { color: colors.textPrimary }]} numberOfLines={1}>
                       {arc.company}
                     </Text>
-                    <Text style={[styles.legendPct, { color: colors.textSecondary }]}>
-                      {(arc.weight * 100).toFixed(1)}%
+                    {showSharesColumn && (
+                      <Text style={[styles.legendShares, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {formatShares(arc.shares)}
+                      </Text>
+                    )}
+                    <Text style={[styles.legendPct, { color: colors.textPrimary }]}>
+                      {arc.pctLabel}
                     </Text>
                   </View>
                 ))}
@@ -346,72 +387,114 @@ export const AllocationDonut = React.memo(function AllocationDonut({
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 16,
+    marginBottom: tokens.spacing.md,
   },
   title: {
-    fontSize: 13,
+    ...tokens.typography.label,
     fontWeight: "700",
     letterSpacing: 1,
     textTransform: "uppercase",
-    marginBottom: 10,
+    marginBottom: tokens.spacing.sm,
   },
   chartBackground: {
-    borderRadius: 16,
+    borderRadius: tokens.radii.lg,
     overflow: "hidden",
-    padding: 16,
+    padding: tokens.spacing.md,
   },
   chartRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    gap: tokens.spacing.md,
+  },
+  chartRowCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
   },
   chartContainer: {
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
+  chartContainerCompact: {
+    alignSelf: "center",
+  },
   tooltip: {
     position: "absolute",
     backgroundColor: "rgba(15,23,42,0.92)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
+    borderRadius: tokens.radii.md,
     alignItems: "center",
     alignSelf: "center",
     top: "50%",
     transform: [{ translateY: -20 }],
   },
   tooltipCompany: {
-    color: "#fff",
-    fontSize: 12,
+    ...tokens.typography.caption,
+    color: tokens.dark.onSurface,
     fontWeight: "600",
   },
   tooltipPct: {
+    ...tokens.typography.caption,
     color: "rgba(255,255,255,0.75)",
-    fontSize: 11,
     fontWeight: "500",
-    marginTop: 2,
+    marginTop: tokens.spacing.xs,
   },
   legendContainer: {
     flex: 1,
     minWidth: 120,
   },
+  legendContainerCompact: {
+    minWidth: 0,
+    width: "100%",
+  },
   legendTitle: {
-    fontSize: 11,
+    ...tokens.typography.caption,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: tokens.spacing.sm,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   legendScroll: {
     maxHeight: 250,
   },
+  legendScrollCompact: {
+    maxHeight: 220,
+  },
+  legendHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: tokens.spacing.sm,
+    marginBottom: tokens.spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: tokens.spacing.sm,
+  },
+  legendHeaderCompany: {
+    flex: 1,
+    ...tokens.typography.caption,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  legendHeaderShares: {
+    minWidth: 72,
+    ...tokens.typography.caption,
+    fontWeight: "700",
+    textAlign: "right",
+    textTransform: "uppercase",
+  },
+  legendHeaderWeight: {
+    minWidth: 52,
+    ...tokens.typography.caption,
+    fontWeight: "700",
+    textAlign: "right",
+    textTransform: "uppercase",
+  },
   legendRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: tokens.spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    gap: tokens.spacing.sm,
   },
   legendDot: {
     width: 8,
@@ -420,21 +503,26 @@ const styles = StyleSheet.create({
   },
   legendCompany: {
     flex: 1,
-    fontSize: 12,
+    ...tokens.typography.caption,
     fontWeight: "500",
   },
+  legendShares: {
+    minWidth: 72,
+    ...tokens.typography.caption,
+    textAlign: "right",
+  },
   legendPct: {
-    fontSize: 12,
-    fontWeight: "600",
-    minWidth: 42,
+    ...tokens.typography.label,
+    fontWeight: "700",
+    minWidth: 52,
     textAlign: "right",
   },
   emptyContainer: {
-    padding: 32,
-    borderRadius: 16,
+    padding: tokens.spacing.xl,
+    borderRadius: tokens.radii.lg,
     alignItems: "center",
   },
   emptyText: {
-    fontSize: 14,
+    ...tokens.typography.body,
   },
 });

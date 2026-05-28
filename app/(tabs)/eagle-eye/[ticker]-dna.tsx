@@ -4,7 +4,11 @@ import { BehavioralDnaScreenContent } from "@/components/eagle-eye/BehavioralDna
 import { EE } from "@/constants/eagleEyeStrings";
 import type { ThemePalette } from "@/constants/theme";
 import { UITokens } from "@/constants/uiTokens";
-import { useEagleEyeDna } from "@/hooks/useEagleEye";
+import {
+  useEagleEyeDna,
+  useEagleEyeDnaRecentBars,
+  useEagleEyeStock,
+} from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,6 +24,12 @@ export default function EagleEyeDnaScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { data, isLoading, isError, refetch } = useEagleEyeDna(ticker);
+  const { data: stockData } = useEagleEyeStock(ticker, 0, !!ticker);
+  const {
+    data: recentBarsData,
+    isLoading: isRecentBarsLoading,
+    isError: isRecentBarsError,
+  } = useEagleEyeDnaRecentBars(ticker, !!ticker);
 
   const isPending = data?.status === "pending";
   const isUnavailable = data?.status === "unavailable";
@@ -89,6 +99,10 @@ export default function EagleEyeDnaScreen() {
       <BehavioralDnaScreenContent
         ticker={ticker}
         dna={dna}
+        stock={stockData?.data}
+        recentBars={recentBarsData?.bars ?? []}
+        recentBarsLoading={isRecentBarsLoading}
+        recentBarsError={isRecentBarsError}
         colors={colors}
         bottomInset={insets.bottom}
       />

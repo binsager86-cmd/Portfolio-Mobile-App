@@ -56,6 +56,7 @@ export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
   const pathname = normalizePath(usePathname());
   const router = useRouter();
+  const activeTextColor = "#ffffff";
 
   return (
     <View
@@ -78,23 +79,24 @@ export function EagleEyeTopTabs() {
             <Pressable
               key={tab.key}
               onPress={() => router.push(tab.href)}
-              style={[
+              style={({ pressed }) => [
                 styles.tab,
                 {
-                  backgroundColor: active ? `${colors.accentPrimary}16` : colors.bgCard,
+                  backgroundColor: active ? colors.accentPrimary : colors.bgSecondary,
                   borderColor: active ? colors.accentPrimary : colors.borderColor,
+                  opacity: pressed ? 0.88 : 1,
                 },
               ]}
             >
               <FontAwesome
                 name={tab.icon}
-                size={12}
-                color={active ? colors.accentPrimary : colors.textMuted}
+                size={13}
+                color={active ? activeTextColor : colors.textPrimary}
               />
               <Text
                 style={[
                   styles.label,
-                  { color: active ? colors.accentPrimary : colors.textSecondary },
+                  { color: active ? activeTextColor : colors.textPrimary },
                 ]}
               >
                 {tab.label}
@@ -113,20 +115,23 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: UITokens.spacing.sm,
-    paddingVertical: UITokens.spacing.xs + 2,
+    paddingVertical: UITokens.spacing.sm,
     gap: UITokens.spacing.xs,
+    alignItems: "center",
   },
   tab: {
     flexDirection: "row",
     alignItems: "center",
     gap: UITokens.spacing.sm,
     paddingHorizontal: UITokens.filter.chipPaddingH,
-    paddingVertical: UITokens.spacing.sm,
+    paddingVertical: UITokens.spacing.sm + 2,
     borderRadius: UITokens.radius.pill,
-    borderWidth: 1,
+    borderWidth: 1.25,
+    minHeight: UITokens.touchTarget.mobile,
   },
   label: {
-    fontSize: UITokens.typography.caption.size,
+    fontSize: UITokens.filter.chipFontSize,
     fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });

@@ -16,6 +16,13 @@ import {
 } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 
+const STOCK_LIST_STALE_TIME = 30 * 1000;
+const TAB_DATA_STALE_TIME = 2 * 60 * 1000;
+
+function hasValidStockId(stockId: number) {
+  return Number.isFinite(stockId) && stockId > 0;
+}
+
 // ── Query key constants ─────────────────────────────────────────────
 
 export const analysisKeys = {
@@ -42,6 +49,7 @@ export function useAnalysisStocks(search?: string) {
   return useQuery({
     queryKey: analysisKeys.stocks(search),
     queryFn: () => getAnalysisStocks({ search: search || undefined }),
+    staleTime: STOCK_LIST_STALE_TIME,
   });
 }
 
@@ -50,6 +58,8 @@ export function useStatements(stockId: number, statementType?: string) {
   return useQuery({
     queryKey: analysisKeys.statements(stockId, statementType),
     queryFn: () => getStatements(stockId, statementType),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
   });
 }
 
@@ -58,6 +68,8 @@ export function useStockMetrics(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.metrics(stockId),
     queryFn: () => getStockMetrics(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
   });
 }
 
@@ -66,6 +78,8 @@ export function useGrowthAnalysis(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.growth(stockId),
     queryFn: () => getGrowthAnalysis(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
   });
 }
 
@@ -74,6 +88,9 @@ export function useStockScore(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.score(stockId),
     queryFn: () => getStockScore(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -82,6 +99,8 @@ export function useScoreHistory(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.scoreHistory(stockId),
     queryFn: () => getScoreHistory(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
   });
 }
 
@@ -90,6 +109,8 @@ export function useValuations(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.valuations(stockId),
     queryFn: () => getValuations(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
   });
 }
 
@@ -98,6 +119,7 @@ export function useValuationDefaults(stockId: number) {
   return useQuery({
     queryKey: analysisKeys.valuationDefaults(stockId),
     queryFn: () => getValuationDefaults(stockId),
+    enabled: hasValidStockId(stockId),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -108,6 +130,6 @@ export function usePeerMultiples(stockId: number, enabled = false) {
     queryKey: analysisKeys.peerMultiples(stockId),
     queryFn: () => getPeerMultiples(stockId),
     staleTime: 10 * 60 * 1000,
-    enabled,
+    enabled: enabled && hasValidStockId(stockId),
   });
 }

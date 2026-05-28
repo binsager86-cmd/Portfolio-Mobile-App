@@ -268,7 +268,12 @@ export function useHoldingsView() {
   const allocationData: AllocationSlice[] = useMemo(() => {
     return (resp?.holdings ?? [])
       .filter((h) => (h.allocation_pct ?? 0) > 0)
-      .map((h) => ({ company: h.company, weight: h.allocation_pct ?? 0, pnl_pct: h.pnl_pct ?? 0 }));
+      .map((h) => ({
+        company: h.company,
+        weight: h.allocation_pct ?? 0,
+        pnl_pct: h.pnl_pct ?? 0,
+        shares: h.shares_qty ?? 0,
+      }));
   }, [resp?.holdings]);
 
   const { kfh: { data: kfhDeposits }, bbyn: { data: bbynDeposits }, usa: { data: usaDeposits } } = useDepositTotals();

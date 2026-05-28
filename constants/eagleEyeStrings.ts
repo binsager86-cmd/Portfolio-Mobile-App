@@ -276,6 +276,40 @@ export const EE = {
   setupSummaryTitle: "Setup Summary",
   setupCountLine: (ticker: string, count: number) =>
     `${ticker} has shown this pattern ${count} time${count === 1 ? "" : "s"} in the history we checked.`,
+  scoreExplainTitle: "Why this score and recommendation?",
+  scoreExplainBody:
+    "This combines live signal conditions with this stock's own Behavioral DNA history, so you can see exactly what influenced the current score and call.",
+  scoreExplainRecommendationLabel: "Recommendation",
+  scoreExplainConfidenceLabel: "Score",
+  scoreExplainStageLabel: "Stage",
+  scoreExplainThesisLabel: "Engine thesis",
+  scoreExplainDriversLabel: "Score is based on",
+  scoreExplainRecommendationWhyLabel: "Why this recommendation",
+  scoreExplainNoRecommendation:
+    "Live recommendation details are unavailable right now. DNA history above still shows how this pattern behaved in the past.",
+  scoreDriverHitRate: (target: number, hits: number, total: number, rate: number) =>
+    `Historical hit rate: +${Math.round(target)}% was reached in ${hits} of ${total} setups (${rate}%).`,
+  scoreDriverAvgMove: (gain: string) => `Typical move after this setup: ${gain}.`,
+  scoreDriverDataConfidence: (count: number, label: string) =>
+    `Data confidence: ${label} (${count} completed setups).`,
+  scoreDriverPatternSignals: (signals: string) =>
+    `Current setup fingerprint matched: ${signals}.`,
+  scoreDriverLiveSignals: (signals: string) =>
+    `Live engine signals currently firing: ${signals}.`,
+  recommendationStrongBuy: (confidence: number) =>
+    `Strong Buy is assigned because confidence is ${confidence}% and bullish factors are aligned across stage, signals, and historical setup behavior.`,
+  recommendationBuy: (confidence: number) =>
+    `Buy is assigned because confidence is ${confidence}% with supportive setup history and positive current signal confluence.`,
+  recommendationHold: (confidence: number) =>
+    `Hold is assigned because confidence is ${confidence}%, which suggests mixed conditions or limited edge at the current price.`,
+  recommendationSell: (confidence: number) =>
+    `Sell is assigned because confidence in upside is low (${confidence}%) and current conditions are not favorable for new long exposure.`,
+  recommendationStrongSell: (confidence: number) =>
+    `Strong Sell is assigned because confidence in upside is very low (${confidence}%) and risk conditions are strongly negative.`,
+  recommendationInsufficientData:
+    "Insufficient Data is assigned because there is not enough reliable setup history and current signal evidence to form a robust call.",
+  recommendationFallback: (rating: string, confidence: number) =>
+    `${rating} is assigned at ${confidence}% confidence based on current stage, signal confluence, and historical setup outcomes.`,
   forwardWindowLine: (days?: number | null) => {
     if (!days) return "We measured what happened after the pattern appeared.";
     const weeks = Math.max(1, Math.round(days / 5));
@@ -322,6 +356,25 @@ export const EE = {
   dnaVisualEvidenceTitle: "Visual setup evidence",
   dnaVisualEvidenceBody:
     "These are real historical examples of the same setup. The shaded block is the setup window and the dashed line marks the selected review window.",
+  dnaCurrentChartTitle: "Current chart (same setup indicators)",
+  dnaCurrentChartBody: (days: number, rangeLabel: string) =>
+    `This shows the latest ${rangeLabel} of price action using the same setup indicators as historical examples (RSI, ADX, MACD). The shaded block marks the current setup window and the dashed marker tracks a ${days}-day comparison horizon.`,
+  dnaCurrentRangeLabel: "Chart range",
+  dnaCurrentRange1m: "1 month",
+  dnaCurrentRange3m: "3 months",
+  dnaCurrentRange6m: "6 months",
+  dnaCurrentRange9m: "9 months",
+  dnaCurrentRange1y: "1 year",
+  dnaCurrentRange2y: "2 years",
+  dnaCurrentChartLoading: "Loading latest chart data...",
+  dnaCurrentChartNoData:
+    "Recent chart data is not available right now, but historical setup examples are still shown below.",
+  dnaCurrentChartError:
+    "Could not load the recent chart. Pull to refresh and try again.",
+  dnaCurrentChartFootnote: (setupDate: string, latestDate: string) =>
+    `Current setup anchored on ${setupDate} with latest bar at ${latestDate}. Use this panel to compare today's structure versus the historical examples below.`,
+  dnaCurrentChartCoverage: (rangeLabel: string, startDate: string, latestDate: string, bars: number) =>
+    `Showing ${rangeLabel}: ${bars} bars from ${startDate} to ${latestDate}.`,
   dnaExampleTitle: (date: string) => `Historical setup from ${date}`,
   dnaExampleOutcome: (days: number, gain: string, completed: boolean) =>
     completed

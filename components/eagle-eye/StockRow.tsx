@@ -21,9 +21,29 @@ import { StageTag } from "./StageTag";
 import { MLBandBadge } from "./MLBandBadge";
 import type { MLBandLabel } from "./MLBandBadge";
 
+export const STOCK_TABLE_COL_WIDTHS = {
+  rating: 84,
+  ticker: 92,
+  stage: 108,
+  volume: 106,
+  entry: 92,
+  tp1: 92,
+  bvps: 96,
+  pe: 76,
+  rr: 72,
+  confidence: 78,
+} as const;
+
+type StockRowVariant = "default" | "table";
+
 interface StockRowProps {
   item: RatedStock;
   isFirst?: boolean;
+  variant?: StockRowVariant;
+}
+
+interface StockRowSkeletonProps {
+  variant?: StockRowVariant;
 }
 
 function fmt(n: number | null | undefined, dec = 3): string {
@@ -39,9 +59,10 @@ export function computeRR(item: RatedStock): number | null {
   return null;
 }
 
-export const StockRow = React.memo(function StockRow({ item, isFirst = false }: StockRowProps) {
+export const StockRow = React.memo(function StockRow({ item, isFirst = false, variant = "default" }: StockRowProps) {
   const { colors } = useThemeStore();
   const router = useRouter();
+  const isTable = variant === "table";
 
   const confPct = Math.min(100, Math.max(0, item.confidence));
   const confColor = confPct >= 75 ? colors.success : confPct >= 60 ? "#E6A817" : colors.textMuted;
@@ -54,6 +75,119 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
     colors.mode === "dark" ? "rgba(255,255,255,0.25)" : "rgba(30,41,59,0.25)";
 
   const rr = useMemo(() => computeRR(item), [item]);
+  const rrText = rr != null ? `1:${rr.toFixed(1)}` : "-";
+
+  const volumeCell = useMemo(() => {
+    const vc = item.volume_context;
+    if (!vc) {
+      return { label: "-", color: colors.textMuted };
+    }
+
+    const rv = Number.isFinite(vc.relative_volume) ? vc.relative_volume : 0;
+    const rvText = `${rv.toFixed(1)}x`;
+    const isHigh =
+      vc.liquidity_tier === "TRADEABLE" && vc.is_volume_confirmed && rv >= 1.5;
+    const isLow =
+      vc.liquidity_tier !== "TRADEABLE" || !vc.is_volume_confirmed || rv < 1;
+
+    if (isHigh) {
+      return { label: `High ${rvText}`, color: colors.success };
+    }
+    if (isLow) {
+      return { label: `Low ${rvText}`, color: "#E6A817" };
+    }
+    return { label: `Mid ${rvText}`, color: colors.textSecondary };
+  }, [item.volume_context, colors.textMuted, colors.success, colors.textSecondary]);
+
+  if (isTable) {
+    return (
+      <Pressable
+        onPress={() =>
+          router.push({
+            pathname: "/(tabs)/eagle-eye/[ticker]",
+            params: { ticker: item.ticker },
+          })
+        }
+        android_ripple={{ color: colors.bgCardHover }}
+        style={({ pressed, hovered }: any) => [
+          styles.tableRow,
+          {
+            backgroundColor: pressed || hovered ? colors.bgCardHover : colors.bgCard,
+            borderTopColor: separatorColor,
+            borderTopWidth: isFirst ? 0 : 0.5,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.ticker} ${item.rating}`}
+      >
+        <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />
+
+        <View style={styles.tableCellRating}>
+          <RatingBadge rating={item.rating} size="sm" />
+        </View>
+
+        <View style={styles.tableCellTicker}>
+          <Text style={[styles.tableTickerText, { color: colors.textPrimary }]} numberOfLines={1}>
+            {item.ticker}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellStage}>
+          <StageTag stage={item.stage} size="sm" />
+        </View>
+
+        <View style={styles.tableCellVolume}>
+          <Text style={[styles.tableVolumeText, { color: volumeCell.color }]} numberOfLines={1}>
+            {volumeCell.label}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellEntry}>
+          <Text style={[styles.tableNumText, { color: colors.textPrimary }]}>
+            {fmt(item.entry_primary)}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellTP1}>
+          <Text style={[styles.tableNumText, { color: colors.success }]}>
+            {fmt(item.tp1)}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellBVPS}>
+          <Text
+            style={[
+              styles.tableNumText,
+              { color: item.book_value_per_share != null ? colors.textPrimary : colors.textMuted },
+            ]}
+          >
+            {item.book_value_per_share != null ? fmt(item.book_value_per_share) : "N/A"}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellPE}>
+          <Text
+            style={[
+              styles.tableNumText,
+              { color: item.pe_ratio != null ? colors.textPrimary : colors.textMuted },
+            ]}
+          >
+            {item.pe_ratio != null ? fmt(item.pe_ratio, 2) : "N/A"}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellRR}>
+          <Text style={[styles.tableNumText, { color: rr != null ? colors.textPrimary : colors.textMuted }]}>
+            {rrText}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellConfidence}>
+          <Text style={[styles.tableNumText, { color: confColor }]}>{`${confPct.toFixed(0)}%`}</Text>
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
@@ -197,9 +331,53 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false }: 
   );
 });
 
-export function StockRowSkeleton() {
+export function StockRowSkeleton({ variant = "default" }: StockRowSkeletonProps = {}) {
   const { colors } = useThemeStore();
   const sh = { backgroundColor: colors.bgCardHover };
+
+  if (variant === "table") {
+    return (
+      <View
+        style={[
+          styles.tableRow,
+          { backgroundColor: colors.bgCard, borderTopColor: colors.borderColor },
+        ]}
+      >
+        <View style={[styles.leftStrip, { backgroundColor: colors.borderColor }]} />
+        <View style={styles.tableCellRating}>
+          <View style={[styles.skelRect, sh, { width: 68, height: 20 }]} />
+        </View>
+        <View style={styles.tableCellTicker}>
+          <View style={[styles.skelRect, sh, { width: 58, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellStage}>
+          <View style={[styles.skelRect, sh, { width: 84, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellVolume}>
+          <View style={[styles.skelRect, sh, { width: 70, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellEntry}>
+          <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellTP1}>
+          <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellBVPS}>
+          <View style={[styles.skelRect, sh, { width: 64, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellPE}>
+          <View style={[styles.skelRect, sh, { width: 56, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellRR}>
+          <View style={[styles.skelRect, sh, { width: 54, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellConfidence}>
+          <View style={[styles.skelRect, sh, { width: 48, height: 12 }]} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -234,6 +412,15 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     minHeight: 72,
   },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: UITokens.spacing.md,
+    paddingVertical: 6,
+    position: "relative",
+    overflow: "hidden",
+    minHeight: 54,
+  },
   leftStrip: {
     position: "absolute",
     left: 0,
@@ -241,6 +428,73 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 3,
     borderRadius: 0,
+  },
+  tableCellRating: {
+    width: STOCK_TABLE_COL_WIDTHS.rating,
+    paddingRight: 6,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  tableCellTicker: {
+    width: STOCK_TABLE_COL_WIDTHS.ticker,
+    paddingRight: 6,
+  },
+  tableCellStage: {
+    width: STOCK_TABLE_COL_WIDTHS.stage,
+    paddingRight: 6,
+  },
+  tableCellVolume: {
+    width: STOCK_TABLE_COL_WIDTHS.volume,
+    paddingRight: 6,
+  },
+  tableCellEntry: {
+    width: STOCK_TABLE_COL_WIDTHS.entry,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellTP1: {
+    width: STOCK_TABLE_COL_WIDTHS.tp1,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellBVPS: {
+    width: STOCK_TABLE_COL_WIDTHS.bvps,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellPE: {
+    width: STOCK_TABLE_COL_WIDTHS.pe,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellRR: {
+    width: STOCK_TABLE_COL_WIDTHS.rr,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellConfidence: {
+    width: STOCK_TABLE_COL_WIDTHS.confidence,
+    alignItems: "flex-end",
+  },
+  tableTickerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  tableStageText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  tableVolumeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  tableNumText: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   badgeCol: {
     width: 84,

@@ -31,7 +31,7 @@ import type { TableData } from "@/lib/exportAnalysis";
 import { mergeLineItems, reorderLineItems } from "@/services/api";
 import { st } from "../styles";
 import { STMNT_META, type PanelWithSymbolProps } from "../types";
-import { formatNumber } from "../utils";
+import { formatLineItemValue } from "../utils";
 import { ExportBar, StatementTabBar } from "./shared";
 
 export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }: PanelWithSymbolProps) {
@@ -164,7 +164,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       const row: (string | number | null)[] = [item.name];
       for (let i = 0; i < periods.length; i++) {
         const val = periods[i].items[item.code]?.amount;
-        row.push(val != null ? val : null);
+        row.push(val != null ? formatLineItemValue(item.name, val) : null);
         if (i > 0) {
           const prevVal = periods[i - 1].items[item.code]?.amount;
           const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
@@ -392,7 +392,7 @@ function SortableCompRow({
               color: val != null && val < 0 ? colors.danger : (item.isTotal ? colors.textPrimary : colors.textSecondary),
               fontWeight: item.isTotal ? "700" : "500",
             }]}>
-              {val != null ? formatNumber(val) : "–"}
+              {val != null ? formatLineItemValue(item.name, val) : "–"}
             </Text>
             {i > 0 && (
               <Text style={[st.compCellYoy, {

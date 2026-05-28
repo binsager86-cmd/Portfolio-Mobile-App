@@ -58,6 +58,12 @@ export function StatementsTable({
     togglePeriod, handleToggleMerge,
     mergeMode, mergeSelection,
   } = state;
+  const headerFontSize = isDesktop ? 13 : 11;
+  const headerPaddingVertical = isDesktop ? 10 : 6;
+  const headerPaddingHorizontal = isDesktop ? 14 : 8;
+  const headerGap = isDesktop ? 6 : 4;
+  const selectionBoxSize = isDesktop ? 16 : 14;
+  const selectionCheckSize = isDesktop ? 9 : 8;
 
   if (periods.length === 0) {
     return (
@@ -90,27 +96,27 @@ export function StatementsTable({
             scrollEnabled={false}
             style={{ flexDirection: "row" }}
           >
-            <View style={{ flexDirection: "row", paddingVertical: 6, paddingHorizontal: 8 }}>
+            <View style={{ flexDirection: "row", paddingVertical: headerPaddingVertical, paddingHorizontal: headerPaddingHorizontal }}>
               <View style={{ width: COL_NAME_W }}>
-                <Text style={{ fontSize: 11, fontWeight: "700", color: colors.textPrimary, textTransform: "uppercase", letterSpacing: 0.5 }}>Line Item</Text>
+                <Text style={{ fontSize: headerFontSize, fontWeight: "700", color: colors.textPrimary, textTransform: "uppercase", letterSpacing: 0.5 }}>Line Item</Text>
               </View>
               {periods.map((p) => (
                 <Pressable
                   key={p.period}
                   onPress={() => deleteMode && togglePeriod(p.period)}
-                  style={{ width: COL_VAL_W, alignItems: "flex-end", flexDirection: "row", justifyContent: "flex-end", gap: 4 }}
+                  style={{ width: COL_VAL_W, alignItems: "flex-end", flexDirection: "row", justifyContent: "flex-end", gap: headerGap }}
                 >
                   {deleteMode && (
                     <View style={{
-                      width: 14, height: 14, borderRadius: 3, borderWidth: 1.5,
+                      width: selectionBoxSize, height: selectionBoxSize, borderRadius: 3, borderWidth: 1.5,
                       borderColor: selectedPeriods.has(p.period) ? colors.danger : colors.textMuted,
                       backgroundColor: selectedPeriods.has(p.period) ? colors.danger : "transparent",
                       alignItems: "center", justifyContent: "center",
                     }}>
-                      {selectedPeriods.has(p.period) && <FontAwesome name="check" size={8} color="#fff" />}
+                      {selectedPeriods.has(p.period) && <FontAwesome name="check" size={selectionCheckSize} color="#fff" />}
                     </View>
                   )}
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: colors.textPrimary, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <Text style={{ fontSize: headerFontSize, fontWeight: "700", color: colors.textPrimary, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     {p.label}
                   </Text>
                 </Pressable>
@@ -146,6 +152,7 @@ export function StatementsTable({
                     onCancelEdit={handleCancelEdit}
                     onCreateSave={handleCreateSave}
                     onDeleteRow={handleDeleteRow}
+                    isDesktop={isDesktop}
                     mergeMode={mergeMode}
                     mergeSelected={mergeSelection.includes(item.code)}
                     onToggleMerge={handleToggleMerge}

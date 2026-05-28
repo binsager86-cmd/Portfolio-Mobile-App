@@ -34,7 +34,7 @@ import {
     logStatementChange,
 } from "@/services/api/analytics";
 import { STMNT_META } from "../types";
-import { inferQuarterFromDate } from "../utils";
+import { formatLineItemValue, inferQuarterFromDate } from "../utils";
 import type { PeriodInfo } from "../components/StatementTableRows";
 
 const RECONCILE_OPTS = [
@@ -336,7 +336,7 @@ export function useStatementsTableState(
       const row: (string | number | null)[] = [item.name];
       for (const p of periods) {
         const val = p.items[item.code]?.amount;
-        row.push(val ?? null);
+        row.push(val != null ? formatLineItemValue(item.name, val) : null);
       }
       return row;
     });
@@ -373,8 +373,8 @@ export function useStatementsTableState(
     }
   }, [periods, deleteAllMut]);
 
-  const COL_NAME_W = isDesktop ? 200 : 160;
-  const COL_VAL_W = isDesktop ? 120 : 105;
+  const COL_NAME_W = isDesktop ? 260 : 160;
+  const COL_VAL_W = isDesktop ? 148 : 105;
 
   return {
     editingKey, selectedPeriods, setSelectedPeriods, deleteMode, setDeleteMode,

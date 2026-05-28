@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import type { ThemePalette } from "@/constants/theme";
-import { formatNumber } from "../utils";
+import { formatLineItemValue } from "../utils";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ export type PeriodInfo = {
 
 export const EditableCell = React.memo(function EditableCell({
   itemId, value, isTotal, isEdited, colWidth, colors, editingKey,
-  onStartEdit, onSave, onCancel, cellEditKey, onCreateSave,
+  onStartEdit, onSave, onCancel, cellEditKey, onCreateSave, cellLabel,
 }: {
   itemId: number | null;
   value: number | undefined | null;
@@ -41,6 +41,7 @@ export const EditableCell = React.memo(function EditableCell({
   onCancel: () => void;
   cellEditKey?: string;
   onCreateSave?: (amount: number) => void;
+  cellLabel: string;
 }) {
   const actualKey = itemId != null ? String(itemId) : cellEditKey ?? null;
   const isEditing = editingKey != null && actualKey === editingKey;
@@ -101,7 +102,7 @@ export const EditableCell = React.memo(function EditableCell({
           color: value != null && value < 0 ? colors.danger : (isTotal ? colors.textPrimary : colors.textSecondary),
           fontVariant: ["tabular-nums"], textAlign: "right",
         }}>
-          {value != null ? formatNumber(value) : "-"}
+          {value != null ? formatLineItemValue(cellLabel, value) : "-"}
         </Text>
         {isEdited && (
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warning, marginLeft: 4 }} />
@@ -207,6 +208,7 @@ export function SortableRow({
             onSave={onSaveEdit}
             onCancel={onCancelEdit}
             cellEditKey={dashKey}
+            cellLabel={item.name}
             onCreateSave={dashKey ? (amount: number) => onCreateSave(p.statementId, item.code, item.name, rowIdx + 1, amount) : undefined}
           />
         );

@@ -129,6 +129,60 @@ function getVisibleBars(
   return example.bars.slice(0, visibleEnd + 1);
 }
 
+function asFinitePositive(value?: number | null): number | null {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+  return value > 0 ? value : null;
+}
+
+function normalizeVisibleBars(rawBars: DnaSetupBar[]): DnaSetupBar[] {
+  if (rawBars.length === 0) return [];
+
+  const firstKnownClose =
+    rawBars.reduce<number | null>((acc, bar) => {
+      if (acc != null) return acc;
+      return asFinitePositive(bar.close) ?? asFinitePositive(bar.open);
+    }, null) ?? 1;
+
+  const normalized: DnaSetupBar[] = [];
+  let prevClose: number | null = null;
+
+  rawBars.forEach((bar) => {
+    const close =
+      asFinitePositive(bar.close)
+      ?? asFinitePositive(bar.open)
+      ?? prevClose
+      ?? firstKnownClose;
+    const open = asFinitePositive(bar.open) ?? prevClose ?? close;
+
+    const bodyHigh = Math.max(open, close);
+    const bodyLow = Math.min(open, close);
+
+    let high = asFinitePositive(bar.high) ?? bodyHigh;
+    let low = asFinitePositive(bar.low) ?? bodyLow;
+
+    if (high < bodyHigh) high = bodyHigh;
+    if (low > bodyLow) low = bodyLow;
+    if (high < low) {
+      const tmp = high;
+      high = low;
+      low = tmp;
+    }
+
+    normalized.push({
+      ...bar,
+      open,
+      high,
+      low,
+      close,
+    });
+    prevClose = close;
+  });
+
+  return normalized;
+}
+
 // ── Main component ───────────────────────────────────────────────────
 
 export const BehavioralDnaSetupChart = React.memo(
@@ -160,7 +214,7 @@ export const BehavioralDnaSetupChart = React.memo(
 
     // ── Derived bar data ─────────────────────────────────────────
     const bars = useMemo(
-      () => getVisibleBars(example, selectedWindowDays),
+      () => normalizeVisibleBars(getVisibleBars(example, selectedWindowDays)),
       [example, selectedWindowDays],
     );
 
@@ -170,6 +224,7 @@ export const BehavioralDnaSetupChart = React.memo(
 
     // Y scales
     const [priceMin, priceMax] = useMemo(() => {
+      if (bars.length === 0) return [0, 1] as [number, number];
       const highs = bars.map((b) => b.high ?? b.close ?? 0);
       const lows  = bars.map((b) => b.low  ?? b.close ?? 0);
       const yMax  = Math.max(...highs);
