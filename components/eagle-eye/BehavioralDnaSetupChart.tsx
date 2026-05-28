@@ -1,20 +1,9 @@
 /**
- * BehavioralDnaSetupChart — TradingView-inspired candlestick chart
- * for Eagle Eye Behavioral DNA setup examples.
+ * BehavioralDnaSetupChart
  *
- * Visual language adapted from CandlestickChart (Whale Tracker / F.Signal):
- *   • Japanese candlesticks with bull/bear coloring + wicks
- *   • Persistent OHLCV info bar (last bar, or hovered bar on web)
- *   • Price grid with Y-axis price labels
- *   • X-axis date labels
- *   • Last-price dashed horizontal marker + label pill
- *   • Setup window highlight zone (shaded region)
- *   • Forward horizon marker (dashed vertical line)
- *   • Observation dot overlays pinned to candle close prices
- *   • Volume pane — bull/bear colored, same width as candles
- *   • Indicator pane — RSI line (orange) + ADX line (teal) + MACD histogram
- *   • Web: crosshair on mouse-move + floating OHLCV tooltip
- *   • Mobile: tap/press to inspect nearest candle
+ * Interactive multi-pane setup evidence chart for Eagle Eye Behavioral DNA.
+ * Uses candlestick rendering with setup zone, horizon marker, volume,
+ * indicators, tooltip, and crosshair behavior.
  */
 
 /* eslint-disable custom-styles/no-hardcoded-styles */
@@ -310,7 +299,7 @@ export const BehavioralDnaSetupChart = React.memo(
         bars.map((bar, i) => {
           const cx         = PAD_LEFT + slotW * i + slotW / 2;
           // When open is missing fall back to the previous bar's close so
-          // bull/bear direction is still meaningful (not always true due to null≥0).
+          // bull/bear direction is still meaningful.
           const prevClose  = i > 0 ? (bars[i - 1].close ?? bar.close) : bar.close;
           const openVal    = bar.open ?? prevClose ?? 0;
           const isBull     = (bar.close ?? 0) >= openVal;
@@ -323,9 +312,7 @@ export const BehavioralDnaSetupChart = React.memo(
           const bodyH      = Math.max(Math.abs(yC - yO), 2);
           return (
             <G key={`candle-${bar.date}-${i}`}>
-              {/* Wick */}
               <Line x1={cx} y1={yH} x2={cx} y2={yL} stroke={color} strokeWidth={2} />
-              {/* Body */}
               <Rect
                 x={cx - barWidth / 2}
                 y={bodyTop}
@@ -605,7 +592,7 @@ export const BehavioralDnaSetupChart = React.memo(
               />
             )}
 
-            {/* ── Candlesticks ──────────────────────────────── */}
+            {/* Candlesticks */}
             {candleElements}
 
             {/* ── Observation dots ──────────────────────────── */}
