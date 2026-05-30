@@ -53,6 +53,7 @@ import api, {
   login,
   getOverview,
   getHoldings,
+  getRealizedProfit,
   getTransactions,
   createTransaction,
   deleteTransaction,
@@ -351,6 +352,44 @@ describe("API Service", () => {
 
       expect(api.get).toHaveBeenCalledWith("/api/portfolio/fx-rate");
       expect(result.usd_kwd).toBe(0.307);
+    });
+  });
+
+  describe("getRealizedProfit()", () => {
+    it("normalizes legacy realized rows when the explicit dividend field is missing", async () => {
+      jest.spyOn(api, "get").mockResolvedValueOnce({
+        data: {
+          status: "ok",
+          data: {
+            total_realized_kwd: 55,
+            total_profit_kwd: 55,
+            total_loss_kwd: 0,
+            details: [
+              {
+                id: 1,
+                symbol: "NBK",
+                portfolio: "KFH",
+                txn_date: "2025-05-20",
+                shares: 400,
+                sell_value: 1000,
+                avg_cost_at_txn: 2,
+                realized_pnl: 55,
+                realized_pnl_kwd: 55,
+                net_pnl_kwd: 80,
+                currency: "KWD",
+                source: "stored",
+              },
+            ],
+          },
+        },
+      });
+
+      const result = await getRealizedProfit();
+
+      expect(api.get).toHaveBeenCalledWith("/api/v1/analytics/realized-profit");
+      expect(result.total_dividends_allocated_kwd).toBe(25);
+      expect(result.details[0].dividends_allocated_kwd).toBe(25);
+      expect(result.details[0].net_pnl_kwd).toBe(80);
     });
   });
 

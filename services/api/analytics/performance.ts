@@ -6,10 +6,83 @@ import api from "../client";
 import type {
   PerformanceData,
   RealizedProfitData,
+  RealizedProfitDetail,
   RiskMetrics,
   SnapshotRecord,
   TradingSummaryResponse,
 } from "../types";
+
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function roundKwd(value: number): number {
+  if (Math.abs(value) < 0.0005) return 0;
+  return Math.round(value * 1000) / 1000;
+}
+
+function normalizeRealizedProfitDetail(detail: RealizedProfitDetail | Record<string, unknown>): RealizedProfitDetail {
+  const realizedPnlKwd = asFiniteNumber(detail.realized_pnl_kwd) ?? asFiniteNumber(detail.realizedPnlKwd) ?? 0;
+  const explicitDividend =
+    asFiniteNumber(detail.dividends_allocated_kwd) ??
+    asFiniteNumber(detail.dividendsAllocatedKwd) ??
+    asFiniteNumber(detail.cash_dividends_kwd) ??
+    asFiniteNumber(detail.cashDividendsKwd) ??
+    asFiniteNumber(detail.cash_dividend) ??
+    asFiniteNumber(detail.cashDividend) ??
+    asFiniteNumber(detail.dividend) ??
+    asFiniteNumber(detail.dividends_received_kwd) ??
+    asFiniteNumber(detail.dividendsReceivedKwd) ??
+    asFiniteNumber(detail.dividends_received) ??
+    asFiniteNumber(detail.dividendsReceived);
+  const rawNetPnlKwd = asFiniteNumber(detail.net_pnl_kwd) ?? asFiniteNumber(detail.netPnlKwd);
+  const derivedDividend = rawNetPnlKwd != null ? roundKwd(rawNetPnlKwd - realizedPnlKwd) : undefined;
+  const dividendsAllocatedKwd = roundKwd(explicitDividend ?? derivedDividend ?? 0);
+  const netPnlKwd = roundKwd(rawNetPnlKwd ?? (realizedPnlKwd + dividendsAllocatedKwd));
+
+  return {
+    ...(detail as RealizedProfitDetail),
+    id: asFiniteNumber(detail.id) ?? 0,
+    symbol: typeof detail.symbol === "string" ? detail.symbol : typeof detail.stock_symbol === "string" ? detail.stock_symbol : "",
+    portfolio: typeof detail.portfolio === "string" ? detail.portfolio : "",
+    txn_date: typeof detail.txn_date === "string" ? detail.txn_date : typeof detail.txnDate === "string" ? detail.txnDate : "",
+    shares: asFiniteNumber(detail.shares) ?? 0,
+    sell_value: asFiniteNumber(detail.sell_value) ?? asFiniteNumber(detail.sellValue) ?? 0,
+    avg_cost_at_txn: asFiniteNumber(detail.avg_cost_at_txn) ?? asFiniteNumber(detail.avgCostAtTxn) ?? 0,
+    realized_pnl: asFiniteNumber(detail.realized_pnl) ?? asFiniteNumber(detail.realizedPnl) ?? realizedPnlKwd,
+    realized_pnl_kwd: roundKwd(realizedPnlKwd),
+    dividends_allocated_kwd: dividendsAllocatedKwd,
+    net_pnl_kwd: netPnlKwd,
+    currency: typeof detail.currency === "string" ? detail.currency : "KWD",
+    source: typeof detail.source === "string" ? detail.source : "calculated",
+  };
+}
+
+function normalizeRealizedProfit(data: RealizedProfitData | Record<string, unknown>): RealizedProfitData {
+  const details = Array.isArray(data.details)
+    ? data.details.map((detail) => normalizeRealizedProfitDetail(detail as RealizedProfitDetail | Record<string, unknown>))
+    : [];
+
+  return {
+    ...(data as RealizedProfitData),
+    total_realized_kwd: roundKwd(asFiniteNumber(data.total_realized_kwd) ?? asFiniteNumber(data.totalRealizedKwd) ?? 0),
+    total_profit_kwd: roundKwd(asFiniteNumber(data.total_profit_kwd) ?? asFiniteNumber(data.totalProfitKwd) ?? 0),
+    total_loss_kwd: roundKwd(asFiniteNumber(data.total_loss_kwd) ?? asFiniteNumber(data.totalLossKwd) ?? 0),
+    total_dividends_allocated_kwd: roundKwd(
+      asFiniteNumber(data.total_dividends_allocated_kwd) ??
+        asFiniteNumber(data.totalDividendsAllocatedKwd) ??
+        details.reduce((sum, detail) => sum + (detail.dividends_allocated_kwd ?? 0), 0),
+    ),
+    details,
+  };
+}
 
 // ── Performance & Risk ──────────────────────────────────────────────
 
@@ -60,7 +133,7 @@ export async function getRealizedProfit(): Promise<RealizedProfitData> {
   const { data } = await api.get<{ status: string; data: RealizedProfitData }>(
     "/api/v1/analytics/realized-profit"
   );
-  return data.data;
+  return normalizeRealizedProfit(data.data);
 }
 
 /** Get portfolio snapshots (date-filtered). */
