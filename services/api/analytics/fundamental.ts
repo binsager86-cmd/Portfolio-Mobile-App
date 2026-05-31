@@ -3,7 +3,7 @@
  */
 
 import api from "../client";
-import type { AnalysisStock, FinancialStatement } from "../types";
+import type { AnalysisStock, FinancialStatement, LatestPreferredStatementPeriod } from "../types";
 
 // ── Analysis Stocks ─────────────────────────────────────────────────
 
@@ -73,8 +73,15 @@ export async function deleteAnalysisStock(stockId: number): Promise<void> {
 export async function getStatements(
   stockId: number,
   statementType?: string,
-): Promise<{ statements: FinancialStatement[]; count: number }> {
-  const { data } = await api.get<{ status: string; data: { statements: FinancialStatement[]; count: number } }>(
+): Promise<{ statements: FinancialStatement[]; count: number; latest_preferred?: LatestPreferredStatementPeriod | null }> {
+  const { data } = await api.get<{
+    status: string;
+    data: {
+      statements: FinancialStatement[];
+      count: number;
+      latest_preferred?: LatestPreferredStatementPeriod | null;
+    };
+  }>(
     `/api/v1/fundamental/stocks/${stockId}/statements`,
     { params: statementType ? { statement_type: statementType } : undefined },
   );

@@ -9,6 +9,7 @@
  *   GET  /eagle-eye/simulator/portfolios/:strategy/performance
  *   GET  /eagle-eye/simulator/activity
  *   POST /eagle-eye/simulator/positions/:id/close
+ *   POST /eagle-eye/simulator/reset
  *   POST /eagle-eye/simulator/run
  */
 
@@ -298,6 +299,21 @@ export function useRunSimulatorNow() {
   return useMutation({
     mutationFn: async () => {
       const res = await api.post("/api/v1/eagle-eye/simulator/run");
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: simKeys.all });
+    },
+  });
+}
+
+export function useResetSimulator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runAfterReset = false }: { runAfterReset?: boolean } = {}) => {
+      const res = await api.post("/api/v1/eagle-eye/simulator/reset", null, {
+        params: { run_after_reset: runAfterReset },
+      });
       return res.data;
     },
     onSuccess: () => {

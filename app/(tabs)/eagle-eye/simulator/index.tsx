@@ -10,6 +10,7 @@ import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { useThemeStore } from "@/services/themeStore";
 import {
+  useResetSimulator,
   useSimulatorActivity,
   useSimulatorCompare,
   useSimulatorPortfolios,
@@ -20,6 +21,7 @@ import {
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   Pressable,
   RefreshControl,
@@ -295,7 +297,9 @@ export default function SimulatorIndexScreen() {
 
   const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios();
   const runNow = useRunSimulatorNow();
+  const resetNow = useResetSimulator();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
+  const [resetStatus, setResetStatus] = useState<"idle" | "ok" | "err">("idle");
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -310,6 +314,33 @@ export default function SimulatorIndexScreen() {
       setTimeout(() => setRunStatus("idle"), 4000);
     }
   }, [runNow]);
+
+  const handleResetNow = useCallback(() => {
+    Alert.alert(
+      "Reset Simulator?",
+      "This will clear all simulator trades and restart all three strategies from today.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setResetStatus("idle");
+              try {
+                await resetNow.mutateAsync({ runAfterReset: false });
+                setResetStatus("ok");
+                setTimeout(() => setResetStatus("idle"), 4000);
+              } catch {
+                setResetStatus("err");
+                setTimeout(() => setResetStatus("idle"), 4000);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  }, [resetNow]);
 
   const handleCardPress = useCallback((strategy: string) => {
     router.push(`/eagle-eye/simulator/${strategy.toLowerCase()}`);
@@ -349,7 +380,7 @@ export default function SimulatorIndexScreen() {
           Paper Trading Simulator
         </Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}> 
-          Three parallel strategies • 10,000 KWD each • Live forward from May 14, 2026
+          Three parallel strategies • 10,000 KWD each • Live forward from today
         </Text>
 
         {/* Manual run button */}
@@ -378,6 +409,36 @@ export default function SimulatorIndexScreen() {
                 : runStatus === "err"
                 ? "✗ Run failed — check logs"
                 : "▶  Run Simulator Now"}
+            </Text>
+          )}
+        </Pressable>
+
+        {/* Reset button */}
+        <Pressable
+          onPress={handleResetNow}
+          disabled={resetNow.isPending || runNow.isPending}
+          style={[
+            styles.resetBtn,
+            {
+              borderColor:
+                resetStatus === "ok"
+                  ? colors.success
+                  : resetStatus === "err"
+                  ? colors.danger
+                  : colors.borderColor,
+              opacity: resetNow.isPending ? 0.6 : 1,
+            },
+          ]}
+        >
+          {resetNow.isPending ? (
+            <ActivityIndicator size="small" color={colors.textPrimary} />
+          ) : (
+            <Text style={[styles.resetBtnText, { color: colors.textPrimary }]}> 
+              {resetStatus === "ok"
+                ? "✓ Simulator reset"
+                : resetStatus === "err"
+                ? "✗ Reset failed"
+                : "Reset Simulator Data"}
             </Text>
           )}
         </Pressable>
@@ -475,4 +536,15 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   runBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  resetBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    minHeight: 44,
+  },
+  resetBtnText: { fontSize: 14, fontWeight: "600" },
 });

@@ -5,7 +5,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";
@@ -16,8 +16,16 @@ import type { MetricsCategoryData } from "@/lib/exportMetricsPdf";
 import { calculateMetrics, StockMetric } from "@/services/api";
 import { st } from "../styles";
 import { CATEGORY_LABELS, type PanelWithSymbolProps } from "../types";
-import { buildHistoricalMetrics, enrichMetricsWithFallbacks, formatMetricValue } from "../utils";
+import { buildHistoricalMetrics, buildMetricYearLabels, enrichMetricsWithFallbacks, formatMetricValue } from "../utils";
 import { ActionButton, Card, Chip, ExportBar, FadeIn, SectionHeader } from "./shared";
+
+function normalizeQuarter(raw: unknown): number | null {
+  if (raw == null) return null;
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return null;
+  const qi = Math.trunc(q);
+  return qi >= 1 && qi <= 4 ? qi : null;
+}
 
 export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWithSymbolProps) {
   const queryClient = useQueryClient();
@@ -34,6 +42,20 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   }, [stmtQ.data]);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+
+  useEffect(() => {
+    const latest = stmtQ.data?.latest_preferred?.period_end_date ?? null;
+    if (!latest) return;
+    if (!selectedPeriod) {
+      setSelectedPeriod(latest);
+      return;
+    }
+    const selectedStillExists = periods.some((p) => p.period_end_date === selectedPeriod);
+    if (!selectedStillExists) {
+      setSelectedPeriod(latest);
+    }
+  }, [stmtQ.data?.latest_preferred?.period_end_date, periods, selectedPeriod]);
+
   const { data, isLoading, refetch, isFetching } = useStockMetrics(stockId);
 
   const calcMut = useMutation({
@@ -85,13 +107,38 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
 
   const categories = Object.keys(grouped);
   const historicalCategories = useMemo(() => buildHistoricalMetrics(allMetrics), [allMetrics]);
+  const metricYearLabels = useMemo(() => {
+    const years = [...new Set(allMetrics.map((m) => m.fiscal_year))].sort((a, b) => a - b);
+    return buildMetricYearLabels(years, statements);
+  }, [allMetrics, statements]);
+  const periodChipLabels = useMemo(() => {
+    const latestPeriodByYear = new Map<number, string>();
+    for (const p of periods) {
+      const current = latestPeriodByYear.get(p.fiscal_year);
+      if (!current || p.period_end_date > current) {
+        latestPeriodByYear.set(p.fiscal_year, p.period_end_date);
+      }
+    }
+
+    const labels: Record<string, string> = {};
+    for (const p of periods) {
+      const q = normalizeQuarter(p.fiscal_quarter);
+      const yearLabel = metricYearLabels[p.fiscal_year] ?? `FY${p.fiscal_year}`;
+      const isTtmYear = yearLabel.startsWith("TTM ");
+      const isLatestInYear = latestPeriodByYear.get(p.fiscal_year) === p.period_end_date;
+      labels[p.period_end_date] = isTtmYear && isLatestInYear
+        ? yearLabel
+        : `FY${p.fiscal_year}${q != null ? ` Q${q}` : ""}`;
+    }
+    return labels;
+  }, [periods, metricYearLabels]);
 
   const exportTables = useCallback((): TableData[] => {
     return Object.entries(historicalCategories).map(([cat, { metricNames, yearData, years }]) => {
       const catLabel = CATEGORY_LABELS[cat]?.label ?? cat;
       return {
         title: catLabel,
-        headers: ["Metric", ...years.map((yr) => `FY${yr}`)],
+        headers: ["Metric", ...years.map((yr) => metricYearLabels[yr] ?? `FY${yr}`)],
         rows: metricNames.map((name) => [
           name,
           ...years.map((yr) => {
@@ -101,7 +148,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
         ]),
       };
     });
-  }, [historicalCategories]);
+  }, [historicalCategories, metricYearLabels]);
 
   return (
     <ScrollView
@@ -122,7 +169,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
               {periods.map((p) => (
                 <Chip
                   key={p.period_end_date}
-                  label={`FY${p.fiscal_year}${p.fiscal_quarter ? ` Q${p.fiscal_quarter}` : ""}`}
+                  label={periodChipLabels[p.period_end_date] ?? `FY${p.fiscal_year}`}
                   active={selectedPeriod === p.period_end_date}
                   onPress={() => setSelectedPeriod(p.period_end_date)}
                   colors={colors}
@@ -185,7 +232,14 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
                   const pdfCats: Record<string, MetricsCategoryData> = {};
                   for (const [cat, { metricNames, yearData, years }] of Object.entries(historicalCategories)) {
                     const catInfo = CATEGORY_LABELS[cat] ?? { label: cat, color: "#6366f1" };
-                    pdfCats[cat] = { label: catInfo.label, color: catInfo.color, metricNames, yearData, years };
+                    pdfCats[cat] = {
+                      label: catInfo.label,
+                      color: catInfo.color,
+                      metricNames,
+                      yearData,
+                      years,
+                      yearLabels: metricYearLabels,
+                    };
                   }
                   await exportMetricsPdf(pdfCats, stockSymbol, allMetrics.length);
                 } else {
@@ -226,7 +280,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
                           {/* Header */}
                           <View style={[st.metricTableHeader, { borderBottomColor: colors.borderColor, paddingHorizontal: 0 }]}>
                             {years.map((yr) => (
-                              <Text key={yr} style={[st.metricTableValCell, { color: colors.textPrimary, fontWeight: "800" }]}>FY{yr}</Text>
+                              <Text key={yr} style={[st.metricTableValCell, { color: colors.textPrimary, fontWeight: "800" }]}>{metricYearLabels[yr] ?? `FY${yr}`}</Text>
                             ))}
                           </View>
                           {/* Rows */}

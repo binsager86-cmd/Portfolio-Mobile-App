@@ -94,7 +94,7 @@ export function useValuationCalculations(stockId: number) {
     if (!defaults.data || populated.current) return;
     populated.current = true;
     const d = defaults.data;
-    if (d.eps != null) setEps(String(d.eps));
+    if (d.eps != null) setEps(d.eps.toFixed(3));
     // Graham-specific defaults
     if (d.graham_growth_cagr != null) setGrahamGrowth(String(d.graham_growth_cagr));
     if (d.bond_yield != null) setCorpYield(String(d.bond_yield));
@@ -109,7 +109,7 @@ export function useValuationCalculations(stockId: number) {
     if (d.total_cash != null) setCash(String(d.total_cash));
     if (d.total_debt != null) setDebt(String(d.total_debt));
     // EPS as default metric value for multiples
-    if (d.eps != null) setMv(String(d.eps));
+    if (d.eps != null) setMv(d.eps.toFixed(3));
     // WACC risk-free rate
     if (d.wacc_risk_free_rate != null) setWaccRf((d.wacc_risk_free_rate * 100).toFixed(2));
     // WACC tax rate

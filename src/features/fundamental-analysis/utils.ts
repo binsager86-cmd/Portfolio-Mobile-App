@@ -28,6 +28,66 @@ export function buildHistoricalMetrics(allMetrics: StockMetric[]) {
   return result;
 }
 
+function normalizeQuarter(raw: unknown): number | null {
+  if (raw == null) return null;
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return null;
+  const qi = Math.trunc(q);
+  return qi >= 1 && qi <= 4 ? qi : null;
+}
+
+function isQuarterlySource(sourceFile: string | null | undefined): boolean {
+  return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
+}
+
+function isAnnualStatementForLabels(statement: FinancialStatement): boolean {
+  const quarter = normalizeQuarter(statement.fiscal_quarter);
+  if (quarter === 4) return true;
+  if (quarter != null) return false;
+  if (isQuarterlySource(statement.source_file)) return false;
+  return true;
+}
+
+/**
+ * Build display labels for metric years.
+ *
+ * If a fiscal year has no annual statement (Q4/year-end) and only a running
+ * quarter period, label it as "TTM {year}" instead of "FY{year}".
+ */
+export function buildMetricYearLabels(
+  years: number[],
+  statements: FinancialStatement[],
+): Record<number, string> {
+  const annualByYear = new Set<number>();
+  const latestByYear = new Map<number, { periodEndDate: string; quarter: number | null }>();
+
+  for (const statement of statements) {
+    const year = Number(statement.fiscal_year);
+    if (!Number.isFinite(year)) continue;
+
+    if (isAnnualStatementForLabels(statement)) {
+      annualByYear.add(year);
+    }
+
+    const quarter = normalizeQuarter(statement.fiscal_quarter);
+    const periodEndDate = String(statement.period_end_date ?? "");
+    const current = latestByYear.get(year);
+    if (!current || periodEndDate > current.periodEndDate) {
+      latestByYear.set(year, { periodEndDate, quarter });
+    }
+  }
+
+  const labels: Record<number, string> = {};
+  for (const year of years) {
+    const latest = latestByYear.get(year);
+    const isTtmYear = !annualByYear.has(year)
+      && latest?.quarter != null
+      && latest.quarter !== 4;
+    labels[year] = isTtmYear ? `TTM ${year}` : `FY${year}`;
+  }
+  return labels;
+}
+
 export function formatNumber(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }

@@ -3,8 +3,8 @@
  * Eagle Eye — Scanner screen
  *
  * Shows all scored stocks sorted by confidence descending.
- * Supports filtering by min confidence, BUY+, and EARLY_BREAKOUT stage.
- * Sortable by confidence or R:R ratio.
+ * Supports filtering by confidence, rating, volume context, and stage.
+ * Sortable by clicking any table column header.
  */
 
 import { getRegimeColors, getStageColors } from "@/constants/eagleEyeColors";
@@ -41,18 +41,57 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const CONFIDENCE_STEPS = [0, 40, 60, 75] as const;
 const HIGH_VOLUME_RVOL_THRESHOLD = 1.5;
 const STAGE_FILTER_ORDER = [
-  "DORMANT",
-  "STEALTH_ACCUMULATION",
-  "EARLY_BREAKOUT",
-  "MARKUP_TRENDING",
-  "ACCELERATION_CLIMAX",
-  "DISTRIBUTION_TOPPING",
-  "MARKDOWN_DECLINE",
-  "CAPITULATION_EXHAUSTION",
+  "ACCUMULATION",
+  "EARLY_MARKUP",
+  "MARKUP",
+  "DISTRIBUTION",
+  "MARKDOWN",
+  "NEUTRAL_AMBIGUOUS",
+  "INSUFFICIENT_HISTORY",
+  "INACTIVE_OR_DELISTED",
 ] as const;
-type SortField = "conf" | "rr";
+type SortField =
+  | "rating"
+  | "ticker"
+  | "stage"
+  | "volume"
+  | "price"
+  | "entry"
+  | "tp1"
+  | "bvps"
+  | "pe"
+  | "rr"
+  | "conf";
 type SortDir = "asc" | "desc";
 type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
+
+const RATING_SORT_WEIGHT: Record<string, number> = {
+  STRONG_BUY: 5,
+  BUY: 4,
+  HOLD: 3,
+  REDUCE: 2.5,
+  SELL: 2,
+  AVOID: 1.5,
+  STRONG_SELL: 1,
+  INSUFFICIENT_DATA: 0,
+};
+
+const STAGE_SORT_WEIGHT: Record<string, number> = {
+  ACCUMULATION: 8,
+  EARLY_MARKUP: 7,
+  MARKUP: 6,
+  DISTRIBUTION: 5,
+  MARKDOWN: 4,
+  NEUTRAL_AMBIGUOUS: 3,
+  INSUFFICIENT_HISTORY: 2,
+  INACTIVE_OR_DELISTED: 1,
+  EARLY_BREAKOUT: 7,
+  MARKUP_TRENDING: 6,
+  DISTRIBUTION_TOPPING: 5,
+  MARKDOWN_DECLINE: 4,
+  DORMANT: 3,
+  DATA_ISSUE: 0,
+};
 
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
@@ -77,6 +116,12 @@ export default function EagleEyeScannerScreen() {
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const sortArrow = useCallback(
+    (field: SortField) =>
+      sortBy === field ? (sortDir === "desc" ? " ▼" : " ▲") : "",
+    [sortBy, sortDir]
+  );
 
   // Lazy load: don't fetch until the user actually taps into this tab
   const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
@@ -147,7 +192,11 @@ export default function EagleEyeScannerScreen() {
     }
     if (sellRatingOnly) {
       list = list.filter(
-        (s) => s.rating === "SELL" || s.rating === "STRONG_SELL"
+        (s) =>
+          s.rating === "SELL"
+          || s.rating === "STRONG_SELL"
+          || s.rating === "REDUCE"
+          || s.rating === "AVOID"
       );
     }
     if (highVolumeOnly) {
@@ -161,13 +210,43 @@ export default function EagleEyeScannerScreen() {
     }
     // sort
     list = [...list].sort((a, b) => {
+      const numberOrNegInf = (value: number | null | undefined) =>
+        Number.isFinite(value) ? (value as number) : -Infinity;
+
+      const ratingWeight = (value: string | null | undefined) =>
+        RATING_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
+
+      const stageWeight = (value: string | null | undefined) =>
+        STAGE_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
+
+      const relVolume = (stock: RatedStock) =>
+        numberOrNegInf(stock.volume_context?.relative_volume ?? null);
+
       let diff: number;
-      if (sortBy === "conf") {
+      if (sortBy === "rating") {
+        diff = ratingWeight(b.rating) - ratingWeight(a.rating);
+      } else if (sortBy === "ticker") {
+        diff = b.ticker.localeCompare(a.ticker);
+      } else if (sortBy === "stage") {
+        diff = stageWeight(b.stage) - stageWeight(a.stage);
+      } else if (sortBy === "volume") {
+        diff = relVolume(b) - relVolume(a);
+      } else if (sortBy === "conf") {
         diff = b.confidence - a.confidence;
-      } else {
+      } else if (sortBy === "rr") {
         const rrA = computeRR(a) ?? -Infinity;
         const rrB = computeRR(b) ?? -Infinity;
         diff = rrB - rrA;
+      } else if (sortBy === "price") {
+        diff = numberOrNegInf(b.last_price) - numberOrNegInf(a.last_price);
+      } else if (sortBy === "entry") {
+        diff = numberOrNegInf(b.entry_primary) - numberOrNegInf(a.entry_primary);
+      } else if (sortBy === "tp1") {
+        diff = numberOrNegInf(b.tp1) - numberOrNegInf(a.tp1);
+      } else if (sortBy === "bvps") {
+        diff = numberOrNegInf(b.book_value_per_share) - numberOrNegInf(a.book_value_per_share);
+      } else {
+        diff = numberOrNegInf(b.pe_ratio) - numberOrNegInf(a.pe_ratio);
       }
       return sortDir === "asc" ? -diff : diff;
     });
@@ -567,86 +646,167 @@ export default function EagleEyeScannerScreen() {
       >
         {isTableView ? (
           <>
-            <Text
-              style={[
-                styles.colHeaderCell,
-                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.rating },
-              ]}
+            <Pressable
+              onPress={() => toggleSort("rating")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.rating }]}
+              hitSlop={6}
             >
-              Rating
-            </Text>
-            <Text
-              style={[
-                styles.colHeaderCell,
-                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.ticker },
-              ]}
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "rating" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Rating${sortArrow("rating")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("ticker")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.ticker }]}
+              hitSlop={6}
             >
-              Ticker
-            </Text>
-            <Text
-              style={[
-                styles.colHeaderCell,
-                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.stage },
-              ]}
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "ticker" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Ticker${sortArrow("ticker")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("stage")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.stage }]}
+              hitSlop={6}
             >
-              Stage
-            </Text>
-            <Text
-              style={[
-                styles.colHeaderCell,
-                { color: colors.textMuted, width: STOCK_TABLE_COL_WIDTHS.volume },
-              ]}
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "stage" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Stage${sortArrow("stage")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("volume")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.volume }]}
+              hitSlop={6}
             >
-              Volume
-            </Text>
-            <Text
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "volume" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Volume${sortArrow("volume")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("price")}
               style={[
-                styles.colHeaderCell,
-                {
-                  color: colors.textMuted,
-                  width: STOCK_TABLE_COL_WIDTHS.entry,
-                  textAlign: "right",
-                },
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.current },
               ]}
+              hitSlop={6}
             >
-              Entry
-            </Text>
-            <Text
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "price" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Current${sortArrow("price")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("entry")}
               style={[
-                styles.colHeaderCell,
-                {
-                  color: colors.textMuted,
-                  width: STOCK_TABLE_COL_WIDTHS.tp1,
-                  textAlign: "right",
-                },
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.entry },
               ]}
+              hitSlop={6}
             >
-              TP1
-            </Text>
-            <Text
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "entry" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Entry${sortArrow("entry")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("tp1")}
               style={[
-                styles.colHeaderCell,
-                {
-                  color: colors.textMuted,
-                  width: STOCK_TABLE_COL_WIDTHS.bvps,
-                  textAlign: "right",
-                },
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.tp1 },
               ]}
+              hitSlop={6}
             >
-              BVPS
-            </Text>
-            <Text
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "tp1" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`TP1${sortArrow("tp1")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("bvps")}
               style={[
-                styles.colHeaderCell,
-                {
-                  color: colors.textMuted,
-                  width: STOCK_TABLE_COL_WIDTHS.pe,
-                  textAlign: "right",
-                },
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.bvps },
               ]}
+              hitSlop={6}
             >
-              P/E
-            </Text>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "bvps" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`BVPS${sortArrow("bvps")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("pe")}
+              style={[
+                styles.colHeaderBtn,
+                styles.colHeaderSortBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.pe },
+              ]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "pe" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`P/E${sortArrow("pe")}`}
+              </Text>
+            </Pressable>
             <Pressable
               onPress={() => toggleSort("rr")}
               style={[styles.colHeaderBtn, styles.colHeaderSortBtn, { width: STOCK_TABLE_COL_WIDTHS.rr }]}
@@ -661,7 +821,7 @@ export default function EagleEyeScannerScreen() {
                   },
                 ]}
               >
-                {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+                {`R:R${sortArrow("rr")}`}
               </Text>
             </Pressable>
             <Pressable
@@ -682,7 +842,7 @@ export default function EagleEyeScannerScreen() {
                   },
                 ]}
               >
-                {`Conf${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+                {`Conf${sortArrow("conf")}`}
               </Text>
             </Pressable>
           </>

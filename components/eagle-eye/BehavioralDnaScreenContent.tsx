@@ -72,14 +72,22 @@ function formatRatingLabel(rating?: string | null): string {
 function buildRecommendationExplanation(stock: FullStockAnalysis): string {
   const confidence = Math.round(stock.confidence ?? 0);
   switch (stock.rating) {
-    case "STRONG_BUY":
-      return EE.recommendationStrongBuy(confidence);
     case "BUY":
       return EE.recommendationBuy(confidence);
+    case "WATCHLIST":
+      return EE.recommendationWatchlist(confidence);
     case "HOLD":
       return EE.recommendationHold(confidence);
+    case "NEUTRAL":
+      return EE.recommendationNeutral(confidence);
+    case "REDUCE":
+      return EE.recommendationReduce(confidence);
     case "SELL":
       return EE.recommendationSell(confidence);
+    case "AVOID":
+      return EE.recommendationAvoid(confidence);
+    case "STRONG_BUY":
+      return EE.recommendationStrongBuy(confidence);
     case "STRONG_SELL":
       return EE.recommendationStrongSell(confidence);
     case "INSUFFICIENT_DATA":

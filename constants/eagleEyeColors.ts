@@ -4,7 +4,7 @@
  *
  * Usage:
  *   const { colors } = useThemeStore();
- *   const ratingColor = getRatingColor("STRONG_BUY", colors);
+ *   const ratingColor = getRatingColors("BUY", colors);
  */
 
 import type { ThemePalette } from "@/constants/theme";
@@ -19,29 +19,39 @@ export interface RatingColorSet {
 
 export function getRatingColors(rating: string, c: ThemePalette): RatingColorSet {
   switch (rating) {
-    case "STRONG_BUY":
-      // Solid success with high-contrast white text
-      return { bg: c.success, text: "#ffffff", border: c.success };
     case "BUY":
-      // Slightly lighter/teal success tone
+      return { bg: c.success, text: "#ffffff", border: c.success };
+    case "WATCHLIST":
       return {
-        bg: c.mode === "dark" ? "#14B8A6" : "#0EA5A6",
+        bg: c.mode === "dark" ? "#2563EB" : "#1D4ED8",
         text: "#ffffff",
-        border: c.success,
+        border: c.accentPrimary,
       };
     case "HOLD":
-      // Dark goldenrod for clear visibility in both themes
       return { bg: "#B8860B", text: "#ffffff", border: "#B8860B" };
+    case "NEUTRAL":
+      return {
+        bg: c.mode === "dark" ? "#475569" : "#64748B",
+        text: "#ffffff",
+        border: c.borderColor,
+      };
+    case "REDUCE":
+      return { bg: c.warning, text: "#ffffff", border: c.warning };
     case "SELL":
-      // Lightened error tone
       return {
         bg: c.mode === "dark" ? "#FF6B76" : "#F87171",
         text: "#ffffff",
         border: c.danger,
       };
-    case "STRONG_SELL":
-      // Full error tone
+    case "AVOID":
       return { bg: c.danger, text: "#ffffff", border: c.danger };
+
+    // Legacy aliases
+    case "STRONG_BUY":
+      return { bg: c.success, text: "#ffffff", border: c.success };
+    case "STRONG_SELL":
+      return { bg: c.danger, text: "#ffffff", border: c.danger };
+
     case "INSUFFICIENT_DATA":
     default:
       return { bg: c.bgCard, text: c.textMuted, border: c.borderColor };
@@ -51,11 +61,16 @@ export function getRatingColors(rating: string, c: ThemePalette): RatingColorSet
 /** Single text color for confidence numbers and small accents. */
 export function getRatingTextColor(rating: string, c: ThemePalette): string {
   switch (rating) {
-    case "STRONG_BUY":
     case "BUY":
+    case "WATCHLIST":
       return c.success;
+    case "REDUCE":
+      return c.warning;
     case "SELL":
+    case "AVOID":
       return c.danger;
+    case "STRONG_BUY":
+      return c.success;
     case "STRONG_SELL":
       return c.danger;
     default:
@@ -75,36 +90,44 @@ export interface StageColorSet {
 
 export function getStageColors(stage: string, c: ThemePalette): StageColorSet {
   switch (stage) {
-    case "DORMANT":
+    case "NEUTRAL_AMBIGUOUS":
       return { bg: c.bgCard, text: c.textMuted, dot: c.textMuted };
 
-    case "STEALTH_ACCUMULATION":
-      // Info blue — institutional, quiet
+    case "ACCUMULATION":
       return { bg: c.bgCard, text: c.accentSecondary, dot: c.accentSecondary };
 
-    case "EARLY_BREAKOUT":
-      // Teal/cyan — emerging
+    case "EARLY_MARKUP":
       return { bg: c.bgCard, text: c.success, dot: c.success };
 
-    case "MARKUP_TRENDING":
-      // Success green
+    case "MARKUP":
       return { bg: c.successBg, text: c.successText, dot: c.success };
 
-    case "ACCELERATION_CLIMAX":
-      // Amber/orange — caution, late stage
-      return { bg: c.warningBg, text: c.warningText, dot: c.warning };
-
-    case "DISTRIBUTION_TOPPING":
-      // Warning orange
+    case "DISTRIBUTION":
       return { bg: c.warningBg, text: c.warning, dot: c.warning };
 
-    case "MARKDOWN_DECLINE":
-      // Error red
+    case "MARKDOWN":
       return { bg: c.dangerBg, text: c.dangerText, dot: c.danger };
 
+    case "INSUFFICIENT_HISTORY":
+    case "INACTIVE_OR_DELISTED":
+    case "INDICATOR_UNAVAILABLE":
+      return { bg: c.bgCard, text: c.textMuted, dot: c.borderColor };
+
+    // Legacy aliases
+    case "DORMANT":
+      return { bg: c.bgCard, text: c.textMuted, dot: c.textMuted };
+    case "STEALTH_ACCUMULATION":
+      return { bg: c.bgCard, text: c.accentSecondary, dot: c.accentSecondary };
+    case "EARLY_BREAKOUT":
+      return { bg: c.bgCard, text: c.success, dot: c.success };
+    case "MARKUP_TRENDING":
+      return { bg: c.successBg, text: c.successText, dot: c.success };
+    case "ACCELERATION_CLIMAX":
+    case "DISTRIBUTION_TOPPING":
+      return { bg: c.warningBg, text: c.warning, dot: c.warning };
+    case "MARKDOWN_DECLINE":
     case "CAPITULATION_EXHAUSTION":
-      // Purple — extreme, potential reversal
-      return { bg: c.bgCard, text: c.accentPrimary, dot: c.accentPrimary };
+      return { bg: c.dangerBg, text: c.dangerText, dot: c.danger };
 
     default:
       return { bg: c.bgCard, text: c.textMuted, dot: c.textMuted };

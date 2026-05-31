@@ -48,52 +48,93 @@ export function signalLabel(key: string): string {
     .join(" ");
 }
 
-// ── Stage name map (legacy — kept for backward compat) ───────────
+// ── Stage name map (rules-first taxonomy) ─────────────────────────
 export const STAGE_LABELS: Record<string, string> = {
-  DORMANT: "Dormant",
-  STEALTH_ACCUMULATION: "Stealth Accumulation",
-  EARLY_BREAKOUT: "Early Breakout",
-  MARKUP_TRENDING: "Markup / Trending",
-  ACCELERATION_CLIMAX: "Acceleration / Climax",
-  DISTRIBUTION_TOPPING: "Distribution / Topping",
-  MARKDOWN_DECLINE: "Markdown / Decline",
-  CAPITULATION_EXHAUSTION: "Capitulation / Exhaustion",
+  ACCUMULATION: "Accumulation",
+  EARLY_MARKUP: "Early Markup",
+  MARKUP: "Markup",
+  DISTRIBUTION: "Distribution",
+  MARKDOWN: "Markdown",
+  NEUTRAL_AMBIGUOUS: "Neutral / Ambiguous",
+  INSUFFICIENT_HISTORY: "Insufficient History",
+  INACTIVE_OR_DELISTED: "Inactive / Delisted",
+  INDICATOR_UNAVAILABLE: "Indicator Unavailable",
+
+  // Legacy aliases (display-only fallback for stale cache rows)
+  DORMANT: "Neutral / Ambiguous",
+  STEALTH_ACCUMULATION: "Accumulation",
+  EARLY_BREAKOUT: "Early Markup",
+  MARKUP_TRENDING: "Markup",
+  ACCELERATION_CLIMAX: "Distribution",
+  DISTRIBUTION_TOPPING: "Distribution",
+  MARKDOWN_DECLINE: "Markdown",
+  CAPITULATION_EXHAUSTION: "Markdown",
 };
 
 // ── Stage short labels — scanner list (space-constrained) ─────────
 export const STAGE_LABELS_SHORT: Record<string, string> = {
-  DORMANT:                 "Sleeping",
-  STEALTH_ACCUMULATION:    "Accumulating",
-  EARLY_BREAKOUT:          "Breaking Out",
-  MARKUP_TRENDING:         "Rising",
-  ACCELERATION_CLIMAX:     "Overheating",
-  DISTRIBUTION_TOPPING:    "Topping",
-  MARKDOWN_DECLINE:        "Falling",
-  CAPITULATION_EXHAUSTION: "Bottoming",
+  ACCUMULATION: "Accumulating",
+  EARLY_MARKUP: "Turning Up",
+  MARKUP: "Rising",
+  DISTRIBUTION: "Topping",
+  MARKDOWN: "Falling",
+  NEUTRAL_AMBIGUOUS: "Mixed",
+  INSUFFICIENT_HISTORY: "Low History",
+  INACTIVE_OR_DELISTED: "Inactive",
+  INDICATOR_UNAVAILABLE: "No Indicators",
+
+  DORMANT: "Mixed",
+  STEALTH_ACCUMULATION: "Accumulating",
+  EARLY_BREAKOUT: "Turning Up",
+  MARKUP_TRENDING: "Rising",
+  ACCELERATION_CLIMAX: "Topping",
+  DISTRIBUTION_TOPPING: "Topping",
+  MARKDOWN_DECLINE: "Falling",
+  CAPITULATION_EXHAUSTION: "Falling",
 };
 
 // ── Stage full labels — detail / DNA screens ──────────────────────
 export const STAGE_LABELS_FULL: Record<string, string> = {
-  DORMANT:                 "Sleeping",
-  STEALTH_ACCUMULATION:    "Quiet Buying",
-  EARLY_BREAKOUT:          "Breaking Out",
-  MARKUP_TRENDING:         "Rising Strong",
-  ACCELERATION_CLIMAX:     "Overheating",
-  DISTRIBUTION_TOPPING:    "Topping Out",
-  MARKDOWN_DECLINE:        "Falling",
-  CAPITULATION_EXHAUSTION: "Crashed — Possible Bottom",
+  ACCUMULATION: "Accumulation (Bottoming)",
+  EARLY_MARKUP: "Early Markup (Breakout Setup)",
+  MARKUP: "Markup (Uptrend)",
+  DISTRIBUTION: "Distribution (Risk-Off)",
+  MARKDOWN: "Markdown (Downtrend)",
+  NEUTRAL_AMBIGUOUS: "Neutral / Ambiguous",
+  INSUFFICIENT_HISTORY: "Insufficient History",
+  INACTIVE_OR_DELISTED: "Inactive / Delisted",
+  INDICATOR_UNAVAILABLE: "Indicator Unavailable",
+
+  DORMANT: "Neutral / Ambiguous",
+  STEALTH_ACCUMULATION: "Accumulation (Bottoming)",
+  EARLY_BREAKOUT: "Early Markup (Breakout Setup)",
+  MARKUP_TRENDING: "Markup (Uptrend)",
+  ACCELERATION_CLIMAX: "Distribution (Risk-Off)",
+  DISTRIBUTION_TOPPING: "Distribution (Risk-Off)",
+  MARKDOWN_DECLINE: "Markdown (Downtrend)",
+  CAPITULATION_EXHAUSTION: "Markdown (Downtrend)",
 };
 
 // ── Stage tooltip descriptions ────────────────────────────────────
 export const STAGE_DESCRIPTIONS: Record<string, string> = {
-  DORMANT:                 "Price is flat. Wait for direction before trading.",
-  STEALTH_ACCUMULATION:    "Volume is building under the radar. Possible institutional buying.",
-  EARLY_BREAKOUT:          "Just broke above resistance on strong volume. Best entry point for new positions.",
-  MARKUP_TRENDING:         "Clean uptrend in progress. Trade with the trend, buy pullbacks.",
-  ACCELERATION_CLIMAX:     "Up too fast, too far. Take profits or wait for cooldown.",
-  DISTRIBUTION_TOPPING:    "Smart money exiting while price stays high. Reduce exposure.",
-  MARKDOWN_DECLINE:        "Clear downtrend. Avoid new long positions.",
-  CAPITULATION_EXHAUSTION: "Major selloff exhausted. Risky but potential for sharp reversal.",
+  ACCUMULATION: "Bottoming signs are forming. Watch for confirmation before aggressive entries.",
+  EARLY_MARKUP: "Breakout setup is emerging with improving flow and trend structure.",
+  MARKUP: "Sustained uptrend conditions. Focus on risk-managed pullback entries.",
+  DISTRIBUTION: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
+  MARKDOWN: "Downtrend conditions dominate. Avoid fresh long exposure.",
+  NEUTRAL_AMBIGUOUS: "Signals are mixed; directional edge is currently unclear.",
+  INSUFFICIENT_HISTORY: "Not enough price history to compute a reliable stage.",
+  INACTIVE_OR_DELISTED: "Recent market activity is too weak or inactive for trading analysis.",
+  INDICATOR_UNAVAILABLE: "Required indicators are unavailable right now.",
+
+  DORMANT: "Signals are mixed; directional edge is currently unclear.",
+  STEALTH_ACCUMULATION: "Bottoming signs are forming. Watch for confirmation before aggressive entries.",
+  EARLY_BREAKOUT: "Breakout setup is emerging with improving flow and trend structure.",
+  MARKUP_TRENDING: "Sustained uptrend conditions. Focus on risk-managed pullback entries.",
+  ACCELERATION_CLIMAX: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
+  DISTRIBUTION_TOPPING: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
+  MARKDOWN_DECLINE: "Downtrend conditions dominate. Avoid fresh long exposure.",
+  CAPITULATION_EXHAUSTION: "Downtrend conditions dominate. Avoid fresh long exposure.",
 };
 
 /** Short display label for scanner list. Falls back to raw stage name. */
@@ -113,11 +154,17 @@ export function getStageDescription(stage: string): string {
 
 // ── Rating name map ───────────────────────────────────────────────
 export const RATING_LABELS: Record<string, string> = {
-  STRONG_BUY: "Strong Buy",
   BUY: "Buy",
+  WATCHLIST: "Watchlist",
   HOLD: "Hold",
+  NEUTRAL: "Neutral",
+  REDUCE: "Reduce",
   SELL: "Sell",
-  STRONG_SELL: "Strong Sell",
+  AVOID: "Avoid",
+
+  // Legacy aliases
+  STRONG_BUY: "Buy",
+  STRONG_SELL: "Sell",
   INSUFFICIENT_DATA: "Insufficient Data",
 };
 
@@ -174,14 +221,24 @@ export const REGIME_LABELS: Record<string, string> = {
 
 // ── Stage one-line interpretations ───────────────────────────────
 export const STAGE_INTERPRETATIONS: Record<string, string> = {
-  DORMANT: "Stock is quiet — low volatility, low volume. Waiting for a catalyst.",
-  STEALTH_ACCUMULATION: "Institutional accumulation likely underway. OBV rising while price stays flat.",
-  EARLY_BREAKOUT: "Price breaking out with volume confirmation. Early entry opportunity.",
-  MARKUP_TRENDING: "Established uptrend with all EMAs aligned. Trend-following conditions favourable.",
-  ACCELERATION_CLIMAX: "Parabolic move underway — late-stage, high risk of reversal. Caution advised.",
-  DISTRIBUTION_TOPPING: "Smart money distributing. OBV diverging despite high price. Risk elevated.",
-  MARKDOWN_DECLINE: "Confirmed downtrend. Short bias or stay out until trend reversal confirmed.",
-  CAPITULATION_EXHAUSTION: "Extreme oversold — potential reversal zone. Counter-trend opportunity only for experienced traders.",
+  ACCUMULATION: "Bottoming behavior is forming with early internal improvement.",
+  EARLY_MARKUP: "Trend turn is underway and breakout conditions are starting to align.",
+  MARKUP: "Trend is established and constructive for managing long exposure.",
+  DISTRIBUTION: "Risk-off behavior is building as upside momentum fades.",
+  MARKDOWN: "Downtrend is active; preservation mode is preferred.",
+  NEUTRAL_AMBIGUOUS: "Signals conflict; edge is weak until conditions resolve.",
+  INSUFFICIENT_HISTORY: "Not enough bars for full stage classification.",
+  INACTIVE_OR_DELISTED: "Activity is too low to support reliable analysis.",
+  INDICATOR_UNAVAILABLE: "Required indicator set is currently unavailable.",
+
+  DORMANT: "Signals conflict; edge is weak until conditions resolve.",
+  STEALTH_ACCUMULATION: "Bottoming behavior is forming with early internal improvement.",
+  EARLY_BREAKOUT: "Trend turn is underway and breakout conditions are starting to align.",
+  MARKUP_TRENDING: "Trend is established and constructive for managing long exposure.",
+  ACCELERATION_CLIMAX: "Risk-off behavior is building as upside momentum fades.",
+  DISTRIBUTION_TOPPING: "Risk-off behavior is building as upside momentum fades.",
+  MARKDOWN_DECLINE: "Downtrend is active; preservation mode is preferred.",
+  CAPITULATION_EXHAUSTION: "Downtrend is active; preservation mode is preferred.",
 };
 
 // ── Screen/section titles ─────────────────────────────────────────
@@ -296,16 +353,26 @@ export const EE = {
     `Current setup fingerprint matched: ${signals}.`,
   scoreDriverLiveSignals: (signals: string) =>
     `Live engine signals currently firing: ${signals}.`,
-  recommendationStrongBuy: (confidence: number) =>
-    `Strong Buy is assigned because confidence is ${confidence}% and bullish factors are aligned across stage, signals, and historical setup behavior.`,
   recommendationBuy: (confidence: number) =>
-    `Buy is assigned because confidence is ${confidence}% with supportive setup history and positive current signal confluence.`,
+    `Buy is assigned because confidence is ${confidence}% with constructive stage conditions and positive signal alignment.`,
+  recommendationWatchlist: (confidence: number) =>
+    `Watchlist is assigned at ${confidence}% because setup quality is improving but still needs confirmation before full conviction.`,
   recommendationHold: (confidence: number) =>
-    `Hold is assigned because confidence is ${confidence}%, which suggests mixed conditions or limited edge at the current price.`,
+    `Hold is assigned because confidence is ${confidence}% and the trend remains constructive, but reward-to-risk is less compelling for fresh entries.`,
+  recommendationNeutral: (confidence: number) =>
+    `Neutral is assigned at ${confidence}% because current evidence is mixed and does not support a strong directional edge.`,
+  recommendationReduce: (confidence: number) =>
+    `Reduce is assigned because confidence is ${confidence}% and distribution-style risk is rising. Trimming exposure is prudent.`,
   recommendationSell: (confidence: number) =>
-    `Sell is assigned because confidence in upside is low (${confidence}%) and current conditions are not favorable for new long exposure.`,
+    `Sell is assigned because confidence in upside is low (${confidence}%) and markdown conditions are dominant.`,
+  recommendationAvoid: (confidence: number) =>
+    `Avoid is assigned because confidence is ${confidence}% and the setup does not justify taking risk right now.`,
+
+  // Legacy aliases for older rating values
+  recommendationStrongBuy: (confidence: number) =>
+    `Buy is assigned because confidence is ${confidence}% with constructive stage conditions and positive signal alignment.`,
   recommendationStrongSell: (confidence: number) =>
-    `Strong Sell is assigned because confidence in upside is very low (${confidence}%) and risk conditions are strongly negative.`,
+    `Avoid is assigned because confidence is ${confidence}% and the setup does not justify taking risk right now.`,
   recommendationInsufficientData:
     "Insufficient Data is assigned because there is not enough reliable setup history and current signal evidence to form a robust call.",
   recommendationFallback: (rating: string, confidence: number) =>

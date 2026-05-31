@@ -1097,7 +1097,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                                     color: val != null ? colors.textPrimary : colors.textMuted,
                                     fontSize: 13, fontWeight: "600", textAlign: "right", fontVariant: ["tabular-nums"],
                                   }}>
-                                    {val != null ? val.toFixed(2) : "—"}
+                                    {val != null ? (col.key === "eps" ? val.toFixed(3) : val.toFixed(2)) : "—"}
                                   </Text>
                                 </View>
                               );

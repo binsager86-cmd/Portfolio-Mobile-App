@@ -58,13 +58,19 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
     setRefreshing(true);
     try {
       const seen = new Set<string>();
-      const periods = (stmtQ.data?.statements ?? [])
+      const uniquePeriods = (stmtQ.data?.statements ?? [])
         .filter((s) => { if (seen.has(s.period_end_date)) return false; seen.add(s.period_end_date); return true; })
         .map((s) => ({
           period_end_date: s.period_end_date,
           fiscal_year: s.fiscal_year,
           fiscal_quarter: s.fiscal_quarter ?? undefined,
         }));
+
+      const preferredPeriod = stmtQ.data?.latest_preferred?.period_end_date;
+      const preferredPeriods = preferredPeriod
+        ? uniquePeriods.filter((p) => p.period_end_date === preferredPeriod)
+        : [];
+      const periods = preferredPeriods.length > 0 ? preferredPeriods : uniquePeriods;
 
       if (periods.length > 0) {
         const results = await Promise.allSettled(

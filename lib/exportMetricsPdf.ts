@@ -22,6 +22,7 @@ export interface MetricsCategoryData {
   metricNames: string[];
   yearData: Record<number, Record<string, number>>;
   years: number[];
+  yearLabels?: Record<number, string>;
 }
 
 // ── Palette ──────────────────────────────────────────────────────────
@@ -274,6 +275,13 @@ export async function exportMetricsPdf(
   const allYears = new Set<number>();
   for (const [, cat] of catEntries) for (const yr of cat.years) allYears.add(yr);
   const sortedYears = Array.from(allYears).sort((a, b) => a - b);
+  const resolveYearLabel = (year: number): string => {
+    for (const [, cat] of catEntries) {
+      const label = cat.yearLabels?.[year];
+      if (typeof label === "string" && label.length > 0) return label;
+    }
+    return `FY${year}`;
+  };
 
   const summaryH = 22;
   ensureSpace(summaryH + 4);
@@ -286,7 +294,7 @@ export async function exportMetricsPdf(
   const summaryItems = [
     `${catEntries.length} Categories`,
     `${totalMetrics} Metrics`,
-    `${sortedYears.length} Year(s): ${sortedYears.map((yr) => `FY${yr}`).join(", ")}`,
+    `${sortedYears.length} Year(s): ${sortedYears.map((yr) => resolveYearLabel(yr)).join(", ")}`,
   ];
   doc.text(summaryItems.join("   |   "), mx + 8, y + 15);
 
@@ -368,7 +376,9 @@ export async function exportMetricsPdf(
 
     for (let yi = 0; yi < years.length; yi++) {
       const xPos = mx + nameCW + yi * valCW + valCW / 2;
-      doc.text(`FY${years[yi]}`, xPos, headerTextY, { align: "center" });
+      const year = years[yi];
+      const yearLabel = cat.yearLabels?.[year] ?? resolveYearLabel(year);
+      doc.text(yearLabel, xPos, headerTextY, { align: "center" });
     }
 
     if (hasYoY) {

@@ -657,6 +657,14 @@ export interface FinancialStatement {
   line_items: FinancialLineItem[];
 }
 
+export interface LatestPreferredStatementPeriod {
+  period_end_date: string;
+  fiscal_year: number;
+  fiscal_quarter: number | null;
+  resolution: "latest_quarter" | "latest_year_end" | "latest_available";
+  cached: boolean;
+}
+
 export interface FinancialLineItem {
   id: number;
   statement_id: number;

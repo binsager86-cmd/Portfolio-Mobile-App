@@ -26,6 +26,7 @@ export const STOCK_TABLE_COL_WIDTHS = {
   ticker: 92,
   stage: 108,
   volume: 106,
+  current: 92,
   entry: 92,
   tp1: 92,
   bvps: 96,
@@ -139,6 +140,17 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         <View style={styles.tableCellVolume}>
           <Text style={[styles.tableVolumeText, { color: volumeCell.color }]} numberOfLines={1}>
             {volumeCell.label}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellCurrent}>
+          <Text
+            style={[
+              styles.tableNumText,
+              { color: item.last_price != null ? colors.textPrimary : colors.textMuted },
+            ]}
+          >
+            {item.last_price != null ? fmt(item.last_price) : "N/A"}
           </Text>
         </View>
 
@@ -356,6 +368,9 @@ export function StockRowSkeleton({ variant = "default" }: StockRowSkeletonProps 
         <View style={styles.tableCellVolume}>
           <View style={[styles.skelRect, sh, { width: 70, height: 12 }]} />
         </View>
+        <View style={styles.tableCellCurrent}>
+          <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
+        </View>
         <View style={styles.tableCellEntry}>
           <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
         </View>
@@ -445,6 +460,11 @@ const styles = StyleSheet.create({
   },
   tableCellVolume: {
     width: STOCK_TABLE_COL_WIDTHS.volume,
+    paddingRight: 6,
+  },
+  tableCellCurrent: {
+    width: STOCK_TABLE_COL_WIDTHS.current,
+    alignItems: "flex-end",
     paddingRight: 6,
   },
   tableCellEntry: {

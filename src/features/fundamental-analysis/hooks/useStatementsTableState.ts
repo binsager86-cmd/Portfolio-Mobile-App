@@ -53,6 +53,8 @@ export function useStatementsTableState(
   statements: FinancialStatement[],
   isDesktop: boolean,
   statementType?: string,
+  periodView: "annual" | "quarter" = "annual",
+  ttmPeriodEndDate: string | null = null,
 ) {
   const queryClient = useQueryClient();
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -239,8 +241,12 @@ export function useStatementsTableState(
       .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date))
       .map((s) => {
         const q = s.fiscal_quarter ?? inferQuarterFromDate(s.period_end_date);
+        const isTtmPeriod = periodView === "annual"
+          && ttmPeriodEndDate != null
+          && s.period_end_date === ttmPeriodEndDate
+          && q != null;
         return {
-          label: `FY${s.fiscal_year}${q ? ` Q${q}` : ""}`,
+          label: isTtmPeriod ? "TTM" : `FY${s.fiscal_year}${q ? ` Q${q}` : ""}`,
           period: s.period_end_date,
           statementId: s.id,
           items: Object.fromEntries(
@@ -248,7 +254,7 @@ export function useStatementsTableState(
           ),
         };
       }),
-  [statements]);
+  [statements, periodView, ttmPeriodEndDate]);
 
   const allCodes = useMemo(() => {
     const map = new Map<string, { name: string; isTotal: boolean; minOrder: number }>();

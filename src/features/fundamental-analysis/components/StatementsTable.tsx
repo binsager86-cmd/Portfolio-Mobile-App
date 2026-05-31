@@ -42,12 +42,23 @@ export interface StatementsTableProps {
   isFetching: boolean;
   onRefresh: () => void;
   statementType?: string;
+  periodView?: "annual" | "quarter";
+  ttmPeriodEndDate?: string | null;
 }
 
 export function StatementsTable({
   stockId, stockSymbol, statements, colors, isDesktop, isFetching, onRefresh, statementType,
+  periodView = "annual", ttmPeriodEndDate = null,
 }: StatementsTableProps) {
-  const state = useStatementsTableState(stockId, stockSymbol, statements, isDesktop, statementType);
+  const state = useStatementsTableState(
+    stockId,
+    stockSymbol,
+    statements,
+    isDesktop,
+    statementType,
+    periodView,
+    ttmPeriodEndDate,
+  );
   const {
     editingKey, selectedPeriods, deleteMode,
     headerScrollRef,

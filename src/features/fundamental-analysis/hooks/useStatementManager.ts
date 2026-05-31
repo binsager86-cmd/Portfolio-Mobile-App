@@ -11,6 +11,7 @@ import { showErrorAlert } from "@/lib/errorHandling";
 import {
     createStatement,
     fetchStatementsOnline,
+  type LatestPreferredStatementPeriod,
 } from "@/services/api";
 import {
     aiAttributeExtraction,
@@ -27,6 +28,7 @@ import { STMNT_META } from "../types";
 export interface StatementManagerState {
   /* Queries */
   statements: import("@/services/api").FinancialStatement[];
+  latestPreferred: LatestPreferredStatementPeriod | null;
   isLoading: boolean;
   isFetching: boolean;
   refetch: () => void;
@@ -85,6 +87,7 @@ export function useStatementManager(stockId: number): StatementManagerState {
   // Statements query
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
   const statements = data?.statements ?? [];
+  const latestPreferred = data?.latest_preferred ?? null;
 
   // Upload pipeline
   const {
@@ -304,6 +307,7 @@ export function useStatementManager(stockId: number): StatementManagerState {
 
   return {
     statements, isLoading, isFetching, refetch, savedPdfs,
+    latestPreferred,
     typeFilter, setTypeFilter,
     selectedModel, setSelectedModel,
     uploading, processingSteps, uploadResult, uploadError, allDone,
