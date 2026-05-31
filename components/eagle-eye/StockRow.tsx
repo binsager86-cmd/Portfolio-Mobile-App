@@ -10,12 +10,16 @@
  */
 import { UITokens } from "@/constants/uiTokens";
 import { getRatingColors } from "@/constants/eagleEyeColors";
-import { cleanCompanyName } from "@/constants/eagleEyeStrings";
+import {
+  cleanCompanyName,
+  getRatingConfidenceDescription,
+} from "@/constants/eagleEyeStrings";
 import { useThemeStore } from "@/services/themeStore";
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { RatedStock } from "@/hooks/useEagleEye";
+import { BadgeHelpTooltip } from "./BadgeHelpTooltip";
 import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
 import { MLBandBadge } from "./MLBandBadge";
@@ -67,6 +71,7 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
   const confPct = Math.min(100, Math.max(0, item.confidence));
   const confColor = confPct >= 75 ? colors.success : confPct >= 60 ? "#E6A817" : colors.textMuted;
+  const confidenceHelp = getRatingConfidenceDescription(item.rating, confPct);
   const ratingColors = getRatingColors(item.rating, colors);
   const leftStripColor =
     item.rating === "SELL" || item.rating === "STRONG_SELL"
@@ -195,7 +200,13 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         </View>
 
         <View style={styles.tableCellConfidence}>
-          <Text style={[styles.tableNumText, { color: confColor }]}>{`${confPct.toFixed(0)}%`}</Text>
+          <BadgeHelpTooltip
+            title={`${confPct.toFixed(0)}% Confidence`}
+            body={confidenceHelp}
+            align="right"
+          >
+            <Text style={[styles.tableNumText, { color: confColor }]}>{`${confPct.toFixed(0)}%`}</Text>
+          </BadgeHelpTooltip>
         </View>
       </Pressable>
     );
@@ -324,7 +335,13 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
               ]}
             />
           </View>
-          <Text style={[styles.confNum, { color: confColor }]}>{confPct.toFixed(0)}%</Text>
+          <BadgeHelpTooltip
+            title={`${confPct.toFixed(0)}% Confidence`}
+            body={confidenceHelp}
+            align="right"
+          >
+            <Text style={[styles.confNum, { color: confColor }]}>{confPct.toFixed(0)}%</Text>
+          </BadgeHelpTooltip>
         </View>
       </View>
 

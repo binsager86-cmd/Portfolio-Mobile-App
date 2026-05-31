@@ -117,24 +117,24 @@ export const STAGE_LABELS_FULL: Record<string, string> = {
 
 // ── Stage tooltip descriptions ────────────────────────────────────
 export const STAGE_DESCRIPTIONS: Record<string, string> = {
-  ACCUMULATION: "Bottoming signs are forming. Watch for confirmation before aggressive entries.",
-  EARLY_MARKUP: "Breakout setup is emerging with improving flow and trend structure.",
-  MARKUP: "Sustained uptrend conditions. Focus on risk-managed pullback entries.",
-  DISTRIBUTION: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
-  MARKDOWN: "Downtrend conditions dominate. Avoid fresh long exposure.",
-  NEUTRAL_AMBIGUOUS: "Signals are mixed; directional edge is currently unclear.",
+  ACCUMULATION: "Accumulating (Accumulation): Quietly being picked up at the bottom.",
+  EARLY_MARKUP: "Turning Up (Early Markup): The move is starting with buyers stepping in.",
+  MARKUP: "Rising (Markup): In a steady uptrend.",
+  DISTRIBUTION: "Topping (Distribution): Topping out and being quietly sold.",
+  MARKDOWN: "Falling (Markdown): In a downtrend with money leaving.",
+  NEUTRAL_AMBIGUOUS: "Mixed / Neutral: No clear signal right now.",
   INSUFFICIENT_HISTORY: "Not enough price history to compute a reliable stage.",
   INACTIVE_OR_DELISTED: "Recent market activity is too weak or inactive for trading analysis.",
   INDICATOR_UNAVAILABLE: "Required indicators are unavailable right now.",
 
-  DORMANT: "Signals are mixed; directional edge is currently unclear.",
-  STEALTH_ACCUMULATION: "Bottoming signs are forming. Watch for confirmation before aggressive entries.",
-  EARLY_BREAKOUT: "Breakout setup is emerging with improving flow and trend structure.",
-  MARKUP_TRENDING: "Sustained uptrend conditions. Focus on risk-managed pullback entries.",
-  ACCELERATION_CLIMAX: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
-  DISTRIBUTION_TOPPING: "Uptrend is weakening. Favor de-risking and tighter risk controls.",
-  MARKDOWN_DECLINE: "Downtrend conditions dominate. Avoid fresh long exposure.",
-  CAPITULATION_EXHAUSTION: "Downtrend conditions dominate. Avoid fresh long exposure.",
+  DORMANT: "Mixed / Neutral: No clear signal right now.",
+  STEALTH_ACCUMULATION: "Accumulating (Accumulation): Quietly being picked up at the bottom.",
+  EARLY_BREAKOUT: "Turning Up (Early Markup): The move is starting with buyers stepping in.",
+  MARKUP_TRENDING: "Rising (Markup): In a steady uptrend.",
+  ACCELERATION_CLIMAX: "Topping (Distribution): Topping out and being quietly sold.",
+  DISTRIBUTION_TOPPING: "Topping (Distribution): Topping out and being quietly sold.",
+  MARKDOWN_DECLINE: "Falling (Markdown): In a downtrend with money leaving.",
+  CAPITULATION_EXHAUSTION: "Falling (Markdown): In a downtrend with money leaving.",
 };
 
 /** Short display label for scanner list. Falls back to raw stage name. */
@@ -150,6 +150,64 @@ export function getStageLabelFull(stage: string): string {
 /** Tooltip/info description for a stage. Falls back to empty string. */
 export function getStageDescription(stage: string): string {
   return STAGE_DESCRIPTIONS[stage] ?? "";
+}
+
+// ── Rating helper descriptions ───────────────────────────────────
+export const RATING_DESCRIPTIONS: Record<string, string> = {
+  STRONG_BUY: "Strong Buy: Strong setup with multiple confirmations.",
+  BUY: "Buy: A genuine setup with real buying support.",
+  WATCHLIST: "Watchlist: Forming but not confirmed yet. Watch closely.",
+  HOLD: "Hold: Healthy trend if you already own it, but not a fresh entry.",
+  NEUTRAL: "Neutral: No clear action right now.",
+  REDUCE: "Reduce: Showing weakness or topping. Consider trimming.",
+  SELL: "Sell: Confirmed decline. Consider exiting.",
+  STRONG_SELL: "Strong Sell: Strong downtrend with confirmation.",
+  AVOID: "Avoid: Poor quality, illiquid, or actively dangerous.",
+  INSUFFICIENT_DATA: "Insufficient Data: Not enough reliable evidence yet.",
+};
+
+/** Tooltip/info description for a rating. Falls back to empty string. */
+export function getRatingDescription(rating: string): string {
+  return RATING_DESCRIPTIONS[rating] ?? "";
+}
+
+/** Confidence band label in plain language. */
+export function getConfidenceBand(confidence: number): string {
+  if (confidence >= 75) return "Strong";
+  if (confidence >= 60) return "Solid";
+  if (confidence >= 45) return "Moderate";
+  return "Weak";
+}
+
+/** Confidence helper text for tooltips. */
+export function getConfidenceDescription(confidence: number): string {
+  if (confidence >= 75) {
+    return "Strong (75-100): Most evidence agrees. High-conviction signal.";
+  }
+  if (confidence >= 60) {
+    return "Solid (60-75): Good evidence, with a few mixed signals.";
+  }
+  if (confidence >= 45) {
+    return "Moderate (45-60): Real but incomplete evidence.";
+  }
+  return "Weak (below 45): Early or thin evidence. Treat with caution.";
+}
+
+/** Combined helper for the common rating + confidence confusion. */
+export function getRatingConfidenceDescription(
+  rating: string,
+  confidence: number,
+): string {
+  const confLine = getConfidenceDescription(confidence);
+  const normalized = (rating ?? "").toUpperCase();
+
+  if ((normalized === "BUY" || normalized === "WATCHLIST" || normalized === "STRONG_BUY") && confidence < 60) {
+    return `${confLine} Direction is bullish, but confirmation is still thin. Early flag, not a green light.`;
+  }
+  if ((normalized === "SELL" || normalized === "REDUCE" || normalized === "STRONG_SELL" || normalized === "AVOID") && confidence < 60) {
+    return `${confLine} Weakness is showing, but confirmation is still developing.`;
+  }
+  return `${confLine} Rating shows direction. Confidence shows how much the evidence agrees.`;
 }
 
 // ── Rating name map ───────────────────────────────────────────────
