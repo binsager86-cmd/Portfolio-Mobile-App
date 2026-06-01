@@ -3,13 +3,14 @@
  * Eagle Eye — Scanner screen
  *
  * Shows all scored stocks sorted by confidence descending.
- * Supports filtering by confidence, rating, volume context, and stage.
+ * Supports filtering by confidence, rating, status, volume context, and stage.
  * Sortable by clicking any table column header.
  */
 
 import { getRegimeColors, getStageColors } from "@/constants/eagleEyeColors";
 import { EE, REGIME_LABELS, getStageLabelShort } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
+import { exportEagleEyeScannerReport } from "@/lib/exportEagleEyeScannerReport";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import {
   STOCK_TABLE_COL_WIDTHS,
@@ -24,7 +25,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
   Platform,
   Pressable,
@@ -37,9 +41,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ── Filter / sort types ──────────────────────────────────────────────────────
 const CONFIDENCE_STEPS = [0, 40, 60, 75] as const;
-const HIGH_VOLUME_RVOL_THRESHOLD = 1.5;
 const STAGE_FILTER_ORDER = [
   "ACCUMULATION",
   "EARLY_MARKUP",
@@ -50,25 +52,15 @@ const STAGE_FILTER_ORDER = [
   "INSUFFICIENT_HISTORY",
   "INACTIVE_OR_DELISTED",
 ] as const;
-type SortField =
-  | "rating"
-  | "ticker"
-  | "stage"
-  | "volume"
-  | "price"
-  | "entry"
-  | "tp1"
-  | "bvps"
-  | "pe"
-  | "rr"
-  | "conf";
-type SortDir = "asc" | "desc";
-type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
+const STATUS_FILTER_ORDER = ["WATCHLIST", "NEUTRAL", "HOLD"] as const;
+const HIGH_VOLUME_RVOL_THRESHOLD = 1.5;
 
 const RATING_SORT_WEIGHT: Record<string, number> = {
   STRONG_BUY: 5,
   BUY: 4,
+  WATCHLIST: 3.5,
   HOLD: 3,
+  NEUTRAL: 2.75,
   REDUCE: 2.5,
   SELL: 2,
   AVOID: 1.5,
@@ -93,6 +85,38 @@ const STAGE_SORT_WEIGHT: Record<string, number> = {
   DATA_ISSUE: 0,
 };
 
+type SortField =
+  | "rating"
+  | "ticker"
+  | "stage"
+  | "volume"
+  | "conf"
+  | "rr"
+  | "price"
+  | "entry"
+  | "tp1"
+  | "bvps"
+  | "pe";
+type SortDir = "asc" | "desc";
+type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
+type StatusFilter = (typeof STATUS_FILTER_ORDER)[number];
+type LoadingMode = "idle" | "loading" | "refresh" | "warming_up";
+type ScannerListItem = { kind: "col_header" } | { kind: "stock"; stock: RatedStock };
+
+const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
+  rating: "Rating",
+  ticker: "Ticker",
+  stage: "Stage",
+  volume: "Volume",
+  conf: "Confidence",
+  rr: "Risk/Reward",
+  price: "Current Price",
+  entry: "Entry",
+  tp1: "TP1",
+  bvps: "BVPS",
+  pe: "P/E",
+};
+
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
   const mins = Math.floor((Date.now() - ts) / 60_000);
@@ -105,25 +129,18 @@ export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
-  const isTableView = Platform.OS === "web";
-  const rowHeight = isTableView ? 54 : 72;
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
   const [buyRatingOnly, setBuyRatingOnly] = useState(false);
   const [sellRatingOnly, setSellRatingOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   const [highVolumeOnly, setHighVolumeOnly] = useState(false);
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const isTableView = Platform.OS === "web";
 
-  const sortArrow = useCallback(
-    (field: SortField) =>
-      sortBy === field ? (sortDir === "desc" ? " ▼" : " ▲") : "",
-    [sortBy, sortDir]
-  );
-
-  // Lazy load: don't fetch until the user actually taps into this tab
   const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
   useEffect(() => {
     if (isFocused) {
@@ -132,11 +149,95 @@ export default function EagleEyeScannerScreen() {
   }, [isFocused]);
   const fetchEnabled = hasFocusedOnce || isFocused;
 
-  // No min_confidence sent to the server — full universe fetched once and
-  // cached for 10 min.  Confidence filtering happens in the useMemo below
-  // so chip presses are instant with no extra network calls.
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);
+  const isWarmingUp = data?.status === "warming_up";
+
+  const loadingMode: LoadingMode = useMemo(() => {
+    if (isWarmingUp) return "warming_up";
+    if (isLoading) return "loading";
+    if (isRefetching) return "refresh";
+    return "idle";
+  }, [isWarmingUp, isLoading, isRefetching]);
+
+  const backendProgressPercent =
+    typeof data?.progress_percent === "number" && Number.isFinite(data.progress_percent)
+      ? Math.max(0, Math.min(100, Math.round(data.progress_percent)))
+      : null;
+  const backendProgressCurrent =
+    typeof data?.progress_current === "number" && Number.isFinite(data.progress_current)
+      ? Math.max(0, Math.round(data.progress_current))
+      : null;
+  const backendProgressTotal =
+    typeof data?.progress_total === "number" && Number.isFinite(data.progress_total)
+      ? Math.max(0, Math.round(data.progress_total))
+      : null;
+  const hasDeterminateProgress =
+    loadingMode === "warming_up" && backendProgressPercent !== null;
+
+  const loadingLabel =
+    loadingMode === "warming_up"
+      ? data?.progress_message?.trim() || "Building market intelligence"
+      : loadingMode === "refresh"
+      ? "Refreshing scanner data"
+      : "Loading scanner";
+
+  const loadingSubLabel =
+    loadingMode === "warming_up" && backendProgressCurrent !== null && backendProgressTotal
+      ? `${backendProgressCurrent}/${backendProgressTotal} items processed`
+      : loadingMode === "warming_up"
+      ? "Waiting for backend progress"
+      : loadingMode === "refresh"
+      ? "Syncing latest scanner snapshot"
+      : "Fetching scanner snapshot";
+
+  const [loadingPercent, setLoadingPercent] = useState(0);
+  const [showLoadingBanner, setShowLoadingBanner] = useState(false);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (loadingMode === "idle") {
+      return;
+    }
+
+    setShowLoadingBanner(true);
+
+    if (loadingMode === "warming_up") {
+      setLoadingPercent(Math.max(0, Math.min(99, backendProgressPercent ?? 0)));
+      return;
+    }
+
+    setLoadingPercent(loadingMode === "refresh" ? 70 : 35);
+  }, [loadingMode, backendProgressPercent]);
+
+  useEffect(() => {
+    if (loadingMode !== "idle") return;
+    if (!showLoadingBanner) return;
+
+    setLoadingPercent(100);
+    const timeoutId = setTimeout(() => {
+      setShowLoadingBanner(false);
+      setLoadingPercent(0);
+    }, 480);
+
+    return () => clearTimeout(timeoutId);
+  }, [loadingMode, showLoadingBanner]);
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: loadingPercent,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [loadingPercent, progressAnim]);
+
+  const loadingProgressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
+
+  const loadingPercentLabel = hasDeterminateProgress ? `${loadingPercent}%` : "...";
 
   const regimeEnabled = fetchEnabled && !!data && !isLoading && !isError;
   const { data: regimeData } = useEagleEyeRegime(regimeEnabled);
@@ -159,6 +260,15 @@ export default function EagleEyeScannerScreen() {
     runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
   }, [eeRefresh]);
 
+  useEffect(() => {
+    return () => {
+      if (runStatusTimer.current) {
+        clearTimeout(runStatusTimer.current);
+        runStatusTimer.current = null;
+      }
+    };
+  }, []);
+
   const stocks: RatedStock[] = useMemo(() => {
     // Build ML band lookup map (ticker → band item)
     const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
@@ -169,7 +279,6 @@ export default function EagleEyeScannerScreen() {
         }
       }
     }
-
     let list = (data?.stocks ?? []).map((s) => ({
       ...s,
       ml_band: mlMap[s.ticker] ?? null,
@@ -197,6 +306,11 @@ export default function EagleEyeScannerScreen() {
           || s.rating === "STRONG_SELL"
           || s.rating === "REDUCE"
           || s.rating === "AVOID"
+      );
+    }
+    if (statusFilter) {
+      list = list.filter(
+        (s) => String(s.rating ?? "").toUpperCase() === statusFilter
       );
     }
     if (highVolumeOnly) {
@@ -257,12 +371,20 @@ export default function EagleEyeScannerScreen() {
     search,
     buyRatingOnly,
     sellRatingOnly,
+    statusFilter,
     highVolumeOnly,
     stageFilter,
     sortBy,
     sortDir,
     mlBandsData,
   ]);
+
+  const listData = useMemo<ScannerListItem[]>(() => {
+    if (stocks.length === 0) {
+      return [];
+    }
+    return [{ kind: "col_header" }, ...stocks.map((stock) => ({ kind: "stock" as const, stock }))];
+  }, [stocks]);
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -283,361 +405,94 @@ export default function EagleEyeScannerScreen() {
   const regimeLabel = REGIME_LABELS[regime] ?? regime;
   const updatedAgo = getUpdatedAgo(dataUpdatedAt ?? 0);
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: RatedStock; index: number }) => (
-      <StockRow
-        item={item}
-        isFirst={index === 0}
-        variant={isTableView ? "table" : "default"}
-      />
-    ),
-    [isTableView]
-  );
-  const keyExtractor = useCallback((item: RatedStock) => item.ticker, []);
+  const handleExportScanner = useCallback(async () => {
+    try {
+      const ratingFilter = buyRatingOnly
+        ? "BUY RATING"
+        : sellRatingOnly
+        ? "SELL RATING"
+        : "All";
+      const statusFilterLabel = statusFilter ?? "All";
+      const stageFilterLabel = stageFilter ? getStageLabelShort(stageFilter) : "All";
 
-  const isWarmingUp = data?.status === "warming_up";
-
-  const renderEmpty = () => {
-    if (isLoading) {
-      return (
-        <>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <StockRowSkeleton
-              key={i}
-              variant={isTableView ? "table" : "default"}
-            />
-          ))}
-        </>
-      );
+      await exportEagleEyeScannerReport({
+        rows: stocks.map((stock) => ({
+          ticker: stock.ticker,
+          nameEn: stock.name_en,
+          sector: stock.sector,
+          stage: getStageLabelShort(stock.stage),
+          rating: stock.rating ?? "",
+          confidence: Number.isFinite(stock.confidence) ? stock.confidence : 0,
+          lastPrice: stock.last_price ?? null,
+          entryPrimary: stock.entry_primary ?? null,
+          tp1: stock.tp1 ?? null,
+          bookValuePerShare: stock.book_value_per_share ?? null,
+          peRatio: stock.pe_ratio ?? null,
+          rrRatio: computeRR(stock),
+          relativeVolume: stock.volume_context?.relative_volume ?? null,
+          volumeConfirmed: stock.volume_context?.is_volume_confirmed ?? false,
+          computedAt: stock.computed_at ?? null,
+        })),
+        filters: {
+          search,
+          minConfidence,
+          ratingFilter,
+          statusFilter: statusFilterLabel,
+          stageFilter: stageFilterLabel,
+          highVolumeOnly,
+        },
+        summary: {
+          visibleRows: stocks.length,
+          totalRows: data?.stocks?.length ?? stocks.length,
+          sortColumn: SORT_LABEL_BY_FIELD[sortBy],
+          sortDirection: sortDir,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to export scanner report", error);
+      Alert.alert("Export failed", "Could not generate the scanner report.");
     }
-    if (isWarmingUp) {
-      return (
-        <View style={styles.centred}>
-          <ActivityIndicator size="large" color={colors.accentPrimary} />
-          <Text style={[styles.emptyText, { color: colors.textPrimary, marginTop: 16 }]}>
-            {EE.warmingUp}
-          </Text>
-          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 8, fontSize: 13 }]}>
-            {EE.warmingUpSub}
-          </Text>
-        </View>
-      );
-    }
-    if (isError) {
-      return (
-        <View style={styles.centred}>
-          <FontAwesome name="exclamation-triangle" size={28} color={colors.danger} />
-          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 12 }]}>
-            {EE.errorLoading}
-          </Text>
-          <Pressable
-            onPress={() => refetch()}
-            style={[styles.retryBtn, { backgroundColor: colors.accentPrimary }]}
-          >
-            <Text style={[styles.retryText, { color: colors.bgPrimary }]}>{EE.retry}</Text>
-          </Pressable>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.centred}>
-        <Text style={[styles.emptyText, { color: colors.textMuted }]}>{EE.noStocks}</Text>
-      </View>
-    );
-  };
+  }, [
+    buyRatingOnly,
+    sellRatingOnly,
+    stocks,
+    search,
+    minConfidence,
+    statusFilter,
+    stageFilter,
+    highVolumeOnly,
+    data?.stocks,
+    sortBy,
+    sortDir,
+  ]);
 
-  const renderFilterChips = () => (
-    <>
-      {CONFIDENCE_STEPS.map((step) => {
-        const active = minConfidence === step;
-        return (
-          <Pressable
-            key={step}
-            onPress={() => setMinConfidence(step)}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: active ? colors.accentPrimary : colors.bgCard,
-                borderColor: active ? colors.accentPrimary : colors.borderColor,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                { color: active ? colors.bgPrimary : colors.textPrimary },
-              ]}
-            >
-              {step === 0 ? "All" : `${step}%+`}
-            </Text>
-          </Pressable>
-        );
-      })}
-
-      <Pressable
-        onPress={() => {
-          setBuyRatingOnly((v) => !v);
-          setSellRatingOnly(false);
-        }}
-        style={[
-          styles.filterChip,
-          {
-            backgroundColor: buyRatingOnly ? colors.success : colors.bgCard,
-            borderColor: buyRatingOnly ? colors.success : colors.borderColor,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: buyRatingOnly ? colors.bgPrimary : colors.textPrimary },
-          ]}
-        >
-          BUY RATING
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => {
-          setSellRatingOnly((v) => !v);
-          setBuyRatingOnly(false);
-        }}
-        style={[
-          styles.filterChip,
-          {
-            backgroundColor: sellRatingOnly ? colors.danger : colors.bgCard,
-            borderColor: sellRatingOnly ? colors.danger : colors.borderColor,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: sellRatingOnly ? colors.bgPrimary : colors.textPrimary },
-          ]}
-        >
-          SELL RATING
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => setHighVolumeOnly((v) => !v)}
-        style={[
-          styles.filterChip,
-          {
-            backgroundColor: highVolumeOnly ? colors.accentSecondary : colors.bgCard,
-            borderColor: highVolumeOnly ? colors.accentSecondary : colors.borderColor,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: highVolumeOnly ? colors.bgPrimary : colors.textPrimary },
-          ]}
-        >
-          HIGH VOL
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => setStageFilter(null)}
-        style={[
-          styles.filterChip,
-          {
-            backgroundColor: stageFilter == null ? colors.accentPrimary : colors.bgCard,
-            borderColor: stageFilter == null ? colors.accentPrimary : colors.borderColor,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.filterChipText,
-            { color: stageFilter == null ? colors.bgPrimary : colors.textPrimary },
-          ]}
-        >
-          ALL STAGES
-        </Text>
-      </Pressable>
-
-      {STAGE_FILTER_ORDER.map((stage) => {
-        const active = stageFilter === stage;
-        const stageColors = getStageColors(stage, colors);
-
-        return (
-          <Pressable
-            key={stage}
-            onPress={() =>
-              setStageFilter((prev) => (prev === stage ? null : stage))
-            }
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: stageColors.bg,
-                borderColor: stageColors.dot,
-                borderWidth: active ? 1.5 : 1.25,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                { color: stageColors.text },
-              ]}
-            >
-              {getStageLabelShort(stage)}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </>
+  const sortArrow = useCallback(
+    (field: SortField) =>
+      sortBy === field ? (sortDir === "desc" ? " ▼" : " ▲") : "",
+    [sortBy, sortDir]
   );
 
-  return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
-      ]}
-    >
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
-        ]}
-      >
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              {EE.screenTitle}
-            </Text>
-            {updatedAgo ? (
-              <Text style={[styles.updatedText, { color: colors.textMuted }]}>
-                {`Updated ${updatedAgo}`}
-              </Text>
-            ) : (
-              <Text style={[styles.updatedText, { color: colors.textMuted }]}>
-                {EE.screenSubtitle}
-              </Text>
-            )}
-          </View>
+  const hasActiveFilters =
+    search.trim().length > 0
+    || minConfidence > 0
+    || buyRatingOnly
+    || sellRatingOnly
+    || statusFilter != null
+    || highVolumeOnly
+    || stageFilter != null;
 
-          <View style={styles.headerRight}>
-            {regime ? (
-              <View
-                style={[
-                  styles.regimeBadge,
-                  { backgroundColor: regimeColors.bg, borderColor: regimeColors.border },
-                ]}
-              >
-                <Text style={[styles.regimeText, { color: regimeColors.text }]}>
-                  {regimeLabel}
-                </Text>
-              </View>
-            ) : null}
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setMinConfidence(0);
+    setBuyRatingOnly(false);
+    setSellRatingOnly(false);
+    setStatusFilter(null);
+    setHighVolumeOnly(false);
+    setStageFilter(null);
+  }, []);
 
-            <Text style={[styles.countBadge, { color: colors.textMuted }]}>
-              {stocks.length} stocks
-            </Text>
-
-            <Pressable
-              onPress={handleRunEagleEye}
-              disabled={eeRefresh.isPending}
-              style={[
-                styles.eeRunBtn,
-                {
-                  backgroundColor:
-                    runStatus === "ok"
-                      ? colors.success
-                      : runStatus === "err"
-                      ? colors.danger
-                      : colors.accentPrimary,
-                  opacity: eeRefresh.isPending ? 0.6 : 1,
-                },
-              ]}
-            >
-              {eeRefresh.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.eeRunBtnText}>
-                  {runStatus === "ok"
-                    ? "\u2713 Running..."
-                    : runStatus === "err"
-                    ? "\u2717 Failed"
-                    : "\u25b6 Run"}
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-
-      <EagleEyeTopTabs />
-
-      {/* ML Experimental Disclaimer Banner */}
-      {mlBandsData?.enabled ? (
-        <MLDisclaimerBanner
-          autoDisabled={mlDisplayState?.auto_disabled ?? false}
-          disabledReason={mlDisplayState?.disabled_reason}
-        />
-      ) : mlDisplayState?.auto_disabled ? (
-        <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
-      ) : null}
-
-      {/* Search bar */}
-      <View
-        style={[
-          styles.searchRow,
-          { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
-        ]}
-      >
-        <View
-          style={[
-            styles.searchInput,
-            { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
-          ]}
-        >
-          <FontAwesome name="search" size={13} color={colors.textMuted} />
-          <TextInput
-            style={[styles.searchText, { color: colors.textPrimary }]}
-            placeholder="Search ticker or name..."
-            placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-            autoCapitalize="characters"
-            returnKeyType="search"
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")} hitSlop={8}>
-              <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      {/* Filter chips */}
-      <View
-        style={[
-          styles.filterBarWrap,
-          { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
-        ]}
-      >
-        {Platform.OS === "web" ? (
-          <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterBar}
-            contentContainerStyle={styles.filterBarContent}
-          >
-            {renderFilterChips()}
-          </ScrollView>
-        )}
-      </View>
-
-      {/* Sortable column header */}
+  const renderColumnHeader = useCallback(
+    () => (
       <View
         style={[
           styles.colHeader,
@@ -899,35 +754,543 @@ export default function EagleEyeScannerScreen() {
           </>
         )}
       </View>
+    ),
+    [
+      colors.accentPrimary,
+      colors.bgSecondary,
+      colors.borderColor,
+      colors.textMuted,
+      isTableView,
+      mlBandsData?.enabled,
+      sortArrow,
+      sortBy,
+      sortDir,
+      toggleSort,
+    ]
+  );
 
-      {/* List */}
-      <FlatList
-        data={stocks}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching && !isLoading}
-            onRefresh={onRefresh}
-            tintColor={colors.accentPrimary}
-            colors={[colors.accentPrimary]}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: insets.bottom + UITokens.spacing.lg },
-          stocks.length === 0 && styles.listEmpty,
+  const renderItem = useCallback(
+    ({ item, index }: { item: ScannerListItem; index: number }) => {
+      if (item.kind === "col_header") {
+        return renderColumnHeader();
+      }
+      return (
+        <StockRow
+          item={item.stock}
+          isFirst={index === 1}
+          variant={isTableView ? "table" : "default"}
+        />
+      );
+    },
+    [isTableView, renderColumnHeader]
+  );
+
+  const keyExtractor = useCallback(
+    (item: ScannerListItem) =>
+      item.kind === "col_header" ? "__scanner_column_header__" : item.stock.ticker,
+    []
+  );
+
+  const renderEmpty = () => {
+    if (isLoading) {
+      return (
+        <>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <StockRowSkeleton
+              key={i}
+              variant={isTableView ? "table" : "default"}
+            />
+          ))}
+        </>
+      );
+    }
+    if (isWarmingUp) {
+      return (
+        <View style={styles.centred}>
+          <ActivityIndicator size="large" color={colors.accentPrimary} />
+          <Text style={[styles.emptyText, { color: colors.textPrimary, marginTop: 16 }]}>
+            {EE.warmingUp}
+          </Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 8, fontSize: 13 }]}>
+            {EE.warmingUpSub}
+          </Text>
+        </View>
+      );
+    }
+    if (isError) {
+      return (
+        <View style={styles.centred}>
+          <FontAwesome name="exclamation-triangle" size={28} color={colors.danger} />
+          <Text style={[styles.emptyText, { color: colors.textMuted, marginTop: 12 }]}>
+            {EE.errorLoading}
+          </Text>
+          <Pressable
+            onPress={() => refetch()}
+            style={[styles.retryBtn, { backgroundColor: colors.accentPrimary }]}
+          >
+            <Text style={[styles.retryText, { color: colors.bgPrimary }]}>{EE.retry}</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.centred}>
+        <Text style={[styles.emptyText, { color: colors.textMuted }]}>{EE.noStocks}</Text>
+      </View>
+    );
+  };
+
+  const renderFilterChips = () => (
+    <>
+      {CONFIDENCE_STEPS.map((step) => {
+        const active = minConfidence === step;
+        return (
+          <Pressable
+            key={step}
+            onPress={() => setMinConfidence(step)}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: active ? colors.accentPrimary : colors.bgCard,
+                borderColor: active ? colors.accentPrimary : colors.borderColor,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: active ? colors.bgPrimary : colors.textPrimary },
+              ]}
+            >
+              {step === 0 ? "All" : `${step}%+`}
+            </Text>
+          </Pressable>
+        );
+      })}
+
+      <Pressable
+        onPress={() => {
+          setBuyRatingOnly((v) => !v);
+          setSellRatingOnly(false);
+          setStatusFilter(null);
+        }}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: buyRatingOnly ? colors.success : colors.bgCard,
+            borderColor: buyRatingOnly ? colors.success : colors.borderColor,
+          },
         ]}
-        initialNumToRender={15}
-        maxToRenderPerBatch={15}
-        windowSize={5}
-        getItemLayout={(_data, index) => ({
-          length: rowHeight,
-          offset: rowHeight * index,
-          index,
-        })}
-      />
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: buyRatingOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          BUY RATING
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setSellRatingOnly((v) => !v);
+          setBuyRatingOnly(false);
+          setStatusFilter(null);
+        }}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: sellRatingOnly ? colors.danger : colors.bgCard,
+            borderColor: sellRatingOnly ? colors.danger : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: sellRatingOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          SELL RATING
+        </Text>
+      </Pressable>
+
+      {STATUS_FILTER_ORDER.map((status) => {
+        const active = statusFilter === status;
+        const activeColor =
+          status === "WATCHLIST"
+            ? colors.accentSecondary
+            : status === "HOLD"
+            ? colors.warning
+            : colors.textMuted;
+
+        return (
+          <Pressable
+            key={status}
+            onPress={() => {
+              setStatusFilter((prev) => (prev === status ? null : status));
+              setBuyRatingOnly(false);
+              setSellRatingOnly(false);
+            }}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: active ? activeColor : colors.bgCard,
+                borderColor: active ? activeColor : colors.borderColor,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: active ? colors.bgPrimary : colors.textPrimary },
+              ]}
+            >
+              {status}
+            </Text>
+          </Pressable>
+        );
+      })}
+
+      <Pressable
+        onPress={() => setHighVolumeOnly((v) => !v)}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: highVolumeOnly ? colors.accentSecondary : colors.bgCard,
+            borderColor: highVolumeOnly ? colors.accentSecondary : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: highVolumeOnly ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          HIGH VOL
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => setStageFilter(null)}
+        style={[
+          styles.filterChip,
+          {
+            backgroundColor: stageFilter == null ? colors.accentPrimary : colors.bgCard,
+            borderColor: stageFilter == null ? colors.accentPrimary : colors.borderColor,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: stageFilter == null ? colors.bgPrimary : colors.textPrimary },
+          ]}
+        >
+          ALL STAGES
+        </Text>
+      </Pressable>
+
+      {STAGE_FILTER_ORDER.map((stage) => {
+        const active = stageFilter === stage;
+        const stageColors = getStageColors(stage, colors);
+
+        return (
+          <Pressable
+            key={stage}
+            onPress={() =>
+              setStageFilter((prev) => (prev === stage ? null : stage))
+            }
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: stageColors.bg,
+                borderColor: stageColors.dot,
+                borderWidth: active ? 1.5 : 1.25,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: stageColors.text },
+              ]}
+            >
+              {getStageLabelShort(stage)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </>
+  );
+
+  return (
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
+      ]}
+    >
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
+        ]}
+      >
+        <View style={styles.headerTop}>
+          <View>
+
+          
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+              {EE.screenTitle}
+            </Text>
+            {updatedAgo ? (
+              <Text style={[styles.updatedText, { color: colors.textMuted }]}>
+                {`Updated ${updatedAgo}`}
+              </Text>
+            ) : (
+              <Text style={[styles.updatedText, { color: colors.textMuted }]}>
+                {EE.screenSubtitle}
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.headerRight}>
+            {regime ? (
+              <View
+                style={[
+                  styles.regimeBadge,
+                  { backgroundColor: regimeColors.bg, borderColor: regimeColors.border },
+                ]}
+              >
+                <Text style={[styles.regimeText, { color: regimeColors.text }]}>
+                  {regimeLabel}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text style={[styles.countBadge, { color: colors.textMuted }]}>
+              {stocks.length} stocks
+            </Text>
+
+            <Pressable
+              onPress={handleRunEagleEye}
+              disabled={eeRefresh.isPending}
+              style={[
+                styles.eeRunBtn,
+                {
+                  backgroundColor:
+                    runStatus === "ok"
+                      ? colors.success
+                      : runStatus === "err"
+                      ? colors.danger
+                      : colors.accentPrimary,
+                  opacity: eeRefresh.isPending ? 0.6 : 1,
+                },
+              ]}
+            >
+              {eeRefresh.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.eeRunBtnText}>
+                  {runStatus === "ok"
+                    ? "\u2713 Running..."
+                    : runStatus === "err"
+                    ? "\u2717 Failed"
+                    : "\u25b6 Run"}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      {showLoadingBanner ? (
+        <View
+          style={[
+            styles.loadingBanner,
+            { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+          ]}
+        >
+          <View style={styles.loadingBannerRow}>
+            <View style={styles.loadingTitleRow}>
+              <ActivityIndicator size="small" color={colors.accentPrimary} />
+              <View style={styles.loadingTextWrap}>
+                <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>
+                  {loadingLabel}
+                </Text>
+                <Text style={[styles.loadingSubTitle, { color: colors.textMuted }]}>
+                  {loadingSubLabel}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.loadingPercent, { color: colors.accentPrimary }]}>
+              {loadingPercentLabel}
+            </Text>
+          </View>
+
+          <View style={[styles.loadingTrack, { backgroundColor: colors.bgSecondary }]}>
+            <Animated.View
+              style={[
+                styles.loadingFill,
+                {
+                  backgroundColor: colors.accentPrimary,
+                  width: loadingProgressWidth,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      <View
+        style={[
+          styles.tableCard,
+          { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+        ]}
+      >
+        <FlatList
+          data={listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          stickyHeaderIndices={listData.length > 0 ? [0] : undefined}
+          ListEmptyComponent={renderEmpty}
+          ListHeaderComponent={
+            <>
+              <EagleEyeTopTabs />
+
+              {mlBandsData?.enabled ? (
+                <MLDisclaimerBanner
+                  autoDisabled={mlDisplayState?.auto_disabled ?? false}
+                  disabledReason={mlDisplayState?.disabled_reason}
+                />
+              ) : mlDisplayState?.auto_disabled ? (
+                <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
+              ) : null}
+
+              <View style={styles.tableTopSection}>
+                <View style={styles.previewHeader}>
+                  <View style={styles.previewHeaderRow}>
+                    <View style={styles.previewHeaderCopy}>
+                      <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
+                      <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
+                        {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      testID="export-eagle-eye-scanner"
+                      onPress={handleExportScanner}
+                      style={[
+                        styles.exportButton,
+                        {
+                          backgroundColor: colors.accentPrimary + "18",
+                          borderColor: colors.accentPrimary + "55",
+                          opacity: stocks.length ? 1 : 0.5,
+                        },
+                      ]}
+                      disabled={!stocks.length}
+                    >
+                      <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
+                      <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>Export Excel</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.filterPanel,
+                    { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
+                  ]}
+                >
+                  <View style={styles.filterPanelHeader}>
+                    <View>
+                      <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
+                      <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
+                    </View>
+                    {hasActiveFilters ? (
+                      <Pressable
+                        onPress={handleClearFilters}
+                        style={[
+                          styles.clearFiltersButton,
+                          { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
+                        ]}
+                      >
+                        <FontAwesome name="times" size={12} color={colors.textMuted} />
+                        <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.searchRow}>
+                    <View
+                      style={[
+                        styles.searchInput,
+                        { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
+                      ]}
+                    >
+                      <FontAwesome name="search" size={13} color={colors.textMuted} />
+                      <TextInput
+                        style={[styles.searchText, { color: colors.textPrimary }]}
+                        placeholder="Search ticker or name..."
+                        placeholderTextColor={colors.textMuted}
+                        value={search}
+                        onChangeText={setSearch}
+                        autoCapitalize="characters"
+                        returnKeyType="search"
+                      />
+                      {search.length > 0 && (
+                        <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                          <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={styles.filterBarWrap}>
+                    {Platform.OS === "web" ? (
+                      <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.filterBar}
+                        nestedScrollEnabled
+                        directionalLockEnabled
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={styles.filterBarContent}
+                      >
+                        {renderFilterChips()}
+                      </ScrollView>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching && !isLoading}
+              onRefresh={onRefresh}
+              tintColor={colors.accentPrimary}
+              colors={[colors.accentPrimary]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + UITokens.spacing.lg },
+            stocks.length === 0 && styles.listEmpty,
+          ]}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={5}
+        />
+      </View>
     </View>
   );
 }
@@ -938,6 +1301,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: UITokens.spacing.md,
     paddingVertical: UITokens.spacing.sm + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    zIndex: 12,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
   headerTop: {
     flexDirection: "row",
@@ -955,10 +1324,147 @@ const styles = StyleSheet.create({
   },
   regimeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4 },
   countBadge: { fontSize: 11, fontVariant: ["tabular-nums"] },
-  searchRow: {
+  tableCard: {
+    flex: 1,
+    marginHorizontal: UITokens.spacing.md,
+    marginBottom: UITokens.spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  loadingBanner: {
+    marginHorizontal: UITokens.spacing.md,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  loadingBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  loadingTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  loadingTextWrap: {
+    flexShrink: 1,
+  },
+  loadingTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  loadingSubTitle: {
+    fontSize: 11,
+    marginTop: 1,
+    fontWeight: "500",
+  },
+  loadingPercent: {
+    fontSize: 16,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+    minWidth: 42,
+    textAlign: "right",
+  },
+  loadingTrack: {
+    marginTop: 10,
+    height: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  loadingFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  tableTopSection: {
+    gap: 0,
+  },
+  previewHeader: {
     paddingHorizontal: UITokens.spacing.md,
-    paddingVertical: UITokens.spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: UITokens.spacing.sm + 2,
+    paddingBottom: UITokens.spacing.sm,
+    gap: 2,
+  },
+  previewHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  previewHeaderCopy: {
+    flexGrow: 1,
+  },
+  previewTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  previewSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  exportButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  filterPanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginHorizontal: UITokens.spacing.md,
+    marginBottom: 10,
+    gap: 10,
+  },
+  filterPanelHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  filterPanelTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  filterPanelSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 3,
+  },
+  clearFiltersButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  clearFiltersButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  searchRow: {
+    marginBottom: 2,
   },
   searchInput: {
     flexDirection: "row",
@@ -972,8 +1478,7 @@ const styles = StyleSheet.create({
   },
   searchText: { flex: 1, fontSize: 14 },
   filterBarWrap: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 56,
+    minHeight: 52,
     justifyContent: "center",
   },
   filterBar: {
@@ -1018,6 +1523,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: UITokens.spacing.md,
     paddingVertical: 5,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    zIndex: 8,
+    elevation: 4,
   },
   colHeaderCell: {
     fontSize: 10,
