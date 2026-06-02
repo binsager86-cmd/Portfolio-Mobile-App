@@ -121,6 +121,11 @@ export interface ScannerResponse {
   status: string;
   count: number;
   stocks: RatedStock[];
+  progress_phase?: string | null;
+  progress_message?: string | null;
+  progress_current?: number | null;
+  progress_total?: number | null;
+  progress_percent?: number | null;
 }
 
 export interface FullStockAnalysis {
@@ -623,10 +628,10 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
-    // Auto-poll every 30 s while the backend is still warming up
+    // Auto-poll frequently while warmup is active so progress looks real-time
     refetchInterval: (query) =>
       (query.state.data as ScannerResponse | undefined)?.status === "warming_up"
-        ? 30_000
+        ? 2_000
         : false,
   });
 }
