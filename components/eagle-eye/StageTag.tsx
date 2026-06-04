@@ -3,29 +3,37 @@
  * StageTag — colored chip showing the Wyckoff/lifecycle stage name with a status dot.
  */
 import { getStageColors } from "@/constants/eagleEyeColors";
-import { getStageLabelFull, getStageLabelShort } from "@/constants/eagleEyeStrings";
+import {
+  getStageDescription,
+  getStageLabelFull,
+  getStageLabelShort,
+} from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useThemeStore } from "@/services/themeStore";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { BadgeHelpTooltip } from "./BadgeHelpTooltip";
 
 interface StageTagProps {
   stage: string;
   size?: "sm" | "md";
   variant?: "short" | "full";
+  showHelp?: boolean;
 }
 
 export const StageTag = React.memo(function StageTag({
   stage,
   size = "md",
   variant = "short",
+  showHelp = true,
 }: StageTagProps) {
   const { colors } = useThemeStore();
   const c = getStageColors(stage, colors);
   const label = variant === "full" ? getStageLabelFull(stage) : getStageLabelShort(stage);
   const small = size === "sm";
+  const helper = getStageDescription(stage);
 
-  return (
+  const tagContent = (
     <View
       style={[
         styles.tag,
@@ -51,6 +59,16 @@ export const StageTag = React.memo(function StageTag({
         {label}
       </Text>
     </View>
+  );
+
+  if (!showHelp || !helper) {
+    return tagContent;
+  }
+
+  return (
+    <BadgeHelpTooltip title={label} body={helper}>
+      {tagContent}
+    </BadgeHelpTooltip>
   );
 });
 

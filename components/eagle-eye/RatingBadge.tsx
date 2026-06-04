@@ -3,32 +3,41 @@
  * RatingBadge — compact colored badge showing STRONG_BUY / BUY / HOLD / SELL / STRONG_SELL.
  */
 import { getRatingColors } from "@/constants/eagleEyeColors";
-import { RATING_LABELS } from "@/constants/eagleEyeStrings";
+import { getRatingDescription, RATING_LABELS } from "@/constants/eagleEyeStrings";
 import { useThemeStore } from "@/services/themeStore";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { BadgeHelpTooltip } from "./BadgeHelpTooltip";
 
 interface RatingBadgeProps {
   rating: string;
   size?: "sm" | "md";
+  showHelp?: boolean;
 }
 
 export const RatingBadge = React.memo(function RatingBadge({
   rating,
+  size = "md",
+  showHelp = true,
 }: RatingBadgeProps) {
   const { colors } = useThemeStore();
   const c = getRatingColors(rating, colors);
   const label = RATING_LABELS[rating] ?? rating;
+  const helper = getRatingDescription(rating);
+  const small = size === "sm";
   const weight: "600" | "700" =
     rating === "HOLD" || rating === "SELL" ? "600" : "700";
 
-  return (
+  const badgeContent = (
     <View
       style={[
         styles.badge,
         {
           backgroundColor: c.bg,
           borderColor: c.border,
+          minWidth: small ? 66 : 72,
+          paddingHorizontal: small ? 8 : 10,
+          paddingVertical: small ? 4 : 5,
           opacity: 1,
         },
       ]}
@@ -39,6 +48,7 @@ export const RatingBadge = React.memo(function RatingBadge({
           {
             color: c.text,
             fontWeight: weight,
+            fontSize: small ? 10 : 11,
           },
         ]}
         numberOfLines={1}
@@ -46,6 +56,16 @@ export const RatingBadge = React.memo(function RatingBadge({
         {label.toUpperCase()}
       </Text>
     </View>
+  );
+
+  if (!showHelp || !helper) {
+    return badgeContent;
+  }
+
+  return (
+    <BadgeHelpTooltip title={label.toUpperCase()} body={helper}>
+      {badgeContent}
+    </BadgeHelpTooltip>
   );
 });
 

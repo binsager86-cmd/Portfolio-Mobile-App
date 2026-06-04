@@ -10,13 +10,18 @@
 
 import { ConfluenceBar } from "@/components/eagle-eye/ConfluenceBar";
 import { EagleEyeChart } from "@/components/eagle-eye/EagleEyeChart";
+import { BadgeHelpTooltip } from "@/components/eagle-eye/BadgeHelpTooltip";
 import { RatingBadge } from "@/components/eagle-eye/RatingBadge";
 import { SafetyConfirmModal } from "@/components/eagle-eye/SafetyConfirmModal";
 import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { TradePlanCard } from "@/components/eagle-eye/TradePlanCard";
 import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
-import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
+import {
+  EE,
+  getRatingConfidenceDescription,
+  STAGE_INTERPRETATIONS,
+} from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
@@ -26,8 +31,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import EagleEyeDnaScreen from "./[ticker]-dna";
 import {
   ActivityIndicator,
-  Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -55,8 +58,6 @@ export default function EagleEyeDetailScreen() {
   // Safety modal — auto-show when requires_confirmation
   const [safetyVisible, setSafetyVisible] = useState(false);
   const [safetyDismissed, setSafetyDismissed] = useState(false);
-  // Stage tooltip (web hover)
-  const [stageTooltipVisible, setStageTooltipVisible] = useState(false);
 
   useEffect(() => {
     if (analysis?.requires_confirmation && !safetyDismissed) {
@@ -150,46 +151,16 @@ export default function EagleEyeDetailScreen() {
               <RatingBadge rating={analysis.rating} />
               <View style={styles.stageRow}>
                 <StageTag stage={analysis.stage} size="sm" variant="full" />
-                {Platform.OS !== "web" ? (
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        getStageLabelFull(analysis.stage),
-                        getStageDescription(analysis.stage),
-                      )
-                    }
-                    hitSlop={8}
-                    style={({ pressed }: any) => ({ opacity: pressed ? 0.5 : 1 })}
-                  >
-                    <FontAwesome name="info-circle" size={14} color={colors.textMuted} />
-                  </Pressable>
-                ) : (
-                  <View
-                    {...({
-                      onMouseEnter: () => setStageTooltipVisible(true),
-                      onMouseLeave: () => setStageTooltipVisible(false),
-                    } as any)}
-                    style={{ position: "relative" }}
-                  >
-                    <FontAwesome name="info-circle" size={14} color={colors.textMuted} />
-                    {stageTooltipVisible && (
-                      <View
-                        style={[
-                          styles.stageTooltip,
-                          { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
-                        ]}
-                      >
-                        <Text style={[styles.stageTooltipText, { color: colors.textSecondary }]}>
-                          {getStageDescription(analysis.stage)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
               </View>
-              <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
-                {analysis.confidence.toFixed(0)}% confidence
-              </Text>
+              <BadgeHelpTooltip
+                title={`${analysis.confidence.toFixed(0)}% Confidence`}
+                body={getRatingConfidenceDescription(analysis.rating, analysis.confidence)}
+                align="right"
+              >
+                <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
+                  {analysis.confidence.toFixed(0)}% confidence
+                </Text>
+              </BadgeHelpTooltip>
             </View>
           </View>
 
@@ -392,21 +363,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-  },
-  stageTooltip: {
-    position: "absolute",
-    right: 0,
-    top: 20,
-    width: 220,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 10,
-    zIndex: 100,
-    ...UITokens.shadows.card,
-  },
-  stageTooltipText: {
-    fontSize: 12,
-    lineHeight: 17,
   },
   heroTicker: {
     fontSize: 26,
