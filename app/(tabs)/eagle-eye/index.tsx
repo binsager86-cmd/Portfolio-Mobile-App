@@ -159,6 +159,15 @@ export default function EagleEyeScannerScreen() {
     runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
   }, [eeRefresh]);
 
+  useEffect(() => {
+    return () => {
+      if (runStatusTimer.current) {
+        clearTimeout(runStatusTimer.current);
+        runStatusTimer.current = null;
+      }
+    };
+  }, []);
+
   const stocks: RatedStock[] = useMemo(() => {
     // Build ML band lookup map (ticker → band item)
     const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
@@ -629,6 +638,9 @@ export default function EagleEyeScannerScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            directionalLockEnabled
+            keyboardShouldPersistTaps="handled"
             style={styles.filterBar}
             contentContainerStyle={styles.filterBarContent}
           >
@@ -905,6 +917,7 @@ export default function EagleEyeScannerScreen() {
         data={stocks}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        nestedScrollEnabled
         ListEmptyComponent={renderEmpty}
         refreshControl={
           <RefreshControl
