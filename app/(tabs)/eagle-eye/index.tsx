@@ -21,7 +21,6 @@ import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -104,7 +103,6 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
-  const isFocused = useIsFocused();
   const isTableView = Platform.OS === "web";
   const rowHeight = isTableView ? 54 : 72;
 
@@ -123,14 +121,8 @@ export default function EagleEyeScannerScreen() {
     [sortBy, sortDir]
   );
 
-  // Lazy load: don't fetch until the user actually taps into this tab
-  const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
-  useEffect(() => {
-    if (isFocused) {
-      setHasFocusedOnce(true);
-    }
-  }, [isFocused]);
-  const fetchEnabled = hasFocusedOnce || isFocused;
+  // Always enable scanner queries to avoid missed focus events in production.
+  const fetchEnabled = true;
 
   // No min_confidence sent to the server — full universe fetched once and
   // cached for 10 min.  Confidence filtering happens in the useMemo below
