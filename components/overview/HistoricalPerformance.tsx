@@ -35,17 +35,27 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 interface Props {
   snapshotData?: { snapshots: SnapshotRecord[]; count: number };
   realizedData?: { total_realized_kwd: number; total_profit_kwd: number; total_loss_kwd: number; details: RealizedProfitDetail[] };
+  livePortfolioValue?: number;
+}
+
+function getLocalIsoDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // ── Component ───────────────────────────────────────────────────────
 
-export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
+export function HistoricalPerformance({ snapshotData, realizedData, livePortfolioValue }: Props) {
   const { colors } = useThemeStore();
   const { t } = useTranslation();
   const { isPhone, spacing, fonts } = useResponsive();
 
   // Fetch all dividends (need per-record dates)
   const { data: allDivData } = useAllDividends();
+
+  const todayIso = getLocalIsoDate(new Date());
 
   // ── Compute yearly data ─────────────────────────────────────────
 
@@ -54,8 +64,10 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       snapshots: snapshotData?.snapshots ?? [],
       dividends: allDivData?.dividends ?? [],
       realizedDetails: realizedData?.details ?? [],
+      livePortfolioValue,
+      liveAsOfDate: todayIso,
     });
-  }, [snapshotData?.snapshots, allDivData?.dividends, realizedData?.details]);
+  }, [snapshotData?.snapshots, allDivData?.dividends, realizedData?.details, livePortfolioValue, todayIso]);
 
   // ── Year filter ─────────────────────────────────────────────────
 

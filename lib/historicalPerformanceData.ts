@@ -76,9 +76,19 @@ export function buildYearlyHistoricalData(args: {
   snapshots: SnapshotRecord[];
   dividends: DividendRecord[];
   realizedDetails: RealizedProfitDetail[];
+  livePortfolioValue?: number;
+  liveAsOfDate?: string;
 }): YearlyPerformanceDataPoint[] {
   const snapshots = dedupeSnapshotsByDate(args.snapshots);
   const byYear = groupSnapshotsByYear(snapshots);
+  const hasLiveValue =
+    typeof args.livePortfolioValue === "number" &&
+    Number.isFinite(args.livePortfolioValue);
+  const liveValue = hasLiveValue ? safeNum(args.livePortfolioValue) : 0;
+  const liveAsOfDate =
+    typeof args.liveAsOfDate === "string" && args.liveAsOfDate.length >= 10
+      ? args.liveAsOfDate.slice(0, 10)
+      : null;
 
   const divByYear = new Map<string, number>();
   for (const div of args.dividends) {
@@ -129,10 +139,20 @@ export function buildYearlyHistoricalData(args: {
     const yearStart = sorted[0];
     const yearEnd = sorted[sorted.length - 1];
 
-    const yearEndValue = safeNum(yearEnd.portfolio_value);
+    let yearEndValue = safeNum(yearEnd.portfolio_value);
     const yearStartValue = safeNum(yearStart.portfolio_value);
     const yearStartAccumulated = safeNum(yearStart.accumulated_cash);
     const yearEndAccumulated = safeNum(yearEnd.accumulated_cash);
+
+    // For the current year, use today's live overview value when snapshots lag behind.
+    if (
+      hasLiveValue &&
+      liveAsOfDate &&
+      liveAsOfDate.slice(0, 4) === year &&
+      liveAsOfDate >= yearEnd.snapshot_date
+    ) {
+      yearEndValue = liveValue;
+    }
 
     const startValue = hasPrevSnapshotYear ? prevYearEndValue : yearStartValue;
     const accumulatedBaseline =

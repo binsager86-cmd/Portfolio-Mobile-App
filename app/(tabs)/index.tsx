@@ -772,6 +772,7 @@ function OverviewScreen() {
         <HistoricalPerformance
           snapshotData={snapshotData}
           realizedData={realizedData}
+          livePortfolioValue={metrics.totalValue}
         />
       )}
 
