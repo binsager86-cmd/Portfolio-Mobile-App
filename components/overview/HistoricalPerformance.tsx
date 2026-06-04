@@ -19,9 +19,12 @@ import DividendYearlyChart from "@/components/charts/DividendYearlyChart";
 import SnapshotLineChart, { type ChartDataPoint } from "@/components/charts/SnapshotLineChart";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { useAllDividends } from "@/hooks/queries/useDividendQueries";
-import { useAllTransactions } from "@/hooks/queries/useTransactionQueries";
 import { useResponsive } from "@/hooks/useResponsive";
 import { formatCurrency, formatSignedCurrency } from "@/lib/currency";
+import {
+  buildYearlyHistoricalData,
+  type YearlyPerformanceDataPoint,
+} from "@/lib/historicalPerformanceData";
 import type { RealizedProfitDetail, SnapshotRecord } from "@/services/api";
 import { useThemeStore } from "@/services/themeStore";
 import { tokens } from "@/theme/tokens";
@@ -29,30 +32,9 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // ── Types ───────────────────────────────────────────────────────────
 
-interface YearlyData {
-  year: string;
-  portfolioValue: number;       // year-end snapshot value
-  dividends: number;            // total cash dividends (KWD) that year
-  appreciation: number;         // value change − net deposits
-  realizedPnl: number;          // total realized P&L (KWD) that year
-}
-
 interface Props {
   snapshotData?: { snapshots: SnapshotRecord[]; count: number };
   realizedData?: { total_realized_kwd: number; total_profit_kwd: number; total_loss_kwd: number; details: RealizedProfitDetail[] };
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function groupSnapshotsByYear(snapshots: SnapshotRecord[]): Map<string, SnapshotRecord[]> {
-  const map = new Map<string, SnapshotRecord[]>();
-  for (const s of snapshots) {
-    const year = s.snapshot_date.slice(0, 4);
-    const arr = map.get(year) ?? [];
-    arr.push(s);
-    map.set(year, arr);
-  }
-  return map;
 }
 
 // ── Component ───────────────────────────────────────────────────────
@@ -65,110 +47,15 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
   // Fetch all dividends (need per-record dates)
   const { data: allDivData } = useAllDividends();
 
-  // Fetch all transactions (buy/sell/dividend — spans full history)
-  const { data: allTxnData } = useAllTransactions();
-
   // ── Compute yearly data ─────────────────────────────────────────
 
-  const yearlyData = useMemo((): YearlyData[] => {
-    const snapshots = [...(snapshotData?.snapshots ?? [])].sort(
-      (a, b) => a.snapshot_date.localeCompare(b.snapshot_date),
-    );
-
-    const byYear = groupSnapshotsByYear(snapshots);
-
-    // Dividends by year
-    const divByYear = new Map<string, number>();
-    for (const d of (allDivData?.dividends ?? [])) {
-      const yr = d.txn_date.slice(0, 4);
-      divByYear.set(yr, (divByYear.get(yr) ?? 0) + d.cash_dividend_kwd);
-    }
-
-    // Realized P&L by year
-    const realByYear = new Map<string, number>();
-    for (const r of (realizedData?.details ?? [])) {
-      const yr = r.txn_date.slice(0, 4);
-      realByYear.set(yr, (realByYear.get(yr) ?? 0) + r.realized_pnl_kwd);
-    }
-
-    // Cumulative cost basis by year from transactions
-    const txnCostByYear = new Map<string, number>();
-    const txns = allTxnData?.transactions ?? [];
-    for (const txn of txns) {
-      if (txn.is_deleted) continue;
-      const yr = txn.txn_date.slice(0, 4);
-      const cost = txn.purchase_cost ?? 0;
-      const sellVal = txn.sell_value ?? 0;
-      txnCostByYear.set(yr, (txnCostByYear.get(yr) ?? 0) + cost - sellVal);
-    }
-
-    // Union all years from snapshots, dividends, realized trades, and transactions
-    const allYearsSet = new Set<string>([
-      ...byYear.keys(),
-      ...divByYear.keys(),
-      ...realByYear.keys(),
-      ...txnCostByYear.keys(),
-    ]);
-    const years = Array.from(allYearsSet).sort();
-    if (!years.length) return [];
-
-    let prevYearEndValue = 0;
-    // FIX: track the prior year-end deposit_cash so net-deposits uses the correct
-    // cumulative baseline — not the first snapshot of the current year, which
-    // silently drops any deposits made between the prior year's last snapshot and
-    // this year's first snapshot.
-    let prevYearEndDepositCash = 0;
-    let cumulativeCost = 0;
-
-    return years.map((year) => {
-      const yearSnaps = byYear.get(year);
-
-      // Accumulate cost basis for this year
-      cumulativeCost += txnCostByYear.get(year) ?? 0;
-
-      if (yearSnaps) {
-        const sorted = [...yearSnaps].sort((a, b) =>
-          a.snapshot_date.localeCompare(b.snapshot_date),
-        );
-        const yearEnd = sorted[sorted.length - 1];
-        const yearStart = sorted[0];
-
-        // Portfolio growth = year-end value
-        const portfolioValue = yearEnd.portfolio_value;
-
-        // Dividends
-        const dividends = divByYear.get(year) ?? 0;
-
-        // Appreciation = (year-end − year-start) minus net new cash injected this year.
-        // startValue: use prior year-end to bridge cross-year continuity.
-        const startValue = prevYearEndValue > 0 ? prevYearEndValue : yearStart.portfolio_value;
-        // FIX: baseline for deposits is the prior year-end deposit_cash (not this
-        // year's first snapshot — which misses year-boundary deposits).
-        const depositBaseline = prevYearEndDepositCash > 0
-          ? prevYearEndDepositCash
-          : yearStart.deposit_cash;
-        const netDepositsThisYear = yearEnd.deposit_cash - depositBaseline;
-        const appreciation = (yearEnd.portfolio_value - startValue) - netDepositsThisYear;
-
-        // Realized P&L
-        const realizedPnl = realByYear.get(year) ?? 0;
-
-        prevYearEndValue = yearEnd.portfolio_value;
-        prevYearEndDepositCash = yearEnd.deposit_cash;
-
-        return { year, portfolioValue, dividends, appreciation, realizedPnl };
-      }
-
-      // Year has no snapshots — appreciation is indeterminate; do NOT use cost basis
-      // as a portfolio-value proxy (cost basis ≠ market value, would be misleading).
-      // Do NOT update prevYear* so the next snapshot year picks up from the last
-      // real snapshot rather than from a gap-year estimate.
-      const dividends = divByYear.get(year) ?? 0;
-      const realizedPnl = realByYear.get(year) ?? 0;
-
-      return { year, portfolioValue: 0, dividends, appreciation: 0, realizedPnl };
+  const yearlyData = useMemo((): YearlyPerformanceDataPoint[] => {
+    return buildYearlyHistoricalData({
+      snapshots: snapshotData?.snapshots ?? [],
+      dividends: allDivData?.dividends ?? [],
+      realizedDetails: realizedData?.details ?? [],
     });
-  }, [snapshotData, allDivData, realizedData, allTxnData]);
+  }, [snapshotData?.snapshots, allDivData?.dividends, realizedData?.details]);
 
   // ── Year filter ─────────────────────────────────────────────────
 
@@ -197,24 +84,16 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
     return yearlyData.filter((d) => selectedYears.has(d.year));
   }, [yearlyData, selectedYears, isAllSelected]);
 
+  const snapshotBackedData = useMemo(
+    () => filteredData.filter((d) => d.hasSnapshot),
+    [filteredData],
+  );
+
   // ── Chart data ──────────────────────────────────────────────────
 
-  // FIX: use filter().pop() to get the immediately prior year in yearlyData,
-  // not find() which returns the FIRST year less-than (could be 2020 when
-  // the first filtered year is 2023, skipping 2021/2022 in between).
   const growthChartData: ChartDataPoint[] = useMemo(
-    () => filteredData.map((d, i) => {
-      let prevValue: number;
-      if (i === 0) {
-        // Find the last year in the full dataset that is strictly before d.year
-        const prevEntry = yearlyData.filter((y) => y.year < d.year).pop();
-        prevValue = prevEntry?.portfolioValue ?? 0;
-      } else {
-        prevValue = filteredData[i - 1].portfolioValue;
-      }
-      return { label: d.year, value: d.portfolioValue - prevValue };
-    }),
-    [filteredData, yearlyData],
+    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.growth })),
+    [snapshotBackedData],
   );
 
   const dividendBarData = useMemo(
@@ -223,8 +102,8 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
   );
 
   const appreciationChartData: ChartDataPoint[] = useMemo(
-    () => filteredData.map((d) => ({ label: d.year, value: d.appreciation })),
-    [filteredData],
+    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.appreciation })),
+    [snapshotBackedData],
   );
 
   const realizedChartData: ChartDataPoint[] = useMemo(
@@ -236,13 +115,12 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
 
   const summary = useMemo(() => {
     const totalDiv = filteredData.reduce((s, d) => s + d.dividends, 0);
-    const totalAppr = filteredData.reduce((s, d) => s + d.appreciation, 0);
+    const totalAppr = snapshotBackedData.reduce((s, d) => s + d.appreciation, 0);
     const totalReal = filteredData.reduce((s, d) => s + d.realizedPnl, 0);
-    const latestValue = filteredData.length > 0 ? filteredData[filteredData.length - 1].portfolioValue : 0;
-    const earliestValue = filteredData.length > 0 ? filteredData[0].portfolioValue : 0;
-    const totalGrowth = latestValue - earliestValue;
+    const latestValue = snapshotBackedData.length > 0 ? snapshotBackedData[snapshotBackedData.length - 1].portfolioValue : 0;
+    const totalGrowth = snapshotBackedData.reduce((s, d) => s + d.growth, 0);
     return { totalDiv, totalAppr, totalReal, latestValue, totalGrowth };
-  }, [filteredData]);
+  }, [filteredData, snapshotBackedData]);
 
   // ── Empty state ─────────────────────────────────────────────────
 

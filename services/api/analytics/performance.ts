@@ -2,6 +2,7 @@
  * Performance, risk, snapshots & trading endpoints.
  */
 
+import { dedupeSnapshotsByDate } from "@/lib/historicalPerformanceData";
 import api from "../client";
 import type {
   PerformanceData,
@@ -146,7 +147,14 @@ export async function getSnapshots(params?: {
     "/api/v1/analytics/snapshots",
     { params }
   );
-  return data.data;
+  const normalized = dedupeSnapshotsByDate(data.data.snapshots).sort((a, b) =>
+    b.snapshot_date.localeCompare(a.snapshot_date),
+  );
+  return {
+    ...data.data,
+    snapshots: normalized,
+    count: normalized.length,
+  };
 }
 
 // ── Trading ─────────────────────────────────────────────────────────
