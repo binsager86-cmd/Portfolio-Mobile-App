@@ -502,13 +502,8 @@ export default function EagleEyeScannerScreen() {
     </>
   );
 
-  return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
-      ]}
-    >
+  const listHeader = (
+    <>
       {/* Header */}
       <View
         style={[
@@ -911,13 +906,22 @@ export default function EagleEyeScannerScreen() {
           </>
         )}
       </View>
+    </>
+  );
 
-      {/* List */}
+  return (
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
+      ]}
+    >
       <FlatList
         data={stocks}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         nestedScrollEnabled
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={renderEmpty}
         refreshControl={
           <RefreshControl
