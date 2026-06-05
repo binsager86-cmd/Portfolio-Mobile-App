@@ -39,6 +39,20 @@ export const STOCK_TABLE_COL_WIDTHS = {
   confidence: 78,
 } as const;
 
+export const STOCK_TABLE_TOTAL_WIDTH =
+  UITokens.spacing.md * 2
+  + STOCK_TABLE_COL_WIDTHS.rating
+  + STOCK_TABLE_COL_WIDTHS.ticker
+  + STOCK_TABLE_COL_WIDTHS.stage
+  + STOCK_TABLE_COL_WIDTHS.volume
+  + STOCK_TABLE_COL_WIDTHS.current
+  + STOCK_TABLE_COL_WIDTHS.entry
+  + STOCK_TABLE_COL_WIDTHS.tp1
+  + STOCK_TABLE_COL_WIDTHS.bvps
+  + STOCK_TABLE_COL_WIDTHS.pe
+  + STOCK_TABLE_COL_WIDTHS.rr
+  + STOCK_TABLE_COL_WIDTHS.confidence;
+
 type StockRowVariant = "default" | "table";
 
 interface StockRowProps {
@@ -451,6 +465,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     position: "relative",
     overflow: "hidden",
+    width: STOCK_TABLE_TOTAL_WIDTH,
     minHeight: 54,
   },
   leftStrip: {

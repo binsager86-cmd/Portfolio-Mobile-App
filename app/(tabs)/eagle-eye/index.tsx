@@ -14,6 +14,7 @@ import { exportEagleEyeScannerReport } from "@/lib/exportEagleEyeScannerReport";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import {
   STOCK_TABLE_COL_WIDTHS,
+  STOCK_TABLE_TOTAL_WIDTH,
   StockRow,
   StockRowSkeleton,
   computeRR,
@@ -489,6 +490,7 @@ export default function EagleEyeScannerScreen() {
       <View
         style={[
           styles.colHeader,
+          isTableView ? styles.colHeaderTable : null,
           { backgroundColor: colors.bgSecondary, borderBottomColor: colors.borderColor },
         ]}
       >
@@ -1019,6 +1021,149 @@ export default function EagleEyeScannerScreen() {
     </>
   );
 
+  const scannerList = (
+    <FlatList
+      data={listData}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      // ListHeaderComponent occupies index 0; keep only the data column header sticky.
+      stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
+      ListEmptyComponent={renderEmpty}
+      ListHeaderComponent={
+        <>
+          <EagleEyeTopTabs />
+
+          {mlBandsData?.enabled ? (
+            <MLDisclaimerBanner
+              autoDisabled={mlDisplayState?.auto_disabled ?? false}
+              disabledReason={mlDisplayState?.disabled_reason}
+            />
+          ) : mlDisplayState?.auto_disabled ? (
+            <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
+          ) : null}
+
+          <View style={styles.tableTopSection}>
+            <View style={styles.previewHeader}>
+              <View style={styles.previewHeaderRow}>
+                <View style={styles.previewHeaderCopy}>
+                  <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
+                  <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
+                    {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
+                  </Text>
+                </View>
+
+                <Pressable
+                  testID="export-eagle-eye-scanner"
+                  onPress={handleExportScanner}
+                  style={[
+                    styles.exportButton,
+                    {
+                      backgroundColor: colors.accentPrimary + "18",
+                      borderColor: colors.accentPrimary + "55",
+                      opacity: stocks.length ? 1 : 0.5,
+                    },
+                  ]}
+                  disabled={!stocks.length}
+                >
+                  <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
+                  <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>Export Excel</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.filterPanel,
+                { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
+              ]}
+            >
+              <View style={styles.filterPanelHeader}>
+                <View>
+                  <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
+                  <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
+                </View>
+                {hasActiveFilters ? (
+                  <Pressable
+                    onPress={handleClearFilters}
+                    style={[
+                      styles.clearFiltersButton,
+                      { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
+                    ]}
+                  >
+                    <FontAwesome name="times" size={12} color={colors.textMuted} />
+                    <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <View style={styles.searchRow}>
+                <View
+                  style={[
+                    styles.searchInput,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
+                  ]}
+                >
+                  <FontAwesome name="search" size={13} color={colors.textMuted} />
+                  <TextInput
+                    style={[styles.searchText, { color: colors.textPrimary }]}
+                    placeholder="Search ticker or name..."
+                    placeholderTextColor={colors.textMuted}
+                    value={search}
+                    onChangeText={setSearch}
+                    autoCapitalize="characters"
+                    returnKeyType="search"
+                  />
+                  {search.length > 0 && (
+                    <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                      <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.filterBarWrap}>
+                {Platform.OS === "web" ? (
+                  <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterBar}
+                    nestedScrollEnabled
+                    directionalLockEnabled
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.filterBarContent}
+                  >
+                    {renderFilterChips()}
+                  </ScrollView>
+                )}
+              </View>
+            </View>
+          </View>
+        </>
+      }
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefetching && !isLoading}
+          onRefresh={onRefresh}
+          tintColor={colors.accentPrimary}
+          colors={[colors.accentPrimary]}
+        />
+      }
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+      contentContainerStyle={[
+        styles.listContent,
+        { paddingBottom: insets.bottom + UITokens.spacing.lg },
+        stocks.length === 0 && styles.listEmpty,
+      ]}
+      style={isTableView ? styles.tableFlatList : undefined}
+      initialNumToRender={15}
+      maxToRenderPerBatch={15}
+      windowSize={5}
+    />
+  );
+
   return (
     <View
       style={[
@@ -1145,145 +1290,20 @@ export default function EagleEyeScannerScreen() {
           { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
         ]}
       >
-        <FlatList
-          data={listData}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          // ListHeaderComponent occupies index 0; keep only the data column header sticky.
-          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
-          ListEmptyComponent={renderEmpty}
-          ListHeaderComponent={
-            <>
-              <EagleEyeTopTabs />
-
-              {mlBandsData?.enabled ? (
-                <MLDisclaimerBanner
-                  autoDisabled={mlDisplayState?.auto_disabled ?? false}
-                  disabledReason={mlDisplayState?.disabled_reason}
-                />
-              ) : mlDisplayState?.auto_disabled ? (
-                <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
-              ) : null}
-
-              <View style={styles.tableTopSection}>
-                <View style={styles.previewHeader}>
-                  <View style={styles.previewHeaderRow}>
-                    <View style={styles.previewHeaderCopy}>
-                      <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
-                      <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
-                        {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
-                      </Text>
-                    </View>
-
-                    <Pressable
-                      testID="export-eagle-eye-scanner"
-                      onPress={handleExportScanner}
-                      style={[
-                        styles.exportButton,
-                        {
-                          backgroundColor: colors.accentPrimary + "18",
-                          borderColor: colors.accentPrimary + "55",
-                          opacity: stocks.length ? 1 : 0.5,
-                        },
-                      ]}
-                      disabled={!stocks.length}
-                    >
-                      <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
-                      <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>Export Excel</Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View
-                  style={[
-                    styles.filterPanel,
-                    { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
-                  ]}
-                >
-                  <View style={styles.filterPanelHeader}>
-                    <View>
-                      <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
-                      <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
-                    </View>
-                    {hasActiveFilters ? (
-                      <Pressable
-                        onPress={handleClearFilters}
-                        style={[
-                          styles.clearFiltersButton,
-                          { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
-                        ]}
-                      >
-                        <FontAwesome name="times" size={12} color={colors.textMuted} />
-                        <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-
-                  <View style={styles.searchRow}>
-                    <View
-                      style={[
-                        styles.searchInput,
-                        { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
-                      ]}
-                    >
-                      <FontAwesome name="search" size={13} color={colors.textMuted} />
-                      <TextInput
-                        style={[styles.searchText, { color: colors.textPrimary }]}
-                        placeholder="Search ticker or name..."
-                        placeholderTextColor={colors.textMuted}
-                        value={search}
-                        onChangeText={setSearch}
-                        autoCapitalize="characters"
-                        returnKeyType="search"
-                      />
-                      {search.length > 0 && (
-                        <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                          <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.filterBarWrap}>
-                    {Platform.OS === "web" ? (
-                      <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
-                    ) : (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.filterBar}
-                        nestedScrollEnabled
-                        directionalLockEnabled
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={styles.filterBarContent}
-                      >
-                        {renderFilterChips()}
-                      </ScrollView>
-                    )}
-                  </View>
-                </View>
-              </View>
-            </>
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching && !isLoading}
-              onRefresh={onRefresh}
-              tintColor={colors.accentPrimary}
-              colors={[colors.accentPrimary]}
-            />
-          }
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + UITokens.spacing.lg },
-            stocks.length === 0 && styles.listEmpty,
-          ]}
-          initialNumToRender={15}
-          maxToRenderPerBatch={15}
-          windowSize={5}
-        />
+        {isTableView ? (
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            directionalLockEnabled
+            keyboardShouldPersistTaps="handled"
+            style={styles.tableHorizontalScroll}
+            contentContainerStyle={styles.tableHorizontalContent}
+          >
+            {scannerList}
+          </ScrollView>
+        ) : (
+          scannerList
+        )}
       </View>
     </View>
   );
@@ -1519,6 +1539,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     zIndex: 8,
     elevation: 4,
+  },
+  colHeaderTable: {
+    width: STOCK_TABLE_TOTAL_WIDTH,
+  },
+  tableHorizontalScroll: {
+    flex: 1,
+  },
+  tableHorizontalContent: {
+    minWidth: STOCK_TABLE_TOTAL_WIDTH,
+  },
+  tableFlatList: {
+    width: STOCK_TABLE_TOTAL_WIDTH,
   },
   colHeaderCell: {
     fontSize: 10,
