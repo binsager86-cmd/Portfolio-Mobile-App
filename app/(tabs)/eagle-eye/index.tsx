@@ -1149,7 +1149,8 @@ export default function EagleEyeScannerScreen() {
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          stickyHeaderIndices={listData.length > 0 ? [0] : undefined}
+          // ListHeaderComponent occupies index 0; keep only the data column header sticky.
+          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
           ListEmptyComponent={renderEmpty}
           ListHeaderComponent={
             <>
