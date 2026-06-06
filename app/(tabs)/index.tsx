@@ -56,12 +56,13 @@ import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import { tokens } from "@/theme/tokens";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { useShallow } from "zustand/react/shallow";
 import { getApiErrorMessage } from "@/src/features/fundamental-analysis/types";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     ActivityIndicator,
@@ -145,10 +146,15 @@ function OverviewScreen() {
   // Sub-tab state
   const [activeTab, setActiveTab] = useState<OverviewTab>("dashboard");
 
-  // Insight cards
-  const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
-  const showAdvancedMetrics = useUserPrefsStore((s) => s.preferences.showAdvancedMetrics);
-  const dividendFocus = useUserPrefsStore((s) => s.preferences.dividendFocus);
+  // Insight cards — one shallow selector instead of 3 separate subscriptions
+  // to avoid 3× re-render when preferences change.
+  const { expertiseLevel, showAdvancedMetrics, dividendFocus } = useUserPrefsStore(
+    useShallow((s) => ({
+      expertiseLevel: s.preferences.expertiseLevel,
+      showAdvancedMetrics: s.preferences.showAdvancedMetrics,
+      dividendFocus: s.preferences.dividendFocus,
+    }))
+  );
   const [showSimulator, setShowSimulator] = useState(false);
   const [profitOpen, setProfitOpen] = useState(false);
 
@@ -177,10 +183,14 @@ function OverviewScreen() {
     },
   });
 
+  // Depend on aiMutation.mutate, not aiMutation — the whole mutation result
+  // object is a new reference on every render, which defeats useCallback.
+  // mutate() itself is stable (same function reference across renders).
   const handleAiAnalyze = useCallback((prompt: string) => {
     setAiResult(null);
     aiMutation.mutate(prompt);
-  }, [aiMutation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiMutation.mutate]);
 
   // First-time setup wizard — only for genuinely new users with no data.
   // Skip if user already has holdings or transactions (existing user).
@@ -243,10 +253,14 @@ function OverviewScreen() {
   // Fetch stored rf_rate from backend on mount
   const { data: storedRfRate } = useRfRateSetting();
 
-  // When stored rate loads, apply it
-  React.useEffect(() => {
-    if (storedRfRate != null && customRfRate === null) {
+  // When stored rate first loads, apply it once. Use a ref so the effect
+  // doesn't run again when the user manually edits the rate (avoids the
+  // exhaustive-deps eslint error and the stale-closure footgun).
+  const appliedStoredRate = useRef(false);
+  useEffect(() => {
+    if (!appliedStoredRate.current && storedRfRate != null) {
       setCustomRfRate(storedRfRate);
+      appliedStoredRate.current = true;
     }
   }, [storedRfRate]);
 
@@ -418,7 +432,7 @@ function OverviewScreen() {
       else Alert.alert(t('app.error'), detail);
     }
     setSavingSnapshot(false);
-  }, [queryClient]);
+  }, [queryClient, t]);
 
   const onSaveSnapshot = useCallback(() => {
     if (Platform.OS === "web") {
@@ -435,7 +449,7 @@ function OverviewScreen() {
         ],
       );
     }
-  }, [doSaveSnapshot]);
+  }, [doSaveSnapshot, t]);
 
   // ── Derived metrics ──
   const metrics = useMemo(() => {
@@ -497,6 +511,10 @@ function OverviewScreen() {
     // FIX: was incorrectly dividing by totalDeposits (deposits ≠ portfolio value).
     const cashYieldDiv = totalValue > 0 ? (totalDividends / totalValue) * 100 : 0;
 
+    // Yield-on-Cost = dividends / what you originally paid (total deposits).
+    // Distinct from cashYieldDiv which uses current market value as denominator.
+    const yieldOnCost = totalDeposits > 0 ? (totalDividends / totalDeposits) * 100 : 0;
+
     return {
       totalValue,
       totalDeposits,
@@ -518,8 +536,11 @@ function OverviewScreen() {
       totalTrades,
       profitableTrades: profitableTrades.length,
       cashYieldDiv,
+      yieldOnCost,
     };
-  }, [data, snapshotData, realizedData]);
+  // snapshotData is intentionally excluded — it is not used in this memo.
+  // It is only used in chartData below.
+  }, [data, realizedData]);
 
   const chartData = useMemo(
     () =>
@@ -1131,7 +1152,7 @@ function OverviewScreen() {
           <MetricCard
             emoji="📊"
             label={t('dashboard.yieldOnCost')}
-            value={formatPercent(metrics.cashYieldDiv)}
+            value={formatPercent(metrics.yieldOnCost)}
             subline={t('dashboard.depositsSubline', { amount: formatCurrency(metrics.totalDeposits) })}
             accentColor="#8b5cf6"
             width={isPhone ? "48%" : "32%"}

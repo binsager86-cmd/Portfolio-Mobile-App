@@ -68,6 +68,9 @@ export function EagleEyeTopTabs() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        directionalLockEnabled
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
         {EAGLE_EYE_TABS.map((tab) => {

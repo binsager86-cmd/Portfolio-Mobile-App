@@ -34,7 +34,7 @@ import { getHoldings, getOverview, getStockList } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
 import { marketApi } from "@/services/market/marketApi";
 import { newsApi } from "@/services/news/newsApi";
-import { registerForPushNotificationsAsync } from "@/services/pushTokenService";
+import { registerPushToken } from "@/services/notifications/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { useAppTheme } from "@/theme";
@@ -298,7 +298,7 @@ function RootLayoutNav() {
     }
 
     // Register push token for real-time news notifications
-    registerForPushNotificationsAsync().catch((err) => {
+    registerPushToken().catch((err) => {
       analytics.logEvent("push_registration_failed", {
         message: err instanceof Error ? err.message : String(err),
       });
@@ -317,7 +317,7 @@ function RootLayoutNav() {
         const Notifications = await import("expo-notifications");
         if (cancelled) return;
         sub = Notifications.addPushTokenListener(() => {
-          registerForPushNotificationsAsync().catch((err) => {
+          registerPushToken().catch((err) => {
             analytics.logEvent("push_token_rollover_registration_failed", {
               message: err instanceof Error ? err.message : String(err),
             });

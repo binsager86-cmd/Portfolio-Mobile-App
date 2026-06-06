@@ -1,4 +1,5 @@
 import { openSyncDb, type SyncDb } from "./sqliteAdapter";
+import Constants from "expo-constants";
 
 const DB_NAME = "portfolio_offline_v1.db";
 
@@ -44,30 +45,76 @@ const metaStorage: {
   getNumber: (key: string) => number | undefined;
   set: (key: string, value: string | number) => void;
 } = (() => {
-  try {
-    // Avoid static native dependency initialization issues on web/dev runtimes.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MMKV } = require("react-native-mmkv") as { MMKV: new (cfg: { id: string }) => {
-      getString: (key: string) => string | undefined;
-      getNumber: (key: string) => number | undefined;
-      set: (key: string, value: string | number) => void;
-    }};
-    return new MMKV({ id: "sync-metadata" });
-  } catch {
-    return {
-      getString: (key: string) => {
-        const v = fallbackMeta.get(key);
-        return typeof v === "string" ? v : undefined;
-      },
-      getNumber: (key: string) => {
-        const v = fallbackMeta.get(key);
-        return typeof v === "number" ? v : undefined;
-      },
-      set: (key: string, value: string | number) => {
-        fallbackMeta.set(key, value);
-      },
-    };
-  }
+  const runtimeInfo = Constants as {
+    appOwnership?: string;
+    executionEnvironment?: string;
+  };
+  const isExpoGoRuntime =
+    runtimeInfo.appOwnership === "expo" ||
+    runtimeInfo.executionEnvironment === "storeClient";
+  type MMKVMetaStore = {
+    getString: (key: string) => string | undefined;
+    getNumber: (key: string) => number | undefined;
+    set: (key: string, value: string | number) => void;
+  };
+
+  let mmkvMetaStore: MMKVMetaStore | null | undefined;
+  const getMMKVMetaStore = (): MMKVMetaStore | null => {
+    if (isExpoGoRuntime) return null;
+    if (mmkvMetaStore !== undefined) return mmkvMetaStore;
+    try {
+      // Avoid static native dependency initialization issues on web/dev runtimes.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { MMKV } = require("react-native-mmkv") as {
+        MMKV: new (cfg: { id: string }) => MMKVMetaStore;
+      };
+      mmkvMetaStore = new MMKV({ id: "sync-metadata" });
+    } catch {
+      mmkvMetaStore = null;
+    }
+    return mmkvMetaStore;
+  };
+
+  return {
+    getString: (key: string) => {
+      const store = getMMKVMetaStore();
+      if (store) {
+        try {
+          return store.getString(key);
+        } catch {
+          const v = fallbackMeta.get(key);
+          return typeof v === "string" ? v : undefined;
+        }
+      }
+      const v = fallbackMeta.get(key);
+      return typeof v === "string" ? v : undefined;
+    },
+    getNumber: (key: string) => {
+      const store = getMMKVMetaStore();
+      if (store) {
+        try {
+          return store.getNumber(key);
+        } catch {
+          const v = fallbackMeta.get(key);
+          return typeof v === "number" ? v : undefined;
+        }
+      }
+      const v = fallbackMeta.get(key);
+      return typeof v === "number" ? v : undefined;
+    },
+    set: (key: string, value: string | number) => {
+      const store = getMMKVMetaStore();
+      if (store) {
+        try {
+          store.set(key, value);
+          return;
+        } catch {
+          // Fall through to in-memory fallback.
+        }
+      }
+      fallbackMeta.set(key, value);
+    },
+  };
 })();
 
 const memoryHoldings = new Map<string, HoldingRow>();
