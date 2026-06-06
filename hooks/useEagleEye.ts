@@ -106,6 +106,12 @@ export interface RatedStock {
   rating: string;
   confidence: number;
   thesis: string;
+  continue_rising?: boolean;
+  continue_rising_badge?: string | null;
+  continue_rising_label?: string | null;
+  continue_rising_reason?: string | null;
+  continue_rising_exhaustion_count?: number | null;
+  continue_rising_exhaustion_signals?: string[] | null;
   entry_primary?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
@@ -136,6 +142,12 @@ export interface FullStockAnalysis {
   rating: string;
   confidence: number;
   thesis: string;
+  continue_rising?: boolean;
+  continue_rising_badge?: string | null;
+  continue_rising_label?: string | null;
+  continue_rising_reason?: string | null;
+  continue_rising_exhaustion_count?: number | null;
+  continue_rising_exhaustion_signals?: string[] | null;
   supports: SupportResistanceLevel[];
   resistances: SupportResistanceLevel[];
   entry_primary?: number | null;

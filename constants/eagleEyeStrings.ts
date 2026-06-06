@@ -154,6 +154,7 @@ export function getStageDescription(stage: string): string {
 
 // ── Rating helper descriptions ───────────────────────────────────
 export const RATING_DESCRIPTIONS: Record<string, string> = {
+  CONTINUE_RISING: "Continuation lane: breakout is already underway, buyers remain in control, and trend exhaustion is still limited.",
   STRONG_BUY: "Strong Buy: Strong setup with multiple confirmations.",
   BUY: "Buy: A genuine setup with real buying support.",
   WATCHLIST: "Watchlist: Forming but not confirmed yet. Watch closely.",
@@ -212,6 +213,7 @@ export function getRatingConfidenceDescription(
 
 // ── Rating name map ───────────────────────────────────────────────
 export const RATING_LABELS: Record<string, string> = {
+  CONTINUE_RISING: "Riding",
   BUY: "Buy",
   WATCHLIST: "Watchlist",
   HOLD: "Hold",

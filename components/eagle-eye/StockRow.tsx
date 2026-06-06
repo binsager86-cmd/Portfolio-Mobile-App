@@ -129,7 +129,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />
 
         <View style={styles.tableCellRating}>
-          <RatingBadge rating={item.rating} size="sm" />
+          <View style={styles.badgeStack}>
+            <RatingBadge rating={item.rating} size="sm" />
+            {item.continue_rising && item.continue_rising_badge ? (
+              <RatingBadge rating={item.continue_rising_badge} size="sm" />
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.tableCellTicker}>
@@ -237,7 +242,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
       {/* ── Rating badge column ─────────────────────────────── */}
       <View style={styles.badgeCol}>
-        <RatingBadge rating={item.rating} size="sm" />
+        <View style={styles.badgeStack}>
+          <RatingBadge rating={item.rating} size="sm" />
+          {item.continue_rising && item.continue_rising_badge ? (
+            <RatingBadge rating={item.continue_rising_badge} size="sm" />
+          ) : null}
+        </View>
       </View>
 
       {/* ── Content column ──────────────────────────────────── */}
@@ -538,6 +548,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "center",
     paddingRight: 6,
+  },
+  badgeStack: {
+    gap: 4,
+    alignItems: "flex-start",
   },
   contentCol: {
     flex: 1,
