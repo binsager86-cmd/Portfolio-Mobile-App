@@ -1156,7 +1156,9 @@ export default function EagleEyeScannerScreen() {
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          stickyHeaderIndices={listData.length > 0 ? [0] : undefined}
+          // Index 0 is ListHeaderComponent; index 1 is the first list item (our column header row).
+          // Keep this at [1] so only the column header sticks while scrolling.
+          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
           ListEmptyComponent={renderEmpty}
           ListHeaderComponent={
             <>

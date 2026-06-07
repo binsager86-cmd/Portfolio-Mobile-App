@@ -199,8 +199,19 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         </View>
 
         <View style={styles.tableCellRR}>
-          <Text style={[styles.tableNumText, { color: rr != null ? colors.textPrimary : colors.textMuted }]}>
-            {rrText}
+          <Text
+            style={[
+              styles.tableNumText,
+              {
+                color: item.risky_near_resistance
+                  ? colors.danger
+                  : rr != null
+                    ? colors.textPrimary
+                    : colors.textMuted,
+              },
+            ]}
+          >
+            {item.risky_near_resistance ? `${rrText}!` : rrText}
           </Text>
         </View>
 
@@ -301,7 +312,15 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             {rr != null && (
               <Text style={{ fontSize: 11 }}>
                 <Text style={{ color: colors.textMuted }}>{`  ·  `}</Text>
-                <Text style={{ color: colors.textSecondary }}>{`R:R 1:${rr.toFixed(1)}`}</Text>
+                <Text style={{ color: item.risky_near_resistance ? colors.danger : colors.textSecondary }}>
+                  {`R:R 1:${rr.toFixed(1)}`}
+                </Text>
+              </Text>
+            )}
+            {item.risky_near_resistance && (
+              <Text style={{ fontSize: 11 }}>
+                <Text style={{ color: colors.textMuted }}>{`  ·  `}</Text>
+                <Text style={{ color: colors.danger }}>{`Risky`}</Text>
               </Text>
             )}
           </Text>

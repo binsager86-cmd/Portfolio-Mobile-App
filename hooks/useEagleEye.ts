@@ -112,6 +112,7 @@ export interface RatedStock {
   continue_rising_reason?: string | null;
   continue_rising_exhaustion_count?: number | null;
   continue_rising_exhaustion_signals?: string[] | null;
+  risky_near_resistance?: boolean;
   entry_primary?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
