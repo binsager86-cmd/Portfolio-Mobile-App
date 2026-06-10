@@ -12,6 +12,7 @@ import { EE, REGIME_LABELS, getStageLabelShort } from "@/constants/eagleEyeStrin
 import { UITokens } from "@/constants/uiTokens";
 import { exportEagleEyeScannerReport } from "@/lib/exportEagleEyeScannerReport";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
+import { BadgeHelpTooltip } from "@/components/eagle-eye/BadgeHelpTooltip";
 import {
   STOCK_TABLE_COL_WIDTHS,
   StockRow,
@@ -116,6 +117,19 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   bvps: "BVPS",
   pe: "P/E",
 };
+
+const HEADER_TOOLTIP_CONFIDENCE =
+  "How sure the system is about this rating. Above ~75% is strong, 60-75% is moderate, below 60% is weak - treat low-confidence signals with extra caution.";
+const HEADER_TOOLTIP_RR =
+  "How much you can gain versus lose. 1:3 means about 3 up for every 1 risked. Above 1:2 is healthy. Red means the stock is near resistance - little room up, so riskier.";
+const HEADER_TOOLTIP_STAGE =
+  "Where the stock is in its cycle: Rising = trending up now; Turning Up = just starting to turn; Accumulating = building a base; Topping = may be peaking, be careful; Mixed = no clear direction.";
+const HEADER_TOOLTIP_VOLUME =
+  "Trading activity versus its normal level. High means lots of interest (moves are more reliable). Low means thin trading (moves are less trustworthy and harder to exit).";
+const HEADER_TOOLTIP_TP1 =
+  "First target price if the trade works out - a sensible spot to consider taking some profit.";
+const HEADER_TOOLTIP_ENTRY =
+  "The suggested price area to buy, if you decide to enter.";
 
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
@@ -534,28 +548,43 @@ export default function EagleEyeScannerScreen() {
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.stage }]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  { color: sortBy === "stage" ? colors.accentPrimary : colors.textMuted },
-                ]}
-              >
-                {`Stage${sortArrow("stage")}`}
-              </Text>
+              <View style={styles.colHeaderWithInfo}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    { color: sortBy === "stage" ? colors.accentPrimary : colors.textMuted },
+                  ]}
+                >
+                  {`Stage${sortArrow("stage")}`}
+                </Text>
+                <BadgeHelpTooltip title="STAGE" body={HEADER_TOOLTIP_STAGE}>
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
+            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.action }]}>
+              <Text style={[styles.colHeaderCell, { color: colors.textMuted }]}>
+                ACTION
+              </Text>
+            </View>
             <Pressable
               onPress={() => toggleSort("volume")}
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.volume }]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  { color: sortBy === "volume" ? colors.accentPrimary : colors.textMuted },
-                ]}
-              >
-                {`Volume${sortArrow("volume")}`}
-              </Text>
+              <View style={styles.colHeaderWithInfo}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    { color: sortBy === "volume" ? colors.accentPrimary : colors.textMuted },
+                  ]}
+                >
+                  {`Volume${sortArrow("volume")}`}
+                </Text>
+                <BadgeHelpTooltip title="VOLUME" body={HEADER_TOOLTIP_VOLUME}>
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("price")}
@@ -587,17 +616,22 @@ export default function EagleEyeScannerScreen() {
               ]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  {
-                    color: sortBy === "entry" ? colors.accentPrimary : colors.textMuted,
-                    textAlign: "right",
-                  },
-                ]}
-              >
-                {`Entry${sortArrow("entry")}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: sortBy === "entry" ? colors.accentPrimary : colors.textMuted,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {`Entry${sortArrow("entry")}`}
+                </Text>
+                <BadgeHelpTooltip title="ENTRY" body={HEADER_TOOLTIP_ENTRY} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("tp1")}
@@ -608,17 +642,22 @@ export default function EagleEyeScannerScreen() {
               ]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  {
-                    color: sortBy === "tp1" ? colors.accentPrimary : colors.textMuted,
-                    textAlign: "right",
-                  },
-                ]}
-              >
-                {`TP1${sortArrow("tp1")}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: sortBy === "tp1" ? colors.accentPrimary : colors.textMuted,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {`TP1${sortArrow("tp1")}`}
+                </Text>
+                <BadgeHelpTooltip title="TP1" body={HEADER_TOOLTIP_TP1} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("bvps")}
@@ -667,17 +706,22 @@ export default function EagleEyeScannerScreen() {
               style={[styles.colHeaderBtn, styles.colHeaderSortBtn, { width: STOCK_TABLE_COL_WIDTHS.rr }]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  {
-                    color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted,
-                    textAlign: "right",
-                  },
-                ]}
-              >
-                {`R:R${sortArrow("rr")}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {`R:R${sortArrow("rr")}`}
+                </Text>
+                <BadgeHelpTooltip title="R:R" body={HEADER_TOOLTIP_RR} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("conf")}
@@ -688,17 +732,22 @@ export default function EagleEyeScannerScreen() {
               ]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  {
-                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                    textAlign: "right",
-                  },
-                ]}
-              >
-                {`Conf${sortArrow("conf")}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {`Conf${sortArrow("conf")}`}
+                </Text>
+                <BadgeHelpTooltip title="CONF" body={HEADER_TOOLTIP_CONFIDENCE} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
           </>
         ) : (
@@ -714,32 +763,42 @@ export default function EagleEyeScannerScreen() {
               style={styles.colHeaderBtn}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
-                ]}
-              >
-                {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
+                  ]}
+                >
+                  {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+                </Text>
+                <BadgeHelpTooltip title="R:R" body={HEADER_TOOLTIP_RR} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("conf")}
               style={styles.colHeaderBtn}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.colHeaderCell,
-                  {
-                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                    width: 72,
-                    textAlign: "right",
-                  },
-                ]}
-              >
-                {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-              </Text>
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                      width: 72,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+                </Text>
+                <BadgeHelpTooltip title="CONF" body={HEADER_TOOLTIP_CONFIDENCE} align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
             </Pressable>
             {mlBandsData?.enabled ? (
               <Text
@@ -1533,6 +1592,26 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
+  },
+  colHeaderWithInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  colHeaderWithInfoRight: {
+    justifyContent: "flex-end",
+  },
+  colHeaderInfoIcon: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    width: 13,
+    height: 13,
+    textAlign: "center",
+    textAlignVertical: "center",
+    opacity: 0.85,
   },
   colHeaderBtn: { paddingHorizontal: 2 },
   colHeaderSortBtn: { alignItems: "flex-end" },

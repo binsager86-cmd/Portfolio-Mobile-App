@@ -24,11 +24,13 @@ import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
 import { MLBandBadge } from "./MLBandBadge";
 import type { MLBandLabel } from "./MLBandBadge";
+import { getActionInterpretation } from "./actionInterpretation";
 
 export const STOCK_TABLE_COL_WIDTHS = {
   rating: 84,
   ticker: 92,
   stage: 108,
+  action: 142,
   volume: 106,
   current: 92,
   entry: 92,
@@ -82,6 +84,31 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
   const rr = useMemo(() => computeRR(item), [item]);
   const rrText = rr != null ? `1:${rr.toFixed(1)}` : "-";
+  const actionInterpretation = useMemo(
+    () =>
+      getActionInterpretation({
+        rating: item.rating,
+        continue_rising: item.continue_rising,
+        risky_near_resistance: item.risky_near_resistance,
+        risk_reward_ratio: rr,
+        stage: item.stage,
+      }),
+    [item.continue_rising, item.rating, item.risky_near_resistance, item.stage, rr]
+  );
+
+  const actionColor = useMemo(() => {
+    const actionText = actionInterpretation.action.toUpperCase();
+    if (actionText.includes("EXIT") || actionText.includes("SKIP") || actionText.includes("AVOID") || actionText.includes("TRIM")) {
+      return colors.danger;
+    }
+    if (actionText.includes("WAIT") || actionText.includes("HOLD") || actionText.includes("STAND ASIDE") || actionText.includes("SMALL")) {
+      return colors.warning;
+    }
+    if (actionText.includes("ENTER") || actionText.includes("ADD")) {
+      return colors.success;
+    }
+    return colors.textSecondary;
+  }, [actionInterpretation.action, colors.danger, colors.success, colors.textSecondary, colors.warning]);
 
   const volumeCell = useMemo(() => {
     const vc = item.volume_context;
@@ -145,6 +172,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
         <View style={styles.tableCellStage}>
           <StageTag stage={item.stage} size="sm" />
+        </View>
+
+        <View style={styles.tableCellAction}>
+          <Text style={[styles.tableActionText, { color: actionColor }]} numberOfLines={2} ellipsizeMode="tail">
+            {actionInterpretation.action}
+          </Text>
         </View>
 
         <View style={styles.tableCellVolume}>
@@ -411,6 +444,9 @@ export function StockRowSkeleton({ variant = "default" }: StockRowSkeletonProps 
         <View style={styles.tableCellStage}>
           <View style={[styles.skelRect, sh, { width: 84, height: 12 }]} />
         </View>
+        <View style={styles.tableCellAction}>
+          <View style={[styles.skelRect, sh, { width: 92, height: 12 }]} />
+        </View>
         <View style={styles.tableCellVolume}>
           <View style={[styles.skelRect, sh, { width: 70, height: 12 }]} />
         </View>
@@ -504,6 +540,10 @@ const styles = StyleSheet.create({
     width: STOCK_TABLE_COL_WIDTHS.stage,
     paddingRight: 6,
   },
+  tableCellAction: {
+    width: STOCK_TABLE_COL_WIDTHS.action,
+    paddingRight: 6,
+  },
   tableCellVolume: {
     width: STOCK_TABLE_COL_WIDTHS.volume,
     paddingRight: 6,
@@ -551,6 +591,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  tableActionText: {
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
   },
   tableVolumeText: {
     fontSize: 11,
