@@ -130,9 +130,14 @@ export default function EagleEyeDetailScreen() {
       analysis.continue_rising_exhaustion_count
       ?? scannerRow?.continue_rising_exhaustion_count
       ?? null,
+    risk_warning_score:
+      analysis.risk_warning_score
+      ?? scannerRow?.risk_warning_score
+      ?? null,
     risky_near_resistance:
       analysis.risky_near_resistance ?? scannerRow?.risky_near_resistance ?? null,
     risk_reward_ratio: analysis.risk_reward_ratio ?? null,
+    close: analysis.last_price ?? scannerRow?.last_price ?? null,
     stage: analysis.stage,
   });
 

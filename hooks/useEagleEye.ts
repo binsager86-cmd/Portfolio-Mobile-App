@@ -112,6 +112,7 @@ export interface RatedStock {
   continue_rising_reason?: string | null;
   continue_rising_exhaustion_count?: number | null;
   continue_rising_exhaustion_signals?: string[] | null;
+  risk_warning_score?: number | null;
   risky_near_resistance?: boolean;
   risk_reward_ratio?: number | null;
   entry_primary?: number | null;
@@ -150,6 +151,7 @@ export interface FullStockAnalysis {
   continue_rising_reason?: string | null;
   continue_rising_exhaustion_count?: number | null;
   continue_rising_exhaustion_signals?: string[] | null;
+  risk_warning_score?: number | null;
   risky_near_resistance?: boolean;
   supports: SupportResistanceLevel[];
   resistances: SupportResistanceLevel[];

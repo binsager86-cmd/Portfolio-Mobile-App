@@ -2,8 +2,12 @@ export interface ActionInterpretationInput {
   rating?: string | null;
   continue_rising?: boolean | null;
   continue_rising_exhaustion_count?: number | null;
+  risk_warning_score?: number | null;
   risky_near_resistance?: boolean | null;
   risk_reward_ratio?: number | null;
+  close?: number | null;
+  ema_20?: number | null;
+  ema_30?: number | null;
   stage?: string | null;
 }
 
@@ -11,6 +15,12 @@ export interface ActionInterpretation {
   action: string;
   detail: string;
 }
+
+export const ADVANCING_RISK_WARNING_TIER = {
+  EXIT: 4,
+  DEFENSIVE: 3,
+  CAUTION: 2,
+} as const;
 
 function normalize(value: string | null | undefined): string {
   return String(value ?? "").trim().toUpperCase();
@@ -31,8 +41,14 @@ export function getActionInterpretation(row: ActionInterpretationInput): ActionI
   const exhaustionCount = Number.isFinite(row.continue_rising_exhaustion_count)
     ? Math.max(0, Number(row.continue_rising_exhaustion_count))
     : 0;
+  const riskWarningScore = Number.isFinite(row.risk_warning_score)
+    ? Math.max(0, Number(row.risk_warning_score))
+    : 0;
   const hasRiskFlag = typeof row.risky_near_resistance === "boolean";
   const rr = Number.isFinite(row.risk_reward_ratio) ? Number(row.risk_reward_ratio) : null;
+  const close = Number.isFinite(row.close) ? Number(row.close) : null;
+  const ema20 = Number.isFinite(row.ema_20) ? Number(row.ema_20) : null;
+  const ema30 = Number.isFinite(row.ema_30) ? Number(row.ema_30) : null;
   const isRisky = hasRiskFlag
     ? Boolean(row.risky_near_resistance)
     : rr != null
@@ -51,6 +67,46 @@ export function getActionInterpretation(row: ActionInterpretationInput): ActionI
     }
 
     if (isRiding) {
+      if (close != null && ema30 != null && close <= ema30) {
+        return {
+          action: "If you own it: exit remainder. If you don't: stand aside.",
+          detail:
+            "Holding: price is below EMA30, exit remainder and protect capital. Not holding: stand aside until trend repair is confirmed.",
+        };
+      }
+
+      if (close != null && ema20 != null && close <= ema20) {
+        return {
+          action: "If you own it: trim more. If you don't: stand aside.",
+          detail:
+            "Holding: price is below EMA20, trim more and keep risk tight. Not holding: stand aside until price reclaims EMA20 with follow-through.",
+        };
+      }
+
+      if (riskWarningScore >= ADVANCING_RISK_WARNING_TIER.EXIT) {
+        return {
+          action: "If you own it: trim more; exit on EMA20 weakness. If you don't: stand aside.",
+          detail:
+            "Holding: warning stack is elevated, trim more; exit on a close below EMA20 without quick reclaim. Not holding: stand aside.",
+        };
+      }
+
+      if (riskWarningScore >= ADVANCING_RISK_WARNING_TIER.DEFENSIVE) {
+        return {
+          action: "If you own it: hold defensively and trim if momentum stalls. If you don't: wait.",
+          detail:
+            "Holding: stay defensive, trail tightly and trim if strength stalls. Not holding: wait for a cleaner reset before entry.",
+        };
+      }
+
+      if (riskWarningScore >= ADVANCING_RISK_WARNING_TIER.CAUTION) {
+        return {
+          action: "If you own it: hold with trailing stop, no new adds. If you don't: avoid chasing.",
+          detail:
+            "Holding: keep trailing stop discipline and avoid new adds while warning signals are building. Not holding: avoid chasing extension.",
+        };
+      }
+
       const rrText = rr != null ? ` (R:R ${rr.toFixed(2)})` : "";
       const nonOwnerText = isRisky
         ? `Not holding: don't chase near resistance${rrText}; wait for a pullback to EMA20 that holds before entry.`
