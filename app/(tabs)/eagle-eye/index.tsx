@@ -728,7 +728,7 @@ export default function EagleEyeScannerScreen() {
               style={[
                 styles.colHeaderBtn,
                 styles.colHeaderSortBtn,
-                { width: STOCK_TABLE_COL_WIDTHS.confidence },
+                { width: STOCK_TABLE_COL_WIDTHS.yesterdayConfidence },
               ]}
               hitSlop={6}
             >
@@ -742,13 +742,36 @@ export default function EagleEyeScannerScreen() {
                     },
                   ]}
                 >
-                  {`Conf${sortArrow("conf")}`}
+                  {`Yday${sortArrow("conf")}`}
                 </Text>
-                <BadgeHelpTooltip title="CONF" body={HEADER_TOOLTIP_CONFIDENCE} align="right">
+                <BadgeHelpTooltip title="YDAY" body="Yesterday cached confidence from the scanner cache." align="right">
                   <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
                 </BadgeHelpTooltip>
               </View>
             </Pressable>
+            <View
+              style={[
+                styles.colHeaderBtn,
+                { width: STOCK_TABLE_COL_WIDTHS.liveConfidence },
+              ]}
+            >
+              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
+                <Text
+                  style={[
+                    styles.colHeaderCell,
+                    {
+                      color: colors.textMuted,
+                      textAlign: "right",
+                    },
+                  ]}
+                >
+                  LIVE
+                </Text>
+                <BadgeHelpTooltip title="LIVE" body="Fresh confidence recomputed from the stock detail endpoint." align="right">
+                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
+                </BadgeHelpTooltip>
+              </View>
+            </View>
           </>
         ) : (
           <>

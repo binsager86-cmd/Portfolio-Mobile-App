@@ -1,6 +1,8 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 
 import { BehavioralDnaSetupChart } from "@/components/eagle-eye/BehavioralDnaSetupChart";
+import { DnaCycleCard } from "@/components/eagle-eye/DnaCycleCard";
+import { DnaSimilarSetupsCard } from "@/components/eagle-eye/DnaSimilarSetupsCard";
 import { EE, RATING_LABELS, getStageLabelFull, signalLabel } from "@/constants/eagleEyeStrings";
 import type { ThemePalette } from "@/constants/theme";
 import { UITokens } from "@/constants/uiTokens";
@@ -9,10 +11,15 @@ import type {
   DnaSetupExample,
   DnaSetupBar,
   DnaWindowProfile,
+  ExitSignalProfile,
   FullStockAnalysis,
+  PostDropBehavior,
+  PreDropSignal,
+  SignalItem,
   SignalReliabilityStat,
   ThresholdProfile,
 } from "@/hooks/useEagleEye";
+import { useSimilarSetups } from "@/hooks/useEagleEye";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -59,6 +66,12 @@ function formatSignedPrecisePct(value?: number | null): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
+function parseNumericWindow(windowKey: string): number | null {
+  const parsed = Number.parseInt(windowKey, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 function formatRatingLabel(rating?: string | null): string {
   if (!rating) return "-";
   const fromMap = RATING_LABELS[rating];
@@ -95,6 +108,92 @@ function buildRecommendationExplanation(stock: FullStockAnalysis): string {
     default:
       return EE.recommendationFallback(formatRatingLabel(stock.rating), confidence);
   }
+}
+
+type ObservationBucketKey = "bottom" | "confirmation" | "market";
+
+const OBSERVATION_KEYWORDS: Record<ObservationBucketKey, string[]> = {
+  bottom: [
+    "accumulation",
+    "wyckoff",
+    "near_60d_low",
+    "oversold",
+    "capitulation",
+    "obv",
+    "cmf",
+    "mfi",
+    "sma200_slope_turning_up",
+  ],
+  confirmation: [
+    "breakout",
+    "price_above_vwap",
+    "ema",
+    "macd",
+    "adx",
+    "plus_di",
+    "supertrend",
+    "ichimoku",
+    "volume_breakout",
+    "markup",
+  ],
+  market: [
+    "market_",
+    "relative_strength_3m",
+    "regime",
+    "breadth",
+    "index",
+    "risk_on",
+  ],
+};
+
+function matchesObservationBucket(signalKey: string, bucket: ObservationBucketKey): boolean {
+  const key = signalKey.toLowerCase();
+  return OBSERVATION_KEYWORDS[bucket].some((token) => key.includes(token));
+}
+
+function formatSignalObservationLine(signal: SignalItem): string {
+  const label = signalLabel(signal.signal);
+  const detail = (signal.description ?? "").trim();
+  if (detail.length > 0) {
+    return `${label}: ${detail}`;
+  }
+  return EE.scoreExplainObserveFallback(label);
+}
+
+function buildObservationBuckets(signals: SignalItem[] | null | undefined): Record<ObservationBucketKey, string[]> {
+  const buckets: Record<ObservationBucketKey, string[]> = {
+    bottom: [],
+    confirmation: [],
+    market: [],
+  };
+
+  const seenSignals = new Set<string>();
+  const firedSignals = (signals ?? []).filter((signal) => signal.fired);
+
+  for (const signal of firedSignals) {
+    if (seenSignals.has(signal.signal)) continue;
+    seenSignals.add(signal.signal);
+
+    const line = formatSignalObservationLine(signal);
+
+    if (matchesObservationBucket(signal.signal, "market")) {
+      buckets.market.push(line);
+      continue;
+    }
+
+    if (matchesObservationBucket(signal.signal, "bottom")) {
+      buckets.bottom.push(line);
+      continue;
+    }
+
+    buckets.confirmation.push(line);
+  }
+
+  return {
+    bottom: buckets.bottom.slice(0, 4),
+    confirmation: buckets.confirmation.slice(0, 4),
+    market: buckets.market.slice(0, 4),
+  };
 }
 
 function pickDisplayedProfiles(profiles: ThresholdProfile[]): ThresholdProfile[] {
@@ -277,6 +376,9 @@ export function BehavioralDnaScreenContent({
   const [currentRange, setCurrentRange] = useState<CurrentRangeKey>(DEFAULT_CURRENT_RANGE);
   const [showAllExamples, setShowAllExamples] = useState(false);
 
+  // Similar historical setups (pattern-store nearest-neighbour)
+  const { data: similarData } = useSimilarSetups(ticker);
+
   useEffect(() => {
     setSelectedWindow(defaultWindow);
   }, [defaultWindow]);
@@ -299,6 +401,14 @@ export function BehavioralDnaScreenContent({
   const totalSetups = useMemo(
     () => selectedProfile?.setup_count ?? dna.total_events_analyzed ?? 0,
     [selectedProfile, dna.total_events_analyzed],
+  );
+  const topTargetZones = useMemo(
+    () =>
+      [...(dna.historical_target_clusters ?? [])]
+        .sort((left, right) => (right.cluster_strength ?? 0) - (left.cluster_strength ?? 0))
+        .slice(0, 3)
+        .map((cluster) => cluster.gain_pct_from_entry),
+    [dna.historical_target_clusters],
   );
   const confidenceFloor = selectedProfile?.confidence_floor ?? dna.confidence_floor ?? 5;
   const hasPercentages = selectedProfile?.percentages_visible ?? displayedProfiles.length > 0;
@@ -367,6 +477,10 @@ export function BehavioralDnaScreenContent({
   const recommendationExplanation = useMemo(
     () => (stock ? buildRecommendationExplanation(stock) : null),
     [stock],
+  );
+  const liveObservationBuckets = useMemo(
+    () => buildObservationBuckets(stock?.signals),
+    [stock?.signals],
   );
   const currentRangeConfig = useMemo(
     () => CURRENT_RANGE_OPTIONS.find((option) => option.key === currentRange) ?? CURRENT_RANGE_OPTIONS[4],
@@ -509,6 +623,16 @@ export function BehavioralDnaScreenContent({
         )}
       </View>
 
+      {/* ── Cycle detection card ──────────────────────────────────────────── */}
+      {dna.cycle_profile && (
+        <DnaCycleCard cycle={dna.cycle_profile} colors={colors} />
+      )}
+
+      {/* ── Similar historical setups card ────────────────────────────────── */}
+      {similarData?.status === "ok" && similarData.setups.length > 0 && (
+        <DnaSimilarSetupsCard setups={similarData.setups} colors={colors} />
+      )}
+
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.dnaCurrentChartTitle}</Text>
         <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaCurrentChartBody(selectedWindow, getCurrentRangeLabel(currentRange))}</Text>
@@ -605,6 +729,57 @@ export function BehavioralDnaScreenContent({
               <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{stock.thesis}</Text>
             </View>
 
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.scoreExplainObservationsTitle}</Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.scoreExplainObservationsBody}</Text>
+
+            <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.scoreExplainObserveBottomTitle}</Text>
+              {liveObservationBuckets.bottom.length > 0 ? (
+                <View style={styles.reasonList}>
+                  {liveObservationBuckets.bottom.map((line, index) => (
+                    <View key={`obs-bottom-${index}`} style={styles.reasonRow}>
+                      <View style={[styles.reasonDot, { backgroundColor: colors.accentPrimary }]} />
+                      <Text style={[styles.reasonText, { color: colors.textSecondary }]}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.scoreExplainObserveBottomEmpty}</Text>
+              )}
+            </View>
+
+            <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.scoreExplainObserveConfirmationTitle}</Text>
+              {liveObservationBuckets.confirmation.length > 0 ? (
+                <View style={styles.reasonList}>
+                  {liveObservationBuckets.confirmation.map((line, index) => (
+                    <View key={`obs-confirmation-${index}`} style={styles.reasonRow}>
+                      <View style={[styles.reasonDot, { backgroundColor: colors.accentPrimary }]} />
+                      <Text style={[styles.reasonText, { color: colors.textSecondary }]}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.scoreExplainObserveConfirmationEmpty}</Text>
+              )}
+            </View>
+
+            <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+              <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.scoreExplainObserveMarketTitle}</Text>
+              {liveObservationBuckets.market.length > 0 ? (
+                <View style={styles.reasonList}>
+                  {liveObservationBuckets.market.map((line, index) => (
+                    <View key={`obs-market-${index}`} style={styles.reasonRow}>
+                      <View style={[styles.reasonDot, { backgroundColor: colors.accentPrimary }]} />
+                      <Text style={[styles.reasonText, { color: colors.textSecondary }]}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.scoreExplainObserveMarketEmpty}</Text>
+              )}
+            </View>
+
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.scoreExplainDriversLabel}</Text>
             <View style={styles.reasonList}>
               {scoreDrivers.map((driver, index) => (
@@ -672,6 +847,19 @@ export function BehavioralDnaScreenContent({
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.dnaVisualEvidenceTitle}</Text>
         <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaVisualEvidenceBody}</Text>
+        <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
+          <Text style={[styles.noteTitle, { color: colors.textPrimary }]}>{EE.dnaLearnedProfitTitle}</Text>
+          <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.dnaLearnedOptimalHold(dna.optimal_hold_window_days)}</Text>
+          <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.dnaLearnedTargets(topTargetZones)}</Text>
+          <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{EE.dnaLearnedEntryQuality(dna.avg_entry_quality_score)}</Text>
+          <Text style={[styles.noteBody, { color: colors.textSecondary }]}>
+            {EE.dnaLearnedPullback(
+              dna.pullback_entry_profile?.median_pullback_pct,
+              dna.pullback_entry_profile?.pullback_within_days,
+              dna.pullback_entry_profile?.pullback_success_rate,
+            )}
+          </Text>
+        </View>
         {setupExamples.length === 0 ? (
           <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaNoExamples}</Text>
         ) : (
@@ -682,6 +870,7 @@ export function BehavioralDnaScreenContent({
                 example={example}
                 selectedWindow={selectedWindow}
                 colors={colors}
+                dna={dna}
               />
             ))}
             {!showAllExamples && hiddenExampleCount > 0 && (
@@ -697,6 +886,10 @@ export function BehavioralDnaScreenContent({
           </>
         )}
       </View>
+
+      {dna.exit_signal_profile != null && (
+        <ExitSignalCard exit={dna.exit_signal_profile} colors={colors} />
+      )}
 
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.howToReadTitle}</Text>
@@ -828,22 +1021,61 @@ const SetupExampleCard = React.memo(function SetupExampleCard({
   example,
   selectedWindow,
   colors,
+  dna,
 }: {
   example: DnaSetupExample;
   selectedWindow: number;
   colors: ThemePalette;
+  dna?: BehavioralDNA | null;
 }) {
-  const outcome = example.forward_outcomes[String(selectedWindow)] ?? null;
+  const selectedOutcome = example.forward_outcomes[String(selectedWindow)] ?? null;
+  const bestCompletedOutcome = useMemo(() => {
+    const completed = Object.entries(example.forward_outcomes)
+      .map(([windowKey, outcome]) => ({
+        window: parseNumericWindow(windowKey),
+        outcome,
+      }))
+      .filter(
+        (item): item is { window: number; outcome: NonNullable<typeof selectedOutcome> } =>
+          item.window != null && item.outcome != null && item.outcome.completed,
+      )
+      .sort((left, right) => {
+        const leftGain = left.outcome.max_gain_pct ?? Number.NEGATIVE_INFINITY;
+        const rightGain = right.outcome.max_gain_pct ?? Number.NEGATIVE_INFINITY;
+        if (rightGain === leftGain) return left.window - right.window;
+        return rightGain - leftGain;
+      });
+
+    return completed[0] ?? null;
+  }, [example.forward_outcomes]);
+
+  const shownTargets =
+    (selectedOutcome?.threshold_hits?.length ?? 0) > 0
+      ? selectedOutcome?.threshold_hits ?? []
+      : bestCompletedOutcome?.outcome.threshold_hits ?? [];
 
   return (
     <View style={[styles.exampleCard, { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor }]}> 
       <Text style={[styles.exampleTitle, { color: colors.textPrimary }]}>{EE.dnaExampleTitle(example.setup_date)}</Text>
       <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-        {EE.dnaExampleOutcome(selectedWindow, formatSignedPrecisePct(outcome?.max_gain_pct), outcome?.completed ?? false)}
+        {EE.dnaExampleOutcome(
+          selectedWindow,
+          formatSignedPrecisePct(selectedOutcome?.max_gain_pct),
+          selectedOutcome?.completed ?? false,
+        )}
       </Text>
-      <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaTargetsHit(outcome?.threshold_hits ?? [])}</Text>
+      <Text style={[styles.helperText, { color: colors.textSecondary }]}> 
+        {bestCompletedOutcome
+          ? EE.dnaExampleBestOutcome(
+              bestCompletedOutcome.window,
+              formatSignedPrecisePct(bestCompletedOutcome.outcome.max_gain_pct),
+              bestCompletedOutcome.outcome.max_gain_date,
+            )
+          : EE.dnaExampleBestOutcomePending}
+      </Text>
+      <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaTargetsHit(shownTargets)}</Text>
 
-      <BehavioralDnaSetupChart example={example} selectedWindowDays={selectedWindow} colors={colors} />
+      <BehavioralDnaSetupChart example={example} selectedWindowDays={selectedWindow} colors={colors} dna={dna} />
 
       <View style={styles.observationList}>
         {example.observations.map((observation) => (
@@ -861,6 +1093,116 @@ const SetupExampleCard = React.memo(function SetupExampleCard({
     </View>
   );
 });
+
+// ---------------------------------------------------------------------------
+// Exit Signal Intelligence card
+// ---------------------------------------------------------------------------
+function postDropClassificationLabel(classification: string): string {
+  switch (classification) {
+    case "STRONG_BOUNCER": return EE.exitPostDropBouncer;
+    case "CONTINUATION_SELLER": return EE.exitPostDropContinuation;
+    default: return EE.exitPostDropMixed;
+  }
+}
+
+function postDropBadgeColors(
+  classification: string,
+  colors: ThemePalette,
+): { textColor: string; backgroundColor: string; borderColor: string } {
+  switch (classification) {
+    case "STRONG_BOUNCER":
+      return { textColor: colors.success, backgroundColor: colors.successBg ?? colors.bgCardHover, borderColor: colors.success };
+    case "CONTINUATION_SELLER":
+      return { textColor: colors.danger, backgroundColor: colors.dangerBg ?? colors.bgCardHover, borderColor: colors.danger };
+    default:
+      return { textColor: colors.warning, backgroundColor: colors.warningBg ?? colors.bgCardHover, borderColor: colors.warning };
+  }
+}
+
+function ExitSignalCard({
+  exit,
+  colors,
+}: {
+  exit: ExitSignalProfile;
+  colors: ThemePalette;
+}) {
+  const hasSignals = exit.pre_drop_signals.length > 0;
+  const pdb: PostDropBehavior | null = exit.post_drop_behavior;
+  const badgeColors = pdb ? postDropBadgeColors(pdb.classification, colors) : null;
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
+      <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.exitIntelTitle}</Text>
+      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+        {EE.exitIntelBody(exit.drop_threshold_pct, exit.historical_drop_events)}
+      </Text>
+      <Text style={[styles.metricSupportLine, { color: colors.textMuted }]}>
+        {EE.exitAvgDrop(exit.avg_drop_magnitude_pct, exit.avg_days_peak_to_trough)}
+      </Text>
+
+      {/* Pre-drop warning signals */}
+      {hasSignals && (
+        <View style={{ gap: UITokens.spacing.xs }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.exitPreDropTitle}</Text>
+          {exit.pre_drop_signals.map((sig: PreDropSignal) => (
+            <View
+              key={sig.signal}
+              style={[styles.metricRow, { borderTopColor: colors.borderColor }]}
+            >
+              <View style={styles.metricHeader}>
+                <View style={styles.metricTitleWrap}>
+                  <Text style={[styles.metricLabel, { color: colors.textPrimary }]}>{sig.label}</Text>
+                  <Text style={[styles.metricCountLine, { color: colors.textSecondary }]}>
+                    {EE.exitPreDropSignalLine(sig.label, sig.fired_before_drop_pct, sig.avg_bars_before_drop)}
+                  </Text>
+                </View>
+                <View style={[styles.strengthBadge, { backgroundColor: colors.bgCardHover, borderColor: colors.warning }]}>
+                  <Text style={[styles.strengthBadgeText, { color: colors.warning }]}>
+                    {`${sig.fired_before_drop_pct.toFixed(0)}%`}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.barTrack, { backgroundColor: colors.bgCardHover }]}> 
+                <View
+                  style={[
+                    styles.barFill,
+                    {
+                      backgroundColor: colors.warning,
+                      width: `${Math.max(4, Math.min(100, sig.fired_before_drop_pct))}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.noteBody, { color: colors.textSecondary }]}>{sig.description}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Post-drop behavior */}
+      {pdb != null && badgeColors != null && (
+        <View style={{ gap: UITokens.spacing.xs }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.exitPostDropTitle}</Text>
+          <View style={[styles.noteBox, { backgroundColor: colors.bgCardHover, borderColor: badgeColors.borderColor }]}> 
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={[styles.noteTitle, { color: badgeColors.textColor, flex: 1 }]}>
+                {postDropClassificationLabel(pdb.classification)}
+              </Text>
+              <View style={[styles.strengthBadge, { backgroundColor: badgeColors.backgroundColor, borderColor: badgeColors.borderColor }]}>
+                <Text style={[styles.strengthBadgeText, { color: badgeColors.textColor }]}>
+                  {pdb.classification === "STRONG_BOUNCER" ? "Bouncer" : pdb.classification === "CONTINUATION_SELLER" ? "Seller" : "Mixed"}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.noteBody, { color: colors.textSecondary }]}>
+              {EE.exitPostDropStats(pdb.bounce_rate_pct, pdb.avg_recovery_days, pdb.avg_continuation_pct)}
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   scroll: {

@@ -600,11 +600,20 @@ export default function FundamentalAnalysisScreen() {
   const [tab, setTab] = useState<SubTab>("stocks");
   const [selectedStockId, setSelectedStockId] = useState<number | null>(null);
   const [selectedStockSymbol, setSelectedStockSymbol] = useState<string>("");
+  const [autoFetch, setAutoFetch] = useState(false);
 
   const handleSelectStock = useCallback((stock: AnalysisStock) => {
+    setAutoFetch(false);
     setSelectedStockId(stock.id);
     setSelectedStockSymbol(stock.symbol);
     setTab("statements");
+  }, []);
+
+  const handleSelectNewStock = useCallback((stock: AnalysisStock) => {
+    setSelectedStockId(stock.id);
+    setSelectedStockSymbol(stock.symbol);
+    setTab("statements");
+    setAutoFetch(true);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -677,8 +686,8 @@ export default function FundamentalAnalysisScreen() {
       </View>
 
       {/* ── Content ────────────────────────────────────────── */}
-      {tab === "stocks" && <StocksPanel colors={colors} isDesktop={isDesktop} onSelect={handleSelectStock} />}
-      {tab === "statements" && selectedStockId && <StatementsPanel stockId={selectedStockId} colors={colors} isDesktop={isDesktop} />}
+      {tab === "stocks" && <StocksPanel colors={colors} isDesktop={isDesktop} onSelect={handleSelectStock} onAdd={handleSelectNewStock} />}
+      {tab === "statements" && selectedStockId && <StatementsPanel stockId={selectedStockId} colors={colors} isDesktop={isDesktop} autoFetch={autoFetch} onAutoFetchDone={() => setAutoFetch(false)} />}
       {tab === "comparison" && selectedStockId && <ComparisonPanel stockId={selectedStockId} stockSymbol={selectedStockSymbol} colors={colors} isDesktop={isDesktop} />}
       {tab === "metrics" && selectedStockId && <MetricsPanel stockId={selectedStockId} stockSymbol={selectedStockSymbol} colors={colors} isDesktop={isDesktop} />}
       {tab === "growth" && selectedStockId && <FundamentalGrowthPanel stockId={selectedStockId} stockSymbol={selectedStockSymbol} colors={colors} isDesktop={isDesktop} />}
@@ -693,8 +702,8 @@ export default function FundamentalAnalysisScreen() {
 /* ═══════════════════════════════════════════════════════════════════ */
 
 function StocksPanel({
-  colors, isDesktop, onSelect,
-}: { colors: ThemePalette; isDesktop: boolean; onSelect: (stock: AnalysisStock) => void }) {
+  colors, isDesktop, onSelect, onAdd,
+}: { colors: ThemePalette; isDesktop: boolean; onSelect: (stock: AnalysisStock) => void; onAdd?: (stock: AnalysisStock) => void }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
@@ -705,7 +714,22 @@ function StocksPanel({
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteAnalysisStock(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] }),
+    onSuccess: (_data, deletedId) => {
+      // Immediately remove from every cached page of the list so it
+      // disappears without waiting for a background refetch.
+      queryClient.setQueriesData<{ stocks: AnalysisStock[]; count: number }>(
+        { queryKey: ["analysis-stocks"] },
+        (old) =>
+          old
+            ? {
+                ...old,
+                stocks: old.stocks.filter((s) => s.id !== deletedId),
+                count: Math.max(0, (old.count ?? 0) - 1),
+              }
+            : old,
+      );
+      queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
+    },
     onError: (err) => showErrorAlert("Delete Failed", err),
   });
 
@@ -820,7 +844,7 @@ function StocksPanel({
         />
       )}
 
-      {showAdd && <StockFormModal colors={colors} onClose={() => setShowAdd(false)} />}
+      {showAdd && <StockFormModal colors={colors} onClose={() => setShowAdd(false)} onAdd={onAdd} />}
       {editStock && <StockFormModal stock={editStock} colors={colors} onClose={() => setEditStock(null)} />}
     </View>
   );
@@ -828,7 +852,7 @@ function StocksPanel({
 
 /* ── Stock Form Modal (unified Add/Edit) ──────────────────────────── */
 
-function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; colors: ThemePalette; onClose: () => void }) {
+function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisStock; colors: ThemePalette; onClose: () => void; onAdd?: (stock: AnalysisStock) => void }) {
   const isEdit = !!stock;
   const queryClient = useQueryClient();
   const [symbol, setSymbol] = useState(stock?.symbol ?? "");
@@ -883,9 +907,29 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
             exchange, currency,
             sector: sector || undefined,
           }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
-      onClose();
+      if (!isEdit && onAdd && data && 'id' in data) {
+        const now = Math.floor(Date.now() / 1000);
+        const newStock: AnalysisStock = {
+          id: data.id,
+          user_id: 0,
+          symbol: (data as { id: number; symbol: string }).symbol,
+          company_name: companyName.trim(),
+          exchange, currency,
+          sector: sector || null,
+          industry: industry || null,
+          country: null, isin: null, cik: null,
+          description: null, website: null,
+          outstanding_shares: outstandingShares ? parseFloat(outstandingShares) : null,
+          created_at: now,
+          updated_at: now,
+        };
+        onClose();
+        onAdd(newStock);
+      } else {
+        onClose();
+      }
     },
   });
 
@@ -1077,7 +1121,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
 /*  STATEMENTS PANEL                                                  */
 /* ═══════════════════════════════════════════════════════════════════ */
 
-function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colors: ThemePalette; isDesktop: boolean }) {
+function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDone }: { stockId: number; colors: ThemePalette; isDesktop: boolean; autoFetch?: boolean; onAutoFetchDone?: () => void }) {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>("income");
   const [periodView, setPeriodView] = useState<StatementPeriodView>("annual");
@@ -1099,8 +1143,17 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
       setOnlineResult("Error: " + (err instanceof Error ? err.message : "Failed to fetch statements"));
     } finally {
       setFetchingOnline(false);
+      onAutoFetchDone?.();
     }
-  }, [stockId, queryClient, refetch]);
+  }, [stockId, queryClient, refetch, onAutoFetchDone]);
+
+  // Auto-trigger fetch when navigating here from a newly added stock
+  useEffect(() => {
+    if (autoFetch && !fetchingOnline) {
+      handleFetchOnline();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFetch]);
   const statements = data?.statements ?? [];
   const latestPreferred = data?.latest_preferred ?? null;
   const selection = useMemo(

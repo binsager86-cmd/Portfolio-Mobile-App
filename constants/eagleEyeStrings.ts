@@ -25,6 +25,13 @@ export const SIGNAL_LABELS: Record<string, string> = {
   wyckoff_in_markup: "Wyckoff markup phase",
   above_ichimoku_cloud: "Above Ichimoku cloud",
   supertrend_bullish: "Supertrend bullish",
+  // Buy setup patterns — multi-bar
+  breakout_from_15d_base: "Broke out of accumulation base",
+  capitulation_reversal_flag: "Capitulation reversal",
+  rsi_oversold_recovery: "RSI recovered from oversold",
+  ema_golden_cross_10_30: "EMA golden cross (10/30)",
+  near_60d_low_compression: "Compression near 60-day low",
+  sma200_slope_turning_up: "200 SMA curling up",
   // Additional raw indicator keys that appear in SignalBreakdown
   rsi: "RSI",
   macd_histogram: "MACD Histogram",
@@ -400,6 +407,19 @@ export const EE = {
   scoreExplainConfidenceLabel: "Score",
   scoreExplainStageLabel: "Stage",
   scoreExplainThesisLabel: "Engine thesis",
+  scoreExplainObservationsTitle: "What the system observes now",
+  scoreExplainObservationsBody:
+    "These are live conditions firing right now, grouped by bottom-building, confirmation, and market backdrop so you can quickly see what is supporting the current call.",
+  scoreExplainObserveBottomTitle: "Bottom / accumulation cues",
+  scoreExplainObserveConfirmationTitle: "Confirmation cues",
+  scoreExplainObserveMarketTitle: "Market context cues",
+  scoreExplainObserveBottomEmpty:
+    "No strong bottom-building cue is firing right now.",
+  scoreExplainObserveConfirmationEmpty:
+    "No strong confirmation cue is firing right now.",
+  scoreExplainObserveMarketEmpty:
+    "No clear market-context cue is firing right now.",
+  scoreExplainObserveFallback: (label: string) => `${label}: active now.`,
   scoreExplainDriversLabel: "Score is based on",
   scoreExplainRecommendationWhyLabel: "Why this recommendation",
   scoreExplainNoRecommendation:
@@ -482,7 +502,26 @@ export const EE = {
     "Every observation marker is causal. It fired on or before the setup bar, not after the outcome was known.",
   dnaVisualEvidenceTitle: "Visual setup evidence",
   dnaVisualEvidenceBody:
-    "These are real historical examples of the same setup. The shaded block is the setup window and the dashed line marks the selected review window.",
+    "These are real historical examples of the same setup. Each card now shows both your selected review window and the best completed forward window, so you can see what history learned when profit was strongest.",
+  dnaLearnedProfitTitle: "Learned profit blueprint",
+  dnaLearnedOptimalHold: (days?: number | null) =>
+    days != null && Number.isFinite(days)
+      ? `Optimal hold from history: around ${days} trading days.`
+      : "Optimal hold from history is still forming as more setups complete.",
+  dnaLearnedTargets: (targets: number[]) =>
+    targets.length > 0
+      ? `Most frequent historical target zones: ${targets.map((target) => `+${Math.round(target)}%`).join(", ")}.`
+      : "No stable historical target clusters yet.",
+  dnaLearnedEntryQuality: (score?: number | null) =>
+    score != null && Number.isFinite(score)
+      ? `Average entry quality score: ${score.toFixed(1)} / 100.`
+      : "Entry quality score is not available yet.",
+  dnaLearnedPullback: (pullbackPct?: number | null, pullbackDays?: number | null, successRate?: number | null) => {
+    if (pullbackPct == null || pullbackDays == null || successRate == null) {
+      return "Pullback-and-reclaim profile is still building.";
+    }
+    return `Typical dip before continuation: ${pullbackPct.toFixed(1)}% within ${pullbackDays} days, with ${Math.round(successRate)}% recovery success.`;
+  },
   dnaCurrentChartTitle: "Current chart (same setup indicators)",
   dnaCurrentChartBody: (days: number, rangeLabel: string) =>
     `This shows the latest ${rangeLabel} of price action using the same setup indicators as historical examples (RSI, ADX, MACD). The shaded block marks the current setup window and the dashed marker tracks a ${days}-day comparison horizon.`,
@@ -505,12 +544,18 @@ export const EE = {
   dnaExampleTitle: (date: string) => `Historical setup from ${date}`,
   dnaExampleOutcome: (days: number, gain: string, completed: boolean) =>
     completed
-      ? `Within ${days} trading days, the max gain reached ${gain}.`
+      ? `Selected ${days}-day window: max gain reached ${gain}.`
       : `This example does not have a complete ${days}-day forward window yet.`,
+  dnaExampleBestOutcome: (days: number, gain: string, date?: string | null) =>
+    date
+      ? `Best completed window: ${days}d reached ${gain} by ${date}.`
+      : `Best completed window: ${days}d reached ${gain}.`,
+  dnaExampleBestOutcomePending:
+    "Best completed window is not available yet for this example.",
   dnaTargetsHit: (targets: number[]) =>
     targets.length > 0
       ? `Targets hit: ${targets.map((target) => `+${Math.round(target)}%`).join(", ")}.`
-      : "No tracked target was hit in this window.",
+      : "No tracked target was hit in the shown outcome.",
   dnaNoExamples: "No historical setup charts are available yet.",
   dnaUpdatedAt: (isoStr: string) => {
     // e.g. "2026-05-23T14:05:00" → "May 23, 2026"
@@ -518,6 +563,33 @@ export const EE = {
     const label = d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
     return `Updated nightly · Last computed: ${label}`;
   },
+  // Sell signal intelligence
+  exitIntelTitle: "Sell-Signal Intelligence",
+  exitIntelBody: (dropPct: number, events: number) =>
+    `Learned from ${events} historical sharp decline${events === 1 ? '' : 's'} (drops exceeding ${Math.abs(dropPct).toFixed(0)}%). The patterns below fired consistently before those drops.`,
+  exitIntelNoData:
+    "Not enough price history to compute sell-signal patterns yet. More data accumulates nightly.",
+  exitPreDropTitle: "Warning signs seen before past drops",
+  exitPreDropSignalLine: (label: string, pct: number, bars: number) =>
+    `${label}: present in ${pct.toFixed(0)}% of drops, typically ~${bars.toFixed(0)} bars before the peak.`,
+  exitPostDropTitle: "How this stock behaves after it falls",
+  exitPostDropBouncer:
+    "Strong bouncer — past drops often recovered quickly. A small dip may be a buying opportunity rather than a reason to sell everything.",
+  exitPostDropContinuation:
+    "Continuation seller — past drops tended to deepen before recovering. Act on warning signs early.",
+  exitPostDropMixed:
+    "Mixed behaviour — some drops recovered fast, others did not. Evaluate per trade.",
+  exitPostDropStats: (bounceRate: number, recoveryDays: number, contPct: number) => {
+    const lines: string[] = [
+      `Recovery rate (≥50% bounce within window): ${bounceRate.toFixed(0)}%.`,
+    ];
+    if (recoveryDays > 0) lines.push(`Average recovery time when it did bounce: ${recoveryDays.toFixed(0)} trading days.`);
+    if (contPct < -0.5) lines.push(`Average further decline when it did NOT bounce: ${contPct.toFixed(1)}%.`);
+    return lines.join(' ');
+  },
+  exitPostDropReason: (reason: string) => reason,
+  exitAvgDrop: (pct: number, days: number) =>
+    `Historical drops averaged ${Math.abs(pct).toFixed(1)}% over ~${days.toFixed(0)} trading days peak-to-trough.`,
   noFakeouts: "No fakeout patterns identified yet",
   days: "days",
   bars: "bars",
