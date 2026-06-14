@@ -1,6 +1,7 @@
 export interface ActionInterpretationInput {
   rating?: string | null;
   continue_rising?: boolean | null;
+  continue_rising_exhaustion_count?: number | null;
   risky_near_resistance?: boolean | null;
   risk_reward_ratio?: number | null;
   stage?: string | null;
@@ -27,6 +28,9 @@ export function getActionInterpretation(row: ActionInterpretationInput): ActionI
   const rating = normalize(row.rating);
   const stage = normalize(row.stage);
   const isRiding = Boolean(row.continue_rising);
+  const exhaustionCount = Number.isFinite(row.continue_rising_exhaustion_count)
+    ? Math.max(0, Number(row.continue_rising_exhaustion_count))
+    : 0;
   const hasRiskFlag = typeof row.risky_near_resistance === "boolean";
   const rr = Number.isFinite(row.risk_reward_ratio) ? Number(row.risk_reward_ratio) : null;
   const isRisky = hasRiskFlag
@@ -34,6 +38,30 @@ export function getActionInterpretation(row: ActionInterpretationInput): ActionI
     : rr != null
       ? rr < 2
       : false;
+
+  const isAdvancingStage = stage === "MARKUP" || isEarlyMarkupStage(stage);
+  if (isAdvancingStage) {
+    if (exhaustionCount >= 2) {
+      return {
+        action:
+          `If you own it: defend profits and trim. If you don't: stand aside (${Math.min(exhaustionCount, 3)}/3 exhaustion).`,
+        detail:
+          `Holding: defend profits - trim into strength; exit on a close below EMA20 without a quick reclaim. Not holding: stand aside - rally is showing exhaustion (${Math.min(exhaustionCount, 3)}/3 signals).`,
+      };
+    }
+
+    if (isRiding) {
+      const rrText = rr != null ? ` (R:R ${rr.toFixed(2)})` : "";
+      const nonOwnerText = isRisky
+        ? `Not holding: don't chase near resistance${rrText}; wait for a pullback to EMA20 that holds before entry.`
+        : "Not holding: only enter on a pullback to EMA20 that holds; avoid chasing extension.";
+      return {
+        action: "If you own it: ride with trailing stop. If you don't: wait for pullback.",
+        detail:
+          `Holding: ride the trend. Trail stop ~1.5x ATR (atr_14). Add only on a pullback to EMA20 that holds. ${nonOwnerText}`,
+      };
+    }
+  }
 
   if (rating === "BUY" || rating === "STRONG_BUY") {
     if (isRisky) {

@@ -24,7 +24,7 @@ import {
   STAGE_INTERPRETATIONS,
 } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
-import { useEagleEyeScanner, useEagleEyeStock } from "@/hooks/useEagleEye";
+import { useEagleEyeScanner, useEagleEyeStock, useEagleEyeDnaRecentBars } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -56,6 +56,12 @@ export default function EagleEyeDetailScreen() {
   const { data, isLoading, isError, refetch } = useEagleEyeStock(t, 0, !isDnaRoute);
   const analysis = data?.data;
   const { data: scannerData } = useEagleEyeScanner(undefined, !isDnaRoute);
+  // Fetch recent OHLCV bars for the candlestick chart only after core
+  // analysis loads, so detail page becomes interactive faster.
+  const { data: recentBarsData } = useEagleEyeDnaRecentBars(
+    t,
+    !isDnaRoute && !!t && !isLoading && !!analysis,
+  );
 
   // Safety modal — auto-show when requires_confirmation
   const [safetyVisible, setSafetyVisible] = useState(false);
@@ -120,6 +126,10 @@ export default function EagleEyeDetailScreen() {
   const actionInterpretation = getActionInterpretation({
     rating: analysis.rating,
     continue_rising: analysis.continue_rising,
+    continue_rising_exhaustion_count:
+      analysis.continue_rising_exhaustion_count
+      ?? scannerRow?.continue_rising_exhaustion_count
+      ?? null,
     risky_near_resistance:
       analysis.risky_near_resistance ?? scannerRow?.risky_near_resistance ?? null,
     risk_reward_ratio: analysis.risk_reward_ratio ?? null,
@@ -199,15 +209,14 @@ export default function EagleEyeDetailScreen() {
         </View>
 
         {/* ── Chart ─────────────────────────────────────────────────────────── */}
-        {analysis.last_price != null && (
+        {(recentBarsData?.bars?.length || analysis?.last_price != null) && (
           <View style={styles.section}>
             <EagleEyeChart
-              prices={[analysis.last_price]} // real charts need OHLCV endpoint (future)
-              supports={analysis.supports ?? []}
-              resistances={analysis.resistances ?? []}
-              lastPrice={analysis.last_price}
-              width={360}
-              height={120}
+              bars={recentBarsData?.bars ?? []}
+              supports={analysis?.supports ?? []}
+              resistances={analysis?.resistances ?? []}
+              lastPrice={analysis?.last_price}
+              height={400}
             />
           </View>
         )}

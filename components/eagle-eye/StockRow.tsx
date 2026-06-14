@@ -113,11 +113,19 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
       getActionInterpretation({
         rating: item.rating,
         continue_rising: item.continue_rising,
+        continue_rising_exhaustion_count: item.continue_rising_exhaustion_count,
         risky_near_resistance: item.risky_near_resistance,
         risk_reward_ratio: rr,
         stage: item.stage,
       }),
-    [item.continue_rising, item.rating, item.risky_near_resistance, item.stage, rr]
+    [
+      item.continue_rising,
+      item.continue_rising_exhaustion_count,
+      item.rating,
+      item.risky_near_resistance,
+      item.stage,
+      rr,
+    ]
   );
 
   const actionColor = useMemo(() => {
