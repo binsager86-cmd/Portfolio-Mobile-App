@@ -22,7 +22,6 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
-import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -142,7 +141,6 @@ function getUpdatedAgo(ts: number): string {
 
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const insets = useSafeAreaInsets();
 
   const [minConfidence, setMinConfidence] = useState(0);
@@ -302,10 +300,6 @@ export default function EagleEyeScannerScreen() {
 
   const handleRunEagleEye = useCallback(async () => {
     if (eeRefresh.isPending) return;
-    if (!isAdmin) {
-      Alert.alert("Admin only", "Run is available for admin users only.");
-      return;
-    }
     if (runStatusTimer.current) clearTimeout(runStatusTimer.current);
     setRunStatus("idle");
     try {
@@ -316,7 +310,7 @@ export default function EagleEyeScannerScreen() {
       Alert.alert("Run failed", getRunErrorMessage(error));
     }
     runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
-  }, [eeRefresh, getRunErrorMessage, isAdmin]);
+  }, [eeRefresh, getRunErrorMessage]);
 
   useEffect(() => {
     return () => {
@@ -1367,7 +1361,7 @@ export default function EagleEyeScannerScreen() {
 
             <Pressable
               onPress={handleRunEagleEye}
-              disabled={eeRefresh.isPending || !isAdmin}
+              disabled={eeRefresh.isPending}
               style={[
                 styles.eeRunBtn,
                 {
@@ -1377,7 +1371,7 @@ export default function EagleEyeScannerScreen() {
                       : runStatus === "err"
                       ? colors.danger
                       : colors.accentPrimary,
-                  opacity: eeRefresh.isPending || !isAdmin ? 0.6 : 1,
+                  opacity: eeRefresh.isPending ? 0.6 : 1,
                 },
               ]}
             >
@@ -1385,9 +1379,7 @@ export default function EagleEyeScannerScreen() {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.eeRunBtnText}>
-                  {!isAdmin
-                    ? "Admin only"
-                    : runStatus === "ok"
+                  {runStatus === "ok"
                     ? "\u2713 Running..."
                     : runStatus === "err"
                     ? "\u2717 Failed"

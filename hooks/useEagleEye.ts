@@ -706,7 +706,10 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
   const serverFilters: ScannerFilters = {
     sector: _filters?.sector,
     tier: _filters?.tier,
-    // limit: intentionally omitted — backend now defaults to 200 (full universe)
+    // Always force full-universe fetch for production parity, even if backend
+    // defaults differ across environments or older deployments.
+    min_confidence: 0,
+    limit: 500,
   };
   return useQuery<ScannerResponse>({
     // Key does NOT include min_confidence so filter chips hit the cache
