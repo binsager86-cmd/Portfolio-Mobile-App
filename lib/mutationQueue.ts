@@ -16,6 +16,7 @@
  */
 
 import { AxiosError } from "axios";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -60,22 +61,61 @@ function getStore(): KVStore {
     return _store;
   }
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MMKV } = require("react-native-mmkv");
-    const mmkv = new MMKV({ id: "mutation-queue" });
-    _store = {
-      get: (k) => mmkv.getString(k) ?? null,
-      set: (k, v) => mmkv.set(k, v),
-    };
-  } catch {
-    // MMKV unavailable — fall back to a no-op in-memory store
-    const mem = new Map<string, string>();
-    _store = {
-      get: (k) => mem.get(k) ?? null,
-      set: (k, v) => mem.set(k, v),
-    };
-  }
+  const runtimeInfo = Constants as {
+    appOwnership?: string;
+    executionEnvironment?: string;
+  };
+  const isExpoGoRuntime =
+    runtimeInfo.appOwnership === "expo" ||
+    runtimeInfo.executionEnvironment === "storeClient";
+  const mem = new Map<string, string>();
+
+  type MMKVStore = {
+    getString: (key: string) => string | undefined;
+    set: (key: string, value: string) => void;
+  };
+
+  let mmkvStore: MMKVStore | null | undefined;
+  const getMMKVStore = (): MMKVStore | null => {
+    if (isExpoGoRuntime) return null;
+    if (mmkvStore !== undefined) return mmkvStore;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { MMKV } = require("react-native-mmkv") as {
+        MMKV: new (cfg: { id: string }) => MMKVStore;
+      };
+      mmkvStore = new MMKV({ id: "mutation-queue" });
+    } catch {
+      mmkvStore = null;
+    }
+    return mmkvStore;
+  };
+
+  _store = {
+    get: (k) => {
+      const store = getMMKVStore();
+      if (store) {
+        try {
+          return store.getString(k) ?? mem.get(k) ?? null;
+        } catch {
+          return mem.get(k) ?? null;
+        }
+      }
+      return mem.get(k) ?? null;
+    },
+    set: (k, v) => {
+      const store = getMMKVStore();
+      if (store) {
+        try {
+          store.set(k, v);
+          return;
+        } catch {
+          // Fall through to in-memory fallback.
+        }
+      }
+      mem.set(k, v);
+    },
+  };
 
   return _store!;
 }

@@ -80,6 +80,19 @@ export const marketApi = {
 
   async refresh(): Promise<MarketData> {
     const headers = await authHeaders();
+    // Prefer non-blocking refresh: returns the latest snapshot immediately
+    // while backend refreshes in the background.
+    const overviewRes = await fetch(`${MARKET_API}/overview?live=true&include_quotes=false`, { headers });
+    if (overviewRes.ok) {
+      const json = await overviewRes.json();
+      return json.data;
+    }
+
+    // Backward-compatible fallback for deployments without /overview.
+    if (overviewRes.status !== 404) {
+      throw new Error(`Market refresh error: ${overviewRes.status}`);
+    }
+
     const res = await fetch(`${MARKET_API}/refresh`, { headers });
     if (!res.ok) throw new Error(`Market refresh error: ${res.status}`);
     const json = await res.json();

@@ -351,4 +351,37 @@ describe("enrichMetricsWithFallbacks", () => {
       expect(payout.metric_value).toBeGreaterThanOrEqual(0);
     }
   });
+
+  it("computes Debt / Equity from bank borrowing aliases", () => {
+    const statements = [
+      makeStatement("balance", 2024, [
+        { code: "TOTAL_EQUITY", amount: 100 },
+        { code: "CURRENT_BANK_BORROWINGS", amount: 15 },
+        { code: "BANK_BORROWINGS_NON_CURRENT", amount: 25 },
+        { code: "DUE_TO_BANKS", amount: 10 },
+      ]),
+    ];
+
+    const result = enrichMetricsWithFallbacks([], statements);
+    const debtEquity = result.find((m) => m.metric_name === "Debt / Equity" && m.fiscal_year === 2024);
+
+    expect(debtEquity).toBeDefined();
+    expect(debtEquity!.metric_value).toBeCloseTo(0.5);
+  });
+
+  it("computes Debt / Equity from Stock Analysis debt aliases", () => {
+    const statements = [
+      makeStatement("balance", 2024, [
+        { code: "total_equity", amount: 100 },
+        { code: "currentPortDebt", amount: 15 },
+        { code: "debtnc", amount: 25 },
+      ]),
+    ];
+
+    const result = enrichMetricsWithFallbacks([], statements);
+    const debtEquity = result.find((m) => m.metric_name === "Debt / Equity" && m.fiscal_year === 2024);
+
+    expect(debtEquity).toBeDefined();
+    expect(debtEquity!.metric_value).toBeCloseTo(0.4);
+  });
 });

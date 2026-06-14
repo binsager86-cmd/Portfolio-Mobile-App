@@ -1,5 +1,6 @@
 import { SCORE_THRESHOLDS } from "@/src/features/fundamental-analysis/types";
 import {
+  formatLineItemValue,
     formatMetricValue,
     formatScoreDate,
     safeFormatMetric,
@@ -102,6 +103,10 @@ describe("formatMetricValue", () => {
   it("formats multiplier metrics correctly", () => {
     expect(formatMetricValue("Asset Turnover", 1.5)).toBe("1.50x");
     expect(formatMetricValue("Current Ratio", 2.1)).toBe("2.10x");
+    expect(formatMetricValue("Quick Ratio", 3.323)).toBe("3.32x");
+    expect(formatMetricValue("Cash Ratio", 1.689)).toBe("1.69x");
+    expect(formatMetricValue("Debt to Equity Ratio", 0.84)).toBe("0.84x");
+    expect(formatMetricValue("Debt / Equity", 0.84)).toBe("0.84x");
   });
 
   it("formats EPS correctly", () => {
@@ -115,6 +120,30 @@ describe("formatMetricValue", () => {
 
   it("formats generic numbers", () => {
     expect(formatMetricValue("Revenue", 1000000)).toBe("1,000,000");
+  });
+
+  it("keeps percentage-style ratios as percentages", () => {
+    expect(formatMetricValue("Payout Ratio", 0.45)).toBe("45.0%");
+    expect(formatMetricValue("Retention Ratio", 0.55)).toBe("55.0%");
+  });
+
+  it("keeps cash flow amount metrics as values", () => {
+    expect(formatMetricValue("Cash from Operations", 3274405)).toBe("3,274,405");
+    expect(formatMetricValue("Free Cash Flow", 3027067)).toBe("3,027,067");
+  });
+});
+
+describe("formatLineItemValue", () => {
+  it("formats EPS line items to 3 decimal places", () => {
+    expect(formatLineItemValue("EPS (Basic)", 0.01)).toBe("0.010");
+  });
+
+  it("formats Book Value Per Share line items to 3 decimal places", () => {
+    expect(formatLineItemValue("Book Value Per Share", 1.2)).toBe("1.200");
+  });
+
+  it("keeps generic statement values on the normal formatter", () => {
+    expect(formatLineItemValue("Revenue", 4310539)).toBe("4,310,539");
   });
 });
 

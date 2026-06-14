@@ -19,6 +19,12 @@ export interface RatingColorSet {
 
 export function getRatingColors(rating: string, c: ThemePalette): RatingColorSet {
   switch (rating) {
+    case "CONTINUE_RISING":
+      return {
+        bg: c.mode === "dark" ? "#0F766E" : "#0D9488",
+        text: "#ffffff",
+        border: c.mode === "dark" ? "#14B8A6" : "#0F766E",
+      };
     case "BUY":
       return { bg: c.success, text: "#ffffff", border: c.success };
     case "WATCHLIST":
@@ -61,6 +67,8 @@ export function getRatingColors(rating: string, c: ThemePalette): RatingColorSet
 /** Single text color for confidence numbers and small accents. */
 export function getRatingTextColor(rating: string, c: ThemePalette): string {
   switch (rating) {
+    case "CONTINUE_RISING":
+      return c.accentSecondary;
     case "BUY":
     case "WATCHLIST":
       return c.success;

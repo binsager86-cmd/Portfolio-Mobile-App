@@ -19,24 +19,28 @@ import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { RatedStock } from "@/hooks/useEagleEye";
+import { useEagleEyeStock } from "@/hooks/useEagleEye";
 import { BadgeHelpTooltip } from "./BadgeHelpTooltip";
 import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
 import { MLBandBadge } from "./MLBandBadge";
 import type { MLBandLabel } from "./MLBandBadge";
+import { getActionInterpretation } from "./actionInterpretation";
 
 export const STOCK_TABLE_COL_WIDTHS = {
-  rating: 84,
-  ticker: 92,
-  stage: 108,
-  volume: 106,
-  current: 92,
-  entry: 92,
-  tp1: 92,
-  bvps: 96,
-  pe: 76,
-  rr: 72,
-  confidence: 78,
+  rating: 80,
+  ticker: 88,
+  stage: 104,
+  action: 220,
+  volume: 98,
+  current: 88,
+  entry: 84,
+  tp1: 84,
+  bvps: 84,
+  pe: 68,
+  rr: 68,
+  yesterdayConfidence: 72,
+  liveConfidence: 72,
 } as const;
 
 export const STOCK_TABLE_TOTAL_WIDTH =
@@ -70,6 +74,11 @@ function fmt(n: number | null | undefined, dec = 3): string {
 }
 
 export function computeRR(item: RatedStock): number | null {
+  const apiRR = item.risk_reward_ratio;
+  if (apiRR != null && Number.isFinite(apiRR)) {
+    return Number(apiRR);
+  }
+
   const { entry_primary: e, stop_loss: sl, tp1 } = item;
   if (e != null && sl != null && tp1 != null && e > sl) {
     const risk = e - sl;
@@ -82,10 +91,27 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
   const { colors } = useThemeStore();
   const router = useRouter();
   const isTable = variant === "table";
+  const { data: liveAnalysis } = useEagleEyeStock(item.ticker, 0, isTable);
 
   const confPct = Math.min(100, Math.max(0, item.confidence));
   const confColor = confPct >= 75 ? colors.success : confPct >= 60 ? "#E6A817" : colors.textMuted;
   const confidenceHelp = getRatingConfidenceDescription(item.rating, confPct);
+  const liveConfidence = useMemo(() => {
+    const raw = liveAnalysis?.data?.confidence;
+    return Number.isFinite(raw) ? Math.min(100, Math.max(0, Number(raw))) : null;
+  }, [liveAnalysis?.data?.confidence]);
+  const liveConfColor =
+    liveConfidence == null
+      ? colors.textMuted
+      : liveConfidence >= 75
+        ? colors.success
+        : liveConfidence >= 60
+          ? "#E6A817"
+          : colors.textMuted;
+  const liveConfidenceHelp =
+    liveConfidence == null
+      ? "Live confidence is loading from the fresh stock analysis endpoint."
+      : getRatingConfidenceDescription(liveAnalysis?.data?.rating ?? item.rating, liveConfidence);
   const ratingColors = getRatingColors(item.rating, colors);
   const leftStripColor =
     item.rating === "SELL" || item.rating === "STRONG_SELL"
@@ -96,6 +122,43 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
   const rr = useMemo(() => computeRR(item), [item]);
   const rrText = rr != null ? `1:${rr.toFixed(1)}` : "-";
+  const actionInterpretation = useMemo(
+    () =>
+      getActionInterpretation({
+        rating: item.rating,
+        continue_rising: item.continue_rising,
+        continue_rising_exhaustion_count: item.continue_rising_exhaustion_count,
+        risk_warning_score: item.risk_warning_score,
+        risky_near_resistance: item.risky_near_resistance,
+        risk_reward_ratio: rr,
+        close: item.last_price,
+        stage: item.stage,
+      }),
+    [
+      item.continue_rising,
+      item.continue_rising_exhaustion_count,
+      item.risk_warning_score,
+      item.last_price,
+      item.rating,
+      item.risky_near_resistance,
+      item.stage,
+      rr,
+    ]
+  );
+
+  const actionColor = useMemo(() => {
+    const actionText = actionInterpretation.action.toUpperCase();
+    if (actionText.includes("EXIT") || actionText.includes("SKIP") || actionText.includes("AVOID") || actionText.includes("TRIM")) {
+      return colors.danger;
+    }
+    if (actionText.includes("WAIT") || actionText.includes("HOLD") || actionText.includes("STAND ASIDE") || actionText.includes("SMALL")) {
+      return colors.warning;
+    }
+    if (actionText.includes("ENTER") || actionText.includes("ADD")) {
+      return colors.success;
+    }
+    return colors.textSecondary;
+  }, [actionInterpretation.action, colors.danger, colors.success, colors.textSecondary, colors.warning]);
 
   const volumeCell = useMemo(() => {
     const vc = item.volume_context;
@@ -143,7 +206,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />
 
         <View style={styles.tableCellRating}>
-          <RatingBadge rating={item.rating} size="sm" />
+          <View style={styles.badgeStack}>
+            <RatingBadge rating={item.rating} size="sm" />
+            {item.continue_rising && item.continue_rising_badge ? (
+              <RatingBadge rating={item.continue_rising_badge} size="sm" />
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.tableCellTicker}>
@@ -154,6 +222,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
         <View style={styles.tableCellStage}>
           <StageTag stage={item.stage} size="sm" />
+        </View>
+
+        <View style={styles.tableCellAction}>
+          <Text style={[styles.tableActionText, { color: actionColor }]} numberOfLines={2} ellipsizeMode="tail">
+            {actionInterpretation.action}
+          </Text>
         </View>
 
         <View style={styles.tableCellVolume}>
@@ -208,18 +282,41 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         </View>
 
         <View style={styles.tableCellRR}>
-          <Text style={[styles.tableNumText, { color: rr != null ? colors.textPrimary : colors.textMuted }]}>
-            {rrText}
+          <Text
+            style={[
+              styles.tableNumText,
+              {
+                color: item.risky_near_resistance
+                  ? colors.danger
+                  : rr != null
+                    ? colors.textPrimary
+                    : colors.textMuted,
+              },
+            ]}
+          >
+            {item.risky_near_resistance ? `${rrText}!` : rrText}
           </Text>
         </View>
 
         <View style={styles.tableCellConfidence}>
           <BadgeHelpTooltip
-            title={`${confPct.toFixed(0)}% Confidence`}
+            title={`${confPct.toFixed(0)}% Yesterday Confidence`}
             body={confidenceHelp}
             align="right"
           >
             <Text style={[styles.tableNumText, { color: confColor }]}>{`${confPct.toFixed(0)}%`}</Text>
+          </BadgeHelpTooltip>
+        </View>
+
+        <View style={styles.tableCellConfidence}>
+          <BadgeHelpTooltip
+            title={liveConfidence == null ? "Live confidence loading" : `${liveConfidence.toFixed(0)}% Live Confidence`}
+            body={liveConfidenceHelp}
+            align="right"
+          >
+            <Text style={[styles.tableNumText, { color: liveConfColor }]}>
+              {liveConfidence == null ? "--" : `${liveConfidence.toFixed(0)}%`}
+            </Text>
           </BadgeHelpTooltip>
         </View>
       </Pressable>
@@ -251,7 +348,12 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
       {/* ── Rating badge column ─────────────────────────────── */}
       <View style={styles.badgeCol}>
-        <RatingBadge rating={item.rating} size="sm" />
+        <View style={styles.badgeStack}>
+          <RatingBadge rating={item.rating} size="sm" />
+          {item.continue_rising && item.continue_rising_badge ? (
+            <RatingBadge rating={item.continue_rising_badge} size="sm" />
+          ) : null}
+        </View>
       </View>
 
       {/* ── Content column ──────────────────────────────────── */}
@@ -305,7 +407,15 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             {rr != null && (
               <Text style={{ fontSize: 11 }}>
                 <Text style={{ color: colors.textMuted }}>{`  ·  `}</Text>
-                <Text style={{ color: colors.textSecondary }}>{`R:R 1:${rr.toFixed(1)}`}</Text>
+                <Text style={{ color: item.risky_near_resistance ? colors.danger : colors.textSecondary }}>
+                  {`R:R 1:${rr.toFixed(1)}`}
+                </Text>
+              </Text>
+            )}
+            {item.risky_near_resistance && (
+              <Text style={{ fontSize: 11 }}>
+                <Text style={{ color: colors.textMuted }}>{`  ·  `}</Text>
+                <Text style={{ color: colors.danger }}>{`Risky`}</Text>
               </Text>
             )}
           </Text>
@@ -395,6 +505,9 @@ export function StockRowSkeleton({ variant = "default" }: StockRowSkeletonProps 
         </View>
         <View style={styles.tableCellStage}>
           <View style={[styles.skelRect, sh, { width: 84, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellAction}>
+          <View style={[styles.skelRect, sh, { width: 92, height: 12 }]} />
         </View>
         <View style={styles.tableCellVolume}>
           <View style={[styles.skelRect, sh, { width: 70, height: 12 }]} />
@@ -490,6 +603,10 @@ const styles = StyleSheet.create({
     width: STOCK_TABLE_COL_WIDTHS.stage,
     paddingRight: 6,
   },
+  tableCellAction: {
+    width: STOCK_TABLE_COL_WIDTHS.action,
+    paddingRight: 6,
+  },
   tableCellVolume: {
     width: STOCK_TABLE_COL_WIDTHS.volume,
     paddingRight: 6,
@@ -525,7 +642,7 @@ const styles = StyleSheet.create({
     paddingRight: 6,
   },
   tableCellConfidence: {
-    width: STOCK_TABLE_COL_WIDTHS.confidence,
+    width: STOCK_TABLE_COL_WIDTHS.yesterdayConfidence,
     alignItems: "flex-end",
   },
   tableTickerText: {
@@ -537,6 +654,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  tableActionText: {
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
   },
   tableVolumeText: {
     fontSize: 11,
@@ -553,6 +675,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "center",
     paddingRight: 6,
+  },
+  badgeStack: {
+    gap: 4,
+    alignItems: "flex-start",
   },
   contentCol: {
     flex: 1,

@@ -17,13 +17,14 @@ import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { TradePlanCard } from "@/components/eagle-eye/TradePlanCard";
 import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
+import { getActionInterpretation } from "@/components/eagle-eye/actionInterpretation";
 import {
   EE,
   getRatingConfidenceDescription,
   STAGE_INTERPRETATIONS,
 } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
-import { useEagleEyeStock } from "@/hooks/useEagleEye";
+import { useEagleEyeScanner, useEagleEyeStock, useEagleEyeDnaRecentBars } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -54,6 +55,13 @@ export default function EagleEyeDetailScreen() {
 
   const { data, isLoading, isError, refetch } = useEagleEyeStock(t, 0, !isDnaRoute);
   const analysis = data?.data;
+  const { data: scannerData } = useEagleEyeScanner(undefined, !isDnaRoute);
+  // Fetch recent OHLCV bars for the candlestick chart only after core
+  // analysis loads, so detail page becomes interactive faster.
+  const { data: recentBarsData } = useEagleEyeDnaRecentBars(
+    t,
+    !isDnaRoute && !!t && !isLoading && !!analysis,
+  );
 
   // Safety modal — auto-show when requires_confirmation
   const [safetyVisible, setSafetyVisible] = useState(false);
@@ -114,6 +122,24 @@ export default function EagleEyeDetailScreen() {
   }
 
   const stageInterpretation = STAGE_INTERPRETATIONS[analysis.stage];
+  const scannerRow = scannerData?.stocks?.find((stock) => stock.ticker === analysis.ticker);
+  const actionInterpretation = getActionInterpretation({
+    rating: analysis.rating,
+    continue_rising: analysis.continue_rising,
+    continue_rising_exhaustion_count:
+      analysis.continue_rising_exhaustion_count
+      ?? scannerRow?.continue_rising_exhaustion_count
+      ?? null,
+    risk_warning_score:
+      analysis.risk_warning_score
+      ?? scannerRow?.risk_warning_score
+      ?? null,
+    risky_near_resistance:
+      analysis.risky_near_resistance ?? scannerRow?.risky_near_resistance ?? null,
+    risk_reward_ratio: analysis.risk_reward_ratio ?? null,
+    close: analysis.last_price ?? scannerRow?.last_price ?? null,
+    stage: analysis.stage,
+  });
 
   return (
     <View
@@ -179,18 +205,23 @@ export default function EagleEyeDetailScreen() {
               </Text>
             </View>
           ) : null}
+
+          <View style={[styles.meaningBox, { backgroundColor: colors.bgCardHover }]}>
+            <Text style={[styles.meaningLabel, { color: colors.textSecondary }]}>What this means</Text>
+            <Text style={[styles.meaningAction, { color: colors.textPrimary }]}>{actionInterpretation.action}</Text>
+            <Text style={[styles.meaningDetail, { color: colors.textMuted }]}>{actionInterpretation.detail}</Text>
+          </View>
         </View>
 
         {/* ── Chart ─────────────────────────────────────────────────────────── */}
-        {analysis.last_price != null && (
+        {(recentBarsData?.bars?.length || analysis?.last_price != null) && (
           <View style={styles.section}>
             <EagleEyeChart
-              prices={[analysis.last_price]} // real charts need OHLCV endpoint (future)
-              supports={analysis.supports ?? []}
-              resistances={analysis.resistances ?? []}
-              lastPrice={analysis.last_price}
-              width={360}
-              height={120}
+              bars={recentBarsData?.bars ?? []}
+              supports={analysis?.supports ?? []}
+              resistances={analysis?.resistances ?? []}
+              lastPrice={analysis?.last_price}
+              height={400}
             />
           </View>
         )}
@@ -391,6 +422,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontStyle: "italic",
+  },
+  meaningBox: {
+    borderRadius: UITokens.radius.sm,
+    padding: UITokens.spacing.sm,
+    gap: 4,
+  },
+  meaningLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  meaningAction: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  meaningDetail: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   section: {
     gap: UITokens.spacing.sm,

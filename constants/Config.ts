@@ -89,6 +89,10 @@ function resolveAndroidApiUrl(): string {
     return configured;
   }
 
+  if (ENV_API_URL && ENV_API_URL !== "") {
+    return ENV_API_URL.trim();
+  }
+
   return inferred ?? LOCAL_ANDROID_EMULATOR_API;
 }
 
@@ -96,10 +100,11 @@ function resolveAndroidApiUrl(): string {
  * Backend API base URL.
  *
  * Priority:
- *   1. EXPO_PUBLIC_API_URL env var (set in DO / Vercel / EAS / CI)
- *   2. Production web: "" (empty) → relative paths (same domain on DO)
- *   3. Dev web: localhost:8003
- *   4. Dev mobile: LAN IP (must set EXPO_PUBLIC_API_URL)
+ *   1. Android: EXPO_PUBLIC_API_URL_ANDROID (with physical-device safeguards)
+ *   2. Web: EXPO_PUBLIC_API_URL_WEB
+ *   3. iOS: EXPO_PUBLIC_API_URL_IOS
+ *   4. Global platform fallback: EXPO_PUBLIC_API_URL
+ *   5. Local/platform fallbacks
  */
 const isLocalDev =
   Platform.OS === "web" &&
@@ -107,19 +112,20 @@ const isLocalDev =
   (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
 
 export const API_BASE_URL: string =
-  // Explicit override always wins (EAS build, CI, Vercel, etc.)
-  (ENV_API_URL != null && ENV_API_URL !== "")
-    ? ENV_API_URL
+  Platform.OS === "android"
+    ? resolveAndroidApiUrl()
     : Platform.OS === "web"
       ? (ENV_API_URL_WEB && ENV_API_URL_WEB !== "")
         ? ENV_API_URL_WEB
-        : isLocalDev
-          ? LOCAL_WEB_API      // Dev web: localhost backend
-          : ""                 // Production web: relative paths (same domain)
-      : Platform.OS === "android"
-        ? resolveAndroidApiUrl()
-        : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
-          ? ENV_API_URL_IOS
+        : (ENV_API_URL != null && ENV_API_URL !== "")
+          ? ENV_API_URL
+          : isLocalDev
+            ? LOCAL_WEB_API      // Dev web: localhost backend
+            : ""                 // Production web: relative paths (same domain)
+      : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
+        ? ENV_API_URL_IOS
+        : (ENV_API_URL != null && ENV_API_URL !== "")
+          ? ENV_API_URL
           : inferNativeDevApiUrl() ?? LOCAL_WEB_API;
 
 /** How long (ms) to wait before timing out API calls. */

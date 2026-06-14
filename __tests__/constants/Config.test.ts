@@ -94,6 +94,13 @@ describe("Config — API_BASE_URL resolution", () => {
     expect(config.API_BASE_URL).toBe("https://api.production.com");
   });
 
+  it("prefers EXPO_PUBLIC_API_URL_WEB over EXPO_PUBLIC_API_URL on web", () => {
+    process.env.EXPO_PUBLIC_API_URL = "http://10.0.2.2:8004";
+    process.env.EXPO_PUBLIC_API_URL_WEB = "http://127.0.0.1:8004";
+    const config = loadConfig("web", "localhost");
+    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
+  });
+
   it("exports API_TIMEOUT as a positive number", () => {
     const config = loadConfig("web", "localhost");
     expect(config.API_TIMEOUT).toBeGreaterThan(0);

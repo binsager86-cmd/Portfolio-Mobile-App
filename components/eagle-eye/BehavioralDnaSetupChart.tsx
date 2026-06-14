@@ -10,7 +10,7 @@
 
 import type { ThemePalette } from "@/constants/theme";
 import { UITokens } from "@/constants/uiTokens";
-import type { DnaSetupBar, DnaSetupExample } from "@/hooks/useEagleEye";
+import type { BehavioralDNA, DnaSetupBar, DnaSetupExample } from "@/hooks/useEagleEye";
 import React, {
   useCallback,
   useMemo,
@@ -36,15 +36,122 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 
-// ── Constants ────────────────────────────────────────────────────────
+// ── Colours ──────────────────────────────────────────────────────────
+const BULL_COLOR   = "#16a34a";
+const BEAR_COLOR   = "#dc2626";
+const RSI_COLOR    = "#f59e0b";  // amber
+const ADX_COLOR    = "#14b8a6";  // teal
+const BUY_ZONE_COL = "#16a34a";  // same green — buy-zone fill / markers
+const SELL_ZONE_COL= "#dc2626";  // red — sell-zone fill / markers
+const TP_COLORS    = ["#06b6d4", "#f59e0b", "#a855f7"] as const; // TP1 cyan, TP2 amber, TP3 purple
+const STOP_COLOR   = "#ef4444";
 
-const BULL_COLOR = "#16a34a";
-const BEAR_COLOR = "#dc2626";
-const RSI_COLOR  = "#f59e0b"; // amber
-const ADX_COLOR  = "#14b8a6"; // teal
+// ── Buy / sell signal classifiers ────────────────────────────────────
+const BUY_SIGNALS = new Set([
+  "volume_breakout_2x", "volume_breakout_15x", "macd_histogram_turned_positive",
+  "rsi_in_bullish_zone", "rsi_bullish_divergence", "adx_crossed_20", "adx_strong_trend",
+  "plus_di_dominates", "accumulation_above_65", "accumulation_above_75",
+  "ema_ribbon_bullish", "supertrend_bullish", "above_ichimoku_cloud",
+  "wyckoff_in_accumulation", "wyckoff_in_markup", "obv_60d_slope_strongly_positive",
+  "cmf_above_010", "mfi_in_bullish_zone", "bb_squeeze_active", "price_above_vwap",
+  "breakout_from_15d_base", "capitulation_reversal_flag", "rsi_oversold_recovery",
+  "ema_golden_cross_10_30", "near_60d_low_compression", "sma200_slope_turning_up",
+]);
 
-// Layout proportions
-const PAD_LEFT   = 52;
+const SELL_SIGNALS = new Set([
+  "rsi_overbought", "rsi_bearish_divergence", "macd_histogram_turned_negative",
+  "macd_bearish_crossover", "minus_di_dominates", "ema_bearish_cross_10_30",
+  "red_cluster_at_high", "parabolic_vs_200sma", "distribution_at_high_flag",
+  "vol_spike_on_red_at_high", "macd_hist_declining_3d", "extended_vs_50ema",
+  "stoch_rsi_overbought", "volume_drying_up_on_advance",
+]);
+
+function observationColor(signal: string): string {
+  if (SELL_SIGNALS.has(signal)) return SELL_ZONE_COL;
+  if (BUY_SIGNALS.has(signal)) return BUY_ZONE_COL;
+  return "#8b5cf6"; // purple = neutral/unknown
+}
+
+// ── Level computations from DNA learned data ────────────────────────
+interface ChartLevels {
+  entryPrice: number;
+  stopPrice: number | null;
+  tpLevels: Array<{ price: number; label: string; color: string }>;
+  buyZoneLo: number;
+  buyZoneHi: number;
+  sellZonePrice: number | null;
+}
+
+function computeChartLevels(
+  bars: DnaSetupBar[],
+  example: DnaSetupExample,
+  dna: BehavioralDNA | null | undefined,
+): ChartLevels {
+  const setupStartIdx = Math.max(0, Math.min(example.setup_window_start_index, bars.length - 1));
+  const setupEndIdx = Math.max(setupStartIdx, Math.min(example.setup_window_end_index, bars.length - 1));
+  const setupStartBar = bars[setupStartIdx];
+  const setupEndBar = bars[setupEndIdx];
+  const entryPrice = setupStartBar?.close ?? setupEndBar?.close ?? bars[bars.length - 1]?.close ?? 0;
+
+  // Learn the buy zone from the base-building area near the first bullish observations,
+  // not from the later confirmation candle that usually closes much higher.
+  const firstBuyObservationIdx = example.observations
+    .filter((observation) => BUY_SIGNALS.has(observation.signal))
+    .map((observation) => bars.findIndex((bar) => bar.date === observation.date))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0];
+
+  const accumulationStartIdx = firstBuyObservationIdx != null
+    ? Math.min(firstBuyObservationIdx, setupStartIdx)
+    : setupStartIdx;
+  const accumulationBars = bars.slice(accumulationStartIdx, setupStartIdx + 1);
+
+  const accumulationLows = accumulationBars
+    .map((bar) => bar.low ?? bar.close ?? null)
+    .filter((value): value is number => value != null && Number.isFinite(value));
+  const accumulationBodyHighs = accumulationBars
+    .map((bar) => {
+      const open = bar.open ?? bar.close ?? null;
+      const close = bar.close ?? bar.open ?? null;
+      if (open == null || close == null || !Number.isFinite(open) || !Number.isFinite(close)) {
+        return null;
+      }
+      return Math.max(open, close);
+    })
+    .filter((value): value is number => value != null && Number.isFinite(value));
+
+  const pullback = dna?.pullback_entry_profile;
+  const stopPct = pullback?.median_pullback_pct != null
+    ? Math.abs(pullback.median_pullback_pct)
+    : null;
+  const fallbackHalfStop = stopPct != null ? stopPct / 2 : 2.0;
+
+  const buyZoneLo = accumulationLows.length > 0
+    ? Math.min(...accumulationLows)
+    : entryPrice * (1 - fallbackHalfStop / 100);
+  const buyZoneHi = accumulationBodyHighs.length > 0
+    ? Math.min(Math.max(...accumulationBodyHighs), entryPrice)
+    : entryPrice;
+
+  const stopCandidates = [
+    stopPct != null && entryPrice > 0 ? entryPrice * (1 - stopPct / 100) : null,
+    buyZoneLo > 0 ? buyZoneLo * (1 - Math.min(stopPct ?? 2.0, 4.0) / 100) : null,
+  ].filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
+  const stopPrice = stopCandidates.length > 0 ? Math.min(...stopCandidates) : null;
+
+  // TP levels remain tied to the historical setup entry date used by the DNA outcomes.
+  const clusters = dna?.historical_target_clusters ?? [];
+  const tpLevels = clusters.slice(0, 3).map((cluster, i) => ({
+    price: entryPrice * (1 + cluster.gain_pct_from_entry / 100),
+    label: `TP${i + 1} +${cluster.gain_pct_from_entry.toFixed(0)}%`,
+    color: TP_COLORS[i] ?? TP_COLORS[2],
+  }));
+
+  const sellZonePrice = tpLevels.length > 0 ? tpLevels[tpLevels.length - 1].price : null;
+
+  return { entryPrice, stopPrice, tpLevels, buyZoneLo, buyZoneHi, sellZonePrice };
+}
+  const PAD_LEFT   = 52;
 const PAD_RIGHT  = 12;
 const PAD_TOP    = 8;
 const PAD_BOTTOM = 28; // room for X-axis labels
@@ -179,10 +286,12 @@ export const BehavioralDnaSetupChart = React.memo(
     example,
     selectedWindowDays,
     colors,
+    dna,
   }: {
     example: DnaSetupExample;
     selectedWindowDays: number;
     colors: ThemePalette;
+    dna?: BehavioralDNA | null;
   }) {
     const { width: winWidth } = useWindowDimensions();
     const [measuredW, setMeasuredW] = useState(0);
@@ -221,6 +330,12 @@ export const BehavioralDnaSetupChart = React.memo(
       const pad   = (yMax - yMin) * 0.03;
       return [yMin - pad, yMax + pad] as [number, number];
     }, [bars]);
+
+    // ── Computed TA levels from DNA ───────────────────────────
+    const chartLevels = useMemo(
+      () => computeChartLevels(bars, example, dna),
+      [bars, example, dna],
+    );
 
     const [volMin, volMax] = useMemo(
       () => numericRange(bars.map((b) => b.volume ?? null), [0, 1]),
@@ -403,7 +518,7 @@ export const BehavioralDnaSetupChart = React.memo(
       [bars, count, slotW, indTop, indH],
     );
 
-    // Observation dots (pinned to candle close price)
+    // Observation dots — green = buy signal, red = sell warning, purple = neutral
     const observationDots = useMemo(
       () =>
         example.observations
@@ -414,19 +529,34 @@ export const BehavioralDnaSetupChart = React.memo(
             if (close == null) return null;
             const cx = PAD_LEFT + slotW * idx + slotW / 2;
             const cy = yPrice(close);
+            const dotColor = observationColor(obs.signal);
+            const isSell = SELL_SIGNALS.has(obs.signal);
+            // Buy dots go below the candle, sell dots above
+            const yOffset = isSell ? -10 : 8;
             return (
-              <Circle
-                key={`obs-${obs.date}-${obs.signal}`}
-                cx={cx}
-                cy={cy - 8}
-                r={4.5}
-                fill={colors.bgCard}
-                stroke={colors.accentPrimary}
-                strokeWidth={2}
-              />
+              <G key={`obs-${obs.date}-${obs.signal}`}>
+                <Circle
+                  cx={cx}
+                  cy={cy + yOffset}
+                  r={5}
+                  fill={dotColor}
+                  opacity={0.9}
+                />
+                {/* Arrow triangle pointing toward candle */}
+                <SvgText
+                  x={cx}
+                  y={cy + yOffset + (isSell ? 3 : -3)}
+                  fontSize={7}
+                  fontWeight="800"
+                  fill="#fff"
+                  textAnchor="middle"
+                >
+                  {isSell ? "↓" : "↑"}
+                </SvgText>
+              </G>
             );
           }),
-      [example.observations, bars, slotW, yPrice, colors.bgCard, colors.accentPrimary],
+      [example.observations, bars, slotW, yPrice],
     );
 
     // ── Pointer handling (web hover) ─────────────────────────────
@@ -579,6 +709,63 @@ export const BehavioralDnaSetupChart = React.memo(
               fill={colors.accentPrimary}
               opacity={0.07}
             />
+
+            {/* ── ACCUMULATION ZONE band (learned from bottom-building area) ─────── */}
+            {(() => {
+              const { buyZoneLo, buyZoneHi } = chartLevels;
+              if (buyZoneLo <= priceMin || buyZoneHi >= priceMax) return null;
+              const yHi = yPrice(buyZoneHi);
+              const yLo = yPrice(buyZoneLo);
+              const h   = Math.max(2, yLo - yHi);
+              return (
+                <G key="buy-zone">
+                  <Rect x={PAD_LEFT} y={yHi} width={chartW - PAD_LEFT - PAD_RIGHT} height={h} fill={BUY_ZONE_COL} opacity={0.09} />
+                  <Line x1={PAD_LEFT} y1={yHi} x2={chartW - PAD_RIGHT} y2={yHi} stroke={BUY_ZONE_COL} strokeWidth={1.2} strokeDasharray="5,3" opacity={0.55} />
+                  <SvgText x={PAD_LEFT + 4} y={yHi - 3} fontSize={9} fontWeight="700" fill={BUY_ZONE_COL}>ACCUMULATION ZONE</SvgText>
+                </G>
+              );
+            })()}
+
+            {/* ── STOP LOSS line ─────────────────────────────── */}
+            {(() => {
+              const { stopPrice } = chartLevels;
+              if (stopPrice == null || stopPrice <= priceMin || stopPrice >= priceMax) return null;
+              const y = yPrice(stopPrice);
+              return (
+                <G key="stop">
+                  <Line x1={PAD_LEFT} y1={y} x2={chartW - PAD_RIGHT} y2={y} stroke={STOP_COLOR} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.75} />
+                  <Rect x={PAD_LEFT + 3} y={y + 2} width={38} height={13} rx={2} fill={STOP_COLOR} opacity={0.85} />
+                  <SvgText x={PAD_LEFT + 22} y={y + 12} fontSize={8} fontWeight="700" fill="#fff" textAnchor="middle">STOP</SvgText>
+                </G>
+              );
+            })()}
+
+            {/* ── TP1 / TP2 / TP3 target lines ─────────────── */}
+            {chartLevels.tpLevels.map((tp, i) => {
+              if (tp.price <= priceMin || tp.price >= priceMax) return null;
+              const y = yPrice(tp.price);
+              return (
+                <G key={`tp-${i}`}>
+                  <Line x1={PAD_LEFT} y1={y} x2={chartW - PAD_RIGHT} y2={y} stroke={tp.color} strokeWidth={1.5} strokeDasharray="6,3" opacity={0.8} />
+                  <Rect x={chartW - PAD_RIGHT - 52} y={y - 8} width={50} height={14} rx={2} fill={tp.color} opacity={0.9} />
+                  <SvgText x={chartW - PAD_RIGHT - 27} y={y + 3} fontSize={8.5} fontWeight="700" fill="#fff" textAnchor="middle">{tp.label}</SvgText>
+                </G>
+              );
+            })}
+
+            {/* ── SELL ZONE highlight (above last TP) ──────────── */}
+            {(() => {
+              const { sellZonePrice } = chartLevels;
+              if (sellZonePrice == null || sellZonePrice <= priceMin || sellZonePrice >= priceMax) return null;
+              const y = yPrice(sellZonePrice);
+              return (
+                <G key="sell-zone">
+                  <Rect x={PAD_LEFT} y={PAD_TOP} width={chartW - PAD_LEFT - PAD_RIGHT} height={Math.min(Math.max(2, y - PAD_TOP), priceH)} fill={SELL_ZONE_COL} opacity={0.05} />
+                  <Line x1={PAD_LEFT} y1={y} x2={chartW - PAD_RIGHT} y2={y} stroke={SELL_ZONE_COL} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.6} />
+                  <SvgText x={PAD_LEFT + 4} y={y - 3} fontSize={9} fontWeight="700" fill={SELL_ZONE_COL}>SELL ZONE</SvgText>
+                </G>
+              );
+            })()}
 
             {/* ── Forward horizon marker ────────────────────── */}
             {horizonX <= chartW - PAD_RIGHT && (
@@ -857,23 +1044,37 @@ export const BehavioralDnaSetupChart = React.memo(
           <LegendSwatch color={colors.accentPrimary}          label="Setup zone"        colors={colors} line />
           <LegendSwatch color={colors.warning ?? "#f59e0b"}   label={`+${selectedWindowDays}d horizon`} colors={colors} line />
         </View>
+        {/* TA level legend row */}
+        {chartLevels.tpLevels.length > 0 && (
+          <View style={styles.legend}>
+            <LegendSwatch color={BUY_ZONE_COL} label="Buy zone" colors={colors} line />
+            <LegendSwatch color={STOP_COLOR}   label="Stop"     colors={colors} line />
+            {chartLevels.tpLevels.map((tp, i) => (
+              <LegendSwatch key={`tp-leg-${i}`} color={tp.color} label={tp.label.split(" ")[0]} colors={colors} line />
+            ))}
+            <LegendSwatch color={SELL_ZONE_COL} label="Sell zone" colors={colors} line />
+          </View>
+        )}
 
         {/* ── Observations list ───────────────────────────────── */}
         {example.observations.length > 0 && (
           <View style={styles.obsWrap}>
-            {example.observations.map((obs) => (
-              <View key={`${obs.date}-${obs.signal}`} style={styles.obsRow}>
-                <View style={[styles.obsDot, { backgroundColor: colors.accentPrimary }]} />
-                <View style={styles.obsContent}>
-                  <Text style={[styles.obsLabel, { color: colors.textPrimary }]}>
-                    {obs.label} · {obs.date}
-                  </Text>
-                  <Text style={[styles.obsDetail, { color: colors.textSecondary }]}>
-                    {obs.detail}
-                  </Text>
+            {example.observations.map((obs) => {
+              const dotColor = observationColor(obs.signal);
+              return (
+                <View key={`${obs.date}-${obs.signal}`} style={styles.obsRow}>
+                  <View style={[styles.obsDot, { backgroundColor: dotColor }]} />
+                  <View style={styles.obsContent}>
+                    <Text style={[styles.obsLabel, { color: colors.textPrimary }]}>
+                      {obs.label} · {obs.date}
+                    </Text>
+                    <Text style={[styles.obsDetail, { color: colors.textSecondary }]}>
+                      {obs.detail}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </View>
