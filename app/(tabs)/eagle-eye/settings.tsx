@@ -9,8 +9,11 @@
  */
 
 import { EE } from "@/constants/eagleEyeStrings";
+import { API_BASE_URL } from "@/constants/Config";
 import { UITokens } from "@/constants/uiTokens";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
+import { useEagleEyeRefresh } from "@/hooks/useEagleEye";
+import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -45,6 +48,13 @@ interface EagleEyeSettings {
   defaultSort: "confidence" | "rr";
 }
 
+interface RunDiagnosticResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  at: string;
+}
+
 const DEFAULT_SETTINGS: EagleEyeSettings = {
   circuitBreaker: true,
   confirmLargePositions: true,
@@ -65,12 +75,18 @@ function parseSettings(raw: string | null): EagleEyeSettings {
 
 export default function EagleEyeSettingsScreen() {
   const { colors } = useThemeStore();
+  const authUsername = useAuthStore((s) => s.username);
+  const authUserId = useAuthStore((s) => s.userId);
+  const authIsAdmin = useAuthStore((s) => s.isAdmin);
+  const hasAccessToken = useAuthStore((s) => Boolean(s.token));
+  const eeRefresh = useEagleEyeRefresh();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [settings, setSettings] = useState<EagleEyeSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [runDiag, setRunDiag] = useState<RunDiagnosticResult | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -97,6 +113,79 @@ export default function EagleEyeSettingsScreen() {
       setSaving(false);
     }
   }, [settings]);
+
+  const formatRunError = useCallback((error: unknown): { code: string; message: string } => {
+    if (!error || typeof error !== "object") {
+      return { code: "UNKNOWN", message: "Run request failed with an unknown error." };
+    }
+
+    const e = error as {
+      message?: string;
+      response?: {
+        status?: number;
+        data?: {
+          detail?: unknown;
+          message?: unknown;
+        };
+      };
+    };
+
+    const status = e.response?.status;
+    const detail = e.response?.data?.detail;
+    const message = e.response?.data?.message;
+    const serverMessage =
+      typeof detail === "string"
+        ? detail
+        : typeof message === "string"
+        ? message
+        : null;
+
+    if (status === 401) {
+      return { code: "401", message: "Session expired. Sign in again to refresh token claims." };
+    }
+    if (status === 403) {
+      return { code: "403", message: serverMessage ?? "User is authenticated but not allowed to run refresh." };
+    }
+    if (status === 429) {
+      return { code: "429", message: "Too many requests. Wait a few seconds and retry." };
+    }
+    if (status && serverMessage) {
+      return { code: String(status), message: serverMessage };
+    }
+    if (status) {
+      return { code: String(status), message: `HTTP ${status} from refresh endpoint.` };
+    }
+    if (typeof e.message === "string" && e.message.trim()) {
+      return { code: "CLIENT", message: e.message };
+    }
+    return { code: "UNKNOWN", message: "Run request failed." };
+  }, []);
+
+  const handleTestRunApi = useCallback(async () => {
+    const at = new Date().toLocaleString();
+    try {
+      const res = await eeRefresh.mutateAsync({ tickers: [] });
+      setRunDiag({
+        ok: true,
+        code: res.status || "ok",
+        message: `Refresh accepted. job_id=${res.job_id}`,
+        at,
+      });
+    } catch (error) {
+      const parsed = formatRunError(error);
+      setRunDiag({
+        ok: false,
+        code: parsed.code,
+        message: parsed.message,
+        at,
+      });
+      Alert.alert("Run diagnostics", `${parsed.code}: ${parsed.message}`);
+    }
+  }, [eeRefresh, formatRunError]);
+
+  const apiBaseLabel = API_BASE_URL && API_BASE_URL.trim().length > 0
+    ? API_BASE_URL
+    : "(same-origin web API)";
 
   if (loading) {
     return (
@@ -286,6 +375,83 @@ export default function EagleEyeSettingsScreen() {
           </View>
         </View>
 
+        {/* ── Run Diagnostics ─────────────────────────────────────────────── */}
+        <SectionHeader title="Run Diagnostics" colors={colors} />
+
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+          ]}
+        >
+          <SettingRow label="API Base" colors={colors}>
+            <Text style={[styles.diagValue, { color: colors.textPrimary }]} numberOfLines={2}>
+              {apiBaseLabel}
+            </Text>
+          </SettingRow>
+
+          <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
+
+          <SettingRow label="Auth User" colors={colors}>
+            <Text style={[styles.diagValue, { color: colors.textPrimary }]}>
+              {authUsername ? `${authUsername} (#${authUserId ?? "-"})` : "Not signed in"}
+            </Text>
+          </SettingRow>
+
+          <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
+
+          <SettingRow label="Token / Admin" colors={colors}>
+            <Text style={[styles.diagValue, { color: colors.textPrimary }]}>
+              {`${hasAccessToken ? "Token: yes" : "Token: no"} • ${authIsAdmin ? "Admin: yes" : "Admin: no"}`}
+            </Text>
+          </SettingRow>
+
+          <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
+
+          <View style={styles.diagActionRow}>
+            <Pressable
+              onPress={handleTestRunApi}
+              disabled={eeRefresh.isPending}
+              style={({ pressed }) => [
+                styles.diagRunBtn,
+                {
+                  backgroundColor: pressed ? colors.accentSecondary : colors.accentPrimary,
+                  opacity: eeRefresh.isPending ? 0.7 : 1,
+                },
+              ]}
+            >
+              {eeRefresh.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <FontAwesome name="stethoscope" size={13} color="#fff" />
+                  <Text style={styles.diagRunBtnText}>Test Run API</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Text style={[styles.diagHint, { color: colors.textMuted }]}>Calls POST /api/v1/eagle-eye/refresh</Text>
+          </View>
+
+          {runDiag ? (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.borderColor }]} />
+              <View style={styles.diagResultBox}>
+                <Text
+                  style={[
+                    styles.diagResultTitle,
+                    { color: runDiag.ok ? colors.success : colors.danger },
+                  ]}
+                >
+                  {runDiag.ok ? `Last Result: OK (${runDiag.code})` : `Last Result: FAIL (${runDiag.code})`}
+                </Text>
+                <Text style={[styles.diagResultText, { color: colors.textSecondary }]}>{runDiag.message}</Text>
+                <Text style={[styles.diagResultMeta, { color: colors.textMuted }]}>{`Checked: ${runDiag.at}`}</Text>
+              </View>
+            </>
+          ) : null}
+        </View>
+
         {/* ── Save ─────────────────────────────────────────────────────────── */}
         <Pressable
           onPress={handleSave}
@@ -460,6 +626,49 @@ const styles = StyleSheet.create({
   sortChipText: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  diagValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    maxWidth: 220,
+    textAlign: "right",
+  },
+  diagActionRow: {
+    paddingHorizontal: UITokens.spacing.md,
+    paddingVertical: UITokens.spacing.sm + 2,
+    gap: 8,
+  },
+  diagRunBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: UITokens.radius.md,
+  },
+  diagRunBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  diagHint: {
+    fontSize: 11,
+  },
+  diagResultBox: {
+    paddingHorizontal: UITokens.spacing.md,
+    paddingVertical: UITokens.spacing.sm + 2,
+    gap: 4,
+  },
+  diagResultTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  diagResultText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  diagResultMeta: {
+    fontSize: 11,
   },
   saveBtn: {
     flexDirection: "row",

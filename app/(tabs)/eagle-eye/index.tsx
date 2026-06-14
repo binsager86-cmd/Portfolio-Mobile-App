@@ -22,6 +22,7 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -141,6 +142,7 @@ function getUpdatedAgo(ts: number): string {
 
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const insets = useSafeAreaInsets();
 
   const [minConfidence, setMinConfidence] = useState(0);
@@ -255,18 +257,66 @@ export default function EagleEyeScannerScreen() {
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
   const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const getRunErrorMessage = useCallback((error: unknown): string => {
+    const fallback = "Run failed. Please try again in a moment.";
+    if (!error || typeof error !== "object") return fallback;
+
+    const e = error as {
+      message?: string;
+      response?: {
+        status?: number;
+        data?: {
+          detail?: unknown;
+          message?: unknown;
+        };
+      };
+    };
+
+    const status = e.response?.status;
+    const detail = e.response?.data?.detail;
+    const message = e.response?.data?.message;
+    const serverMessage =
+      typeof detail === "string"
+        ? detail
+        : typeof message === "string"
+        ? message
+        : null;
+
+    if (status === 401) {
+      return "Session expired. Please sign in again.";
+    }
+    if (status === 403) {
+      return "This production account is not allowed to run Eagle Eye refresh.";
+    }
+    if (status === 429) {
+      return "Too many requests right now. Wait a few seconds and retry.";
+    }
+    if (serverMessage) {
+      return serverMessage;
+    }
+    if (typeof e.message === "string" && e.message.trim()) {
+      return e.message;
+    }
+    return fallback;
+  }, []);
+
   const handleRunEagleEye = useCallback(async () => {
     if (eeRefresh.isPending) return;
+    if (!isAdmin) {
+      Alert.alert("Admin only", "Run is available for admin users only.");
+      return;
+    }
     if (runStatusTimer.current) clearTimeout(runStatusTimer.current);
     setRunStatus("idle");
     try {
       await eeRefresh.mutateAsync({ tickers: [] });
       setRunStatus("ok");
-    } catch {
+    } catch (error) {
       setRunStatus("err");
+      Alert.alert("Run failed", getRunErrorMessage(error));
     }
     runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
-  }, [eeRefresh]);
+  }, [eeRefresh, getRunErrorMessage, isAdmin]);
 
   useEffect(() => {
     return () => {
@@ -412,6 +462,8 @@ export default function EagleEyeScannerScreen() {
   const regimeColors = getRegimeColors(regime, colors);
   const regimeLabel = REGIME_LABELS[regime] ?? regime;
   const updatedAgo = getUpdatedAgo(dataUpdatedAt ?? 0);
+  const totalStocks = data?.stocks?.length ?? 0;
+  const hiddenStocks = Math.max(totalStocks - stocks.length, 0);
 
   const handleExportScanner = useCallback(async () => {
     try {
@@ -1130,7 +1182,7 @@ export default function EagleEyeScannerScreen() {
                 <View style={styles.previewHeaderCopy}>
                   <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
                   <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
-                    {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
+                    {`${stocks.length} of ${totalStocks || stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
                   </Text>
                 </View>
 
@@ -1293,12 +1345,29 @@ export default function EagleEyeScannerScreen() {
             ) : null}
 
             <Text style={[styles.countBadge, { color: colors.textMuted }]}>
-              {stocks.length} stocks
+              {totalStocks > 0 ? `${stocks.length} of ${totalStocks} stocks` : `${stocks.length} stocks`}
             </Text>
+
+            {hasActiveFilters && hiddenStocks > 0 ? (
+              <Pressable
+                onPress={handleClearFilters}
+                style={[
+                  styles.showAllBtn,
+                  {
+                    borderColor: colors.accentPrimary + "66",
+                    backgroundColor: colors.accentPrimary + "16",
+                  },
+                ]}
+              >
+                <Text style={[styles.showAllBtnText, { color: colors.accentPrimary }]}>
+                  {`Show all ${totalStocks}`}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               onPress={handleRunEagleEye}
-              disabled={eeRefresh.isPending}
+              disabled={eeRefresh.isPending || !isAdmin}
               style={[
                 styles.eeRunBtn,
                 {
@@ -1308,7 +1377,7 @@ export default function EagleEyeScannerScreen() {
                       : runStatus === "err"
                       ? colors.danger
                       : colors.accentPrimary,
-                  opacity: eeRefresh.isPending ? 0.6 : 1,
+                  opacity: eeRefresh.isPending || !isAdmin ? 0.6 : 1,
                 },
               ]}
             >
@@ -1316,7 +1385,9 @@ export default function EagleEyeScannerScreen() {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.eeRunBtnText}>
-                  {runStatus === "ok"
+                  {!isAdmin
+                    ? "Admin only"
+                    : runStatus === "ok"
                     ? "\u2713 Running..."
                     : runStatus === "err"
                     ? "\u2717 Failed"
@@ -1546,6 +1617,19 @@ const styles = StyleSheet.create({
   },
   regimeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4 },
   countBadge: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  showAllBtn: {
+    borderRadius: UITokens.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 26,
+  },
+  showAllBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
   tableCard: {
     flex: 1,
     marginHorizontal: UITokens.spacing.md,
