@@ -427,7 +427,7 @@ export interface RefreshResponse {
 
 export const eagleEyeKeys = {
   all: ["eagle-eye"] as const,
-  scanner: (filters?: ScannerFilters) => [...eagleEyeKeys.all, "scanner", filters ?? {}] as const,
+  scanner: (filters?: ScannerFilters) => [...eagleEyeKeys.all, "scanner", "v3", filters ?? {}] as const,
   stock: (ticker: string, portfolioKwd?: number) =>
     [...eagleEyeKeys.all, "stock", ticker.toUpperCase(), portfolioKwd ?? 0] as const,
   dna: (ticker: string) => [...eagleEyeKeys.all, "dna", ticker.toUpperCase()] as const,
@@ -723,6 +723,9 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
+    // Always re-check the live backend on mount so persisted stale responses
+    // (for example, a pre-deploy 66-row cache) cannot survive a release.
+    refetchOnMount: "always",
     // Auto-poll frequently while warmup is active so progress looks real-time
     refetchInterval: (query) =>
       (query.state.data as ScannerResponse | undefined)?.status === "warming_up"
