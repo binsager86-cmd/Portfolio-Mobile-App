@@ -15,6 +15,10 @@ if (outputArgIndex >= 0) {
 const env = {
   ...process.env,
   EXPO_WEB_OUTPUT: webOutput,
+  // SDK 56 router check breaks builds when react-navigation is present.
+  // Default this for CI/web builds, while still allowing explicit override.
+  EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK:
+    process.env.EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK || "1",
 };
 
 const result = spawnSync("npx", ["expo", ...args], {
