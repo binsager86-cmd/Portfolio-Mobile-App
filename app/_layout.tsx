@@ -3,11 +3,11 @@ import {
     DarkTheme as NavDark,
     DefaultTheme as NavLight,
     ThemeProvider,
-} from "@react-navigation/native";
+  Stack,
+} from "expo-router";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
-import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
