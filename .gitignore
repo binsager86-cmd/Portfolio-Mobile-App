@@ -50,3 +50,7 @@ android/local.properties
 
 # Test output artefacts
 test-results.json
+
+# Local build/debug artefacts
+expo-web.err
+package-lock.json.backup.*
