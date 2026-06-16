@@ -40,7 +40,7 @@ jest.mock("@/lib/exportRealizedTransactionsReport", () => ({
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, value?: string | { defaultValue?: string }) => {
+    t: (key: string, value?: string | { defaultValue?: string; count?: number }) => {
       if (typeof value === "string") return value;
       if (key === "trading.recordsCount" && typeof value?.count === "number") {
         return `${value.count} records`;

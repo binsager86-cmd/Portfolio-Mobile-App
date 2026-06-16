@@ -28,11 +28,13 @@ import { useTranslation } from "react-i18next";
 
 // ── Shared icon helper ──────────────────────────────────────────────
 
+import { ColorValue } from "react-native";
+
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>["name"];
-  color: string;
+  color: ColorValue;
 }) {
-  return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
+  return <FontAwesome size={24} style={{ marginBottom: -3 }} {...(props as any)} />;
 }
 
 // ── Layout ──────────────────────────────────────────────────────────

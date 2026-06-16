@@ -279,7 +279,7 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
 
 const s = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   drawer: {

@@ -53,7 +53,6 @@ export function BadgeHelpTooltip({
         }}
         onHoverIn={() => setHovered(true)}
         onHoverOut={() => setHovered(false)}
-        accessibilityRole="button"
         accessibilityLabel={`Info: ${title}`}
         accessibilityHint={body}
         style={Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : undefined}
@@ -81,7 +80,7 @@ export function BadgeHelpTooltip({
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityRole="button">
           <Pressable
             onPress={(event) => {
               (event as any).stopPropagation?.();

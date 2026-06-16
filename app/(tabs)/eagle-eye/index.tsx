@@ -22,6 +22,7 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -142,6 +143,8 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const authToken = useAuthStore((state) => state.token);
+  const authLoading = useAuthStore((state) => state.isLoading);
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
@@ -154,8 +157,8 @@ export default function EagleEyeScannerScreen() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isTableView = Platform.OS === "web";
 
-  // Always enable scanner queries to avoid missed focus events in production.
-  const fetchEnabled = true;
+  // Avoid startup 401s while auth hydration or token refresh is still running.
+  const fetchEnabled = !authLoading && !!authToken;
 
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);

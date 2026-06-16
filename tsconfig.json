@@ -6,6 +6,10 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "types": [
+      "jest",
+      "node"
+    ],
     "paths": {
       "@/*": [
         "./*"

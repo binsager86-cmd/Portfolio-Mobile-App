@@ -912,9 +912,9 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
       if (!isEdit && onAdd && data && 'id' in data) {
         const now = Math.floor(Date.now() / 1000);
         const newStock: AnalysisStock = {
-          id: data.id,
+          id: (data as any).id || 0,
           user_id: 0,
-          symbol: (data as { id: number; symbol: string }).symbol,
+          symbol: (data as any).symbol || "",
           company_name: companyName.trim(),
           exchange, currency,
           sector: sector || null,

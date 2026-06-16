@@ -55,7 +55,8 @@ export const STOCK_TABLE_TOTAL_WIDTH =
   + STOCK_TABLE_COL_WIDTHS.bvps
   + STOCK_TABLE_COL_WIDTHS.pe
   + STOCK_TABLE_COL_WIDTHS.rr
-  + STOCK_TABLE_COL_WIDTHS.confidence;
+  + STOCK_TABLE_COL_WIDTHS.yesterdayConfidence
+  + STOCK_TABLE_COL_WIDTHS.liveConfidence;
 
 type StockRowVariant = "default" | "table";
 
@@ -200,7 +201,6 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             borderTopWidth: isFirst ? 0 : 0.5,
           },
         ]}
-        accessibilityRole="button"
         accessibilityLabel={`${item.ticker} ${item.rating}`}
       >
         <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />
@@ -341,7 +341,6 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
           borderTopWidth: isFirst ? 0 : 0.5,
         },
       ]}
-      accessibilityRole="button"
       accessibilityLabel={`${item.ticker} ${item.rating}`}
     >
       <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />

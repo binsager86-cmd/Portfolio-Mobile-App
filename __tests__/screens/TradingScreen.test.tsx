@@ -24,7 +24,9 @@ const mockTradingSummary = {
   isFetching: false,
 };
 
-const mockRealizedProfit = {
+const mockRealizedProfit: {
+  data: { total_realized_kwd: number; total_profit_kwd: number; total_loss_kwd: number; details: any[] } | null;
+} = {
   data: {
     total_realized_kwd: 123.45,
     total_profit_kwd: 150,
