@@ -1,5 +1,5 @@
 /**
- * Fundamental Analysis — stock profiles, financial statements,
+ * Fundamental Analysis â€” stock profiles, financial statements,
  * metrics & ratios, growth analysis, scoring, and valuation models.
  *
  * Premium UI with CFA-grade financial analysis tools.
@@ -60,12 +60,21 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import type { ThemePalette } from "@/constants/theme";
 
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /*  TYPE + CONSTANTS                                                 */
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 type SubTab = "stocks" | "statements" | "comparison" | "metrics" | "growth" | "score" | "valuations";
 type GrowthEntry = { period: string; prev_period: string; growth: number };
+
+function isCreatedAnalysisStock(
+  value: unknown,
+): value is { id: number; symbol: string } {
+  return !!value
+    && typeof value === "object"
+    && typeof (value as { id?: unknown }).id === "number"
+    && typeof (value as { symbol?: unknown }).symbol === "string";
+}
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ComponentProps<typeof FontAwesome>["name"] }[] = [
   { key: "stocks",      label: "Stocks",      icon: "th-list" },
@@ -96,9 +105,9 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: React.ComponentProp
   growth:        { label: "Growth Rates",         icon: "line-chart",    color: "#f97316" },
 };
 
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /*  REUSABLE MICRO-COMPONENTS                                        */
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /** Pill-shaped filter chip */
 function Chip({
@@ -375,9 +384,9 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
   );
 }
 
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /*  MAIN SCREEN                                                      */
-/* ────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export default function FundamentalAnalysisScreen() {
   const { colors } = useThemeStore();
@@ -400,7 +409,7 @@ export default function FundamentalAnalysisScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* ── Header ─────────────────────────────────────────── */}
+      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <View style={[st.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor }]}>
         <View style={{ flex: 1 }}>
           <View style={[st.rowCenter, { gap: 10 }]}>
@@ -426,7 +435,7 @@ export default function FundamentalAnalysisScreen() {
         </View>
       </View>
 
-      {/* ── Tab row ────────────────────────────────────────── */}
+      {/* â”€â”€ Tab row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <View style={[st.tabContainer, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
           {SUB_TABS.map((t) => {
@@ -461,7 +470,7 @@ export default function FundamentalAnalysisScreen() {
         </ScrollView>
       </View>
 
-      {/* ── Content ────────────────────────────────────────── */}
+      {/* â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {tab === "stocks" && <StocksPanel colors={colors} isDesktop={isDesktop} onSelect={handleSelectStock} />}
       {tab === "statements" && selectedStockId && <StatementsPanel stockId={selectedStockId} colors={colors} isDesktop={isDesktop} />}
       {tab === "comparison" && selectedStockId && <ComparisonPanel stockId={selectedStockId} stockSymbol={selectedStockSymbol} colors={colors} isDesktop={isDesktop} />}
@@ -473,9 +482,9 @@ export default function FundamentalAnalysisScreen() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  STOCKS PANEL                                                      */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function StocksPanel({
   colors, isDesktop, onSelect,
@@ -611,7 +620,7 @@ function StocksPanel({
   );
 }
 
-/* ── Stock Form Modal (unified Add/Edit) ──────────────────────────── */
+/* â”€â”€ Stock Form Modal (unified Add/Edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; colors: ThemePalette; onClose: () => void }) {
   const isEdit = !!stock;
@@ -668,8 +677,30 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
             exchange, currency,
             sector: sector || undefined,
           }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
+      if (!isEdit && onAdd && isCreatedAnalysisStock(data)) {
+        const now = Math.floor(Date.now() / 1000);
+        const newStock: AnalysisStock = {
+          id: data.id,
+          user_id: 0,
+          symbol: data.symbol,
+          company_name: companyName.trim(),
+          exchange, currency,
+          sector: sector || null,
+          industry: industry || null,
+          country: null, isin: null, cik: null,
+          description: null, website: null,
+          outstanding_shares: outstandingShares ? parseFloat(outstandingShares) : null,
+          created_at: now,
+          updated_at: now,
+          statement_count: 0,
+          metric_count: 0,
+          valuation_count: 0,
+          latest_score: null,
+        };
+        onAdd(newStock);
+      }
       onClose();
     },
   });
@@ -691,7 +722,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {/* ── Stock Picker (Add mode) ── */}
+            {/* â”€â”€ Stock Picker (Add mode) â”€â”€ */}
             {!isEdit && !selectedEntry && (
               <View style={{ marginBottom: 14 }}>
                 {/* Market toggle */}
@@ -774,7 +805,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
               </View>
             )}
 
-            {/* ── Selected stock confirmation (Add mode) ── */}
+            {/* â”€â”€ Selected stock confirmation (Add mode) â”€â”€ */}
             {!isEdit && selectedEntry && (
               <View style={{ marginBottom: 14 }}>
                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 6, letterSpacing: 0.5 }}>SELECTED STOCK</Text>
@@ -803,7 +834,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
               </View>
             )}
 
-            {/* ── Editable fields (always show for Edit, show after selection for Add) ── */}
+            {/* â”€â”€ Editable fields (always show for Edit, show after selection for Add) â”€â”€ */}
             {(isEdit || selectedEntry) && (
               <>
                 {selectedEntry && (
@@ -858,16 +889,16 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  STATEMENTS PANEL                                                  */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>("income");
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
 
-  // ── Online fetch state ────────────────────────────────────────────
+  // â”€â”€ Online fetch state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [fetchingOnline, setFetchingOnline] = useState(false);
   const [onlineResult, setOnlineResult] = useState<string | null>(null);
 
@@ -889,7 +920,7 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ── Fetch Section ──────────────────────────────────────────── */}
+      {/* â”€â”€ Fetch Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <View style={{
         paddingHorizontal: 16, paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: colors.borderColor,
@@ -955,7 +986,7 @@ function StatementsPanel({ stockId, colors, isDesktop }: { stockId: number; colo
   );
 }
 
-/** Table view of financial statements — years left-to-right, line items as rows */
+/** Table view of financial statements â€” years left-to-right, line items as rows */
 function StatementsTable({
   statements, colors, isDesktop, isFetching, onRefresh,
 }: {
@@ -1022,7 +1053,7 @@ function StatementsTable({
     <ScrollView refreshControl={<RefreshControl refreshing={isFetching} onRefresh={onRefresh} tintColor={colors.accentPrimary} />}>
       <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 4, paddingBottom: 80 }}>
         <View>
-          {/* ── Header row ── */}
+          {/* â”€â”€ Header row â”€â”€ */}
           <View style={{
             flexDirection: "row",
             alignItems: "center",
@@ -1042,7 +1073,7 @@ function StatementsTable({
             ))}
           </View>
 
-          {/* ── Data rows ── */}
+          {/* â”€â”€ Data rows â”€â”€ */}
           {allCodes.map((item, rowIdx) => (
             <View
               key={item.code}
@@ -1147,9 +1178,9 @@ function StatementsTable({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
-/*  COMPARISON PANEL — Multi-Period Side-by-Side                      */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
+/*  COMPARISON PANEL â€” Multi-Period Side-by-Side                      */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const [typeFilter, setTypeFilter] = useState<string>("income");
@@ -1200,7 +1231,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       return row;
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
-    return [{ title: `${typeName} — Period Comparison`, headers, rows }];
+    return [{ title: `${typeName} â€” Period Comparison`, headers, rows }];
   }, [periods, allCodes, typeFilter]);
 
   return (
@@ -1269,14 +1300,14 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
                             color: val != null && val < 0 ? colors.danger : (isTotal ? colors.textPrimary : colors.textSecondary),
                             fontWeight: isTotal ? "700" : "500",
                           }]}>
-                            {val != null ? formatNumber(val) : "–"}
+                            {val != null ? formatNumber(val) : "â€“"}
                           </Text>
                           {i > 0 && (
                             <Text style={[st.compCellYoy, {
                               color: yoy == null ? colors.textMuted : yoy >= 0 ? colors.success : colors.danger,
                               fontWeight: "600",
                             }]}>
-                              {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "–"}
+                              {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "â€“"}
                             </Text>
                           )}
                         </React.Fragment>
@@ -1293,9 +1324,9 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  METRICS PANEL                                                     */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
@@ -1467,7 +1498,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
                                 color: val != null ? colors.textPrimary : colors.textMuted,
                                 fontWeight: val != null ? "600" : "400",
                               }]}>
-                                {val != null ? formatMetricValue(name, val) : "–"}
+                                {val != null ? formatMetricValue(name, val) : "â€“"}
                               </Text>
                             );
                           })}
@@ -1507,9 +1538,9 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  GROWTH PANEL                                                      */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const { data, isLoading, refetch, isFetching } = useGrowthAnalysis(stockId);
@@ -1616,9 +1647,9 @@ function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: num
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  SCORE PANEL                                                       */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const { data, isLoading, refetch, isFetching } = useStockScore(stockId);
@@ -1635,10 +1666,10 @@ function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: numb
         headers: ["Component", "Weight", "Score"],
         rows: [
           ["Overall", "100%", score.overall_score.toFixed(0)],
-          ["Fundamental", "30%", score.fundamental_score?.toFixed(0) ?? "–"],
-          ["Valuation", "25%", score.valuation_score?.toFixed(0) ?? "–"],
-          ["Growth", "25%", score.growth_score?.toFixed(0) ?? "–"],
-          ["Quality", "20%", score.quality_score?.toFixed(0) ?? "–"],
+          ["Fundamental", "30%", score.fundamental_score?.toFixed(0) ?? "â€“"],
+          ["Valuation", "25%", score.valuation_score?.toFixed(0) ?? "â€“"],
+          ["Growth", "25%", score.growth_score?.toFixed(0) ?? "â€“"],
+          ["Quality", "20%", score.quality_score?.toFixed(0) ?? "â€“"],
         ],
       });
     }
@@ -1648,11 +1679,11 @@ function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: numb
         headers: ["Date", "Overall", "Fundamental", "Valuation", "Growth", "Quality"],
         rows: scoreHistory.map((sh) => [
           sh.scoring_date,
-          sh.overall_score?.toFixed(0) ?? "–",
-          sh.fundamental_score?.toFixed(0) ?? "–",
-          sh.valuation_score?.toFixed(0) ?? "–",
-          sh.growth_score?.toFixed(0) ?? "–",
-          sh.quality_score?.toFixed(0) ?? "–",
+          sh.overall_score?.toFixed(0) ?? "â€“",
+          sh.fundamental_score?.toFixed(0) ?? "â€“",
+          sh.valuation_score?.toFixed(0) ?? "â€“",
+          sh.growth_score?.toFixed(0) ?? "â€“",
+          sh.quality_score?.toFixed(0) ?? "â€“",
         ]),
       });
     }
@@ -1716,7 +1747,7 @@ function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: numb
               </Text>
               <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 6, textAlign: "center", lineHeight: 16 }}>
                 CFA-Based Composite Score{"\n"}
-                Fundamentals 30% · Valuation 25% · Growth 25% · Quality 20%
+                Fundamentals 30% آ· Valuation 25% آ· Growth 25% آ· Quality 20%
               </Text>
             </Card>
           </FadeIn>
@@ -1750,12 +1781,12 @@ function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: numb
                   <View key={sh.id} style={[st.scoreHistRow, { backgroundColor: idx % 2 === 0 ? "transparent" : colors.bgPrimary + "30" }]}>
                     <Text style={[st.scoreHistCell, { flex: 1, color: colors.textSecondary }]}>{sh.scoring_date}</Text>
                     <Text style={[st.scoreHistCell, { width: 52, fontWeight: "800", color: scoreColor(sh.overall_score ?? 0, colors) }]}>
-                      {sh.overall_score?.toFixed(0) ?? "–"}
+                      {sh.overall_score?.toFixed(0) ?? "â€“"}
                     </Text>
-                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.fundamental_score?.toFixed(0) ?? "–"}</Text>
-                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.valuation_score?.toFixed(0) ?? "–"}</Text>
-                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.growth_score?.toFixed(0) ?? "–"}</Text>
-                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.quality_score?.toFixed(0) ?? "–"}</Text>
+                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.fundamental_score?.toFixed(0) ?? "â€“"}</Text>
+                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.valuation_score?.toFixed(0) ?? "â€“"}</Text>
+                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.growth_score?.toFixed(0) ?? "â€“"}</Text>
+                    <Text style={[st.scoreHistCell, { width: 40, color: colors.textMuted }]}>{sh.quality_score?.toFixed(0) ?? "â€“"}</Text>
                   </View>
                 ))}
               </Card>
@@ -1808,9 +1839,9 @@ function ScoreBarPremium({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  VALUATIONS PANEL                                                  */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
@@ -1871,10 +1902,10 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
   }, [valuations]);
 
   const MODEL_INFO: Record<string, { title: string; formula: string; icon: React.ComponentProps<typeof FontAwesome>["name"] }> = {
-    graham:    { title: "Graham Number", formula: "V = √(22.5 × EPS × BVPS)", icon: "university" },
+    graham:    { title: "Graham Number", formula: "V = âˆڑ(22.5 أ— EPS أ— BVPS)", icon: "university" },
     dcf:       { title: "Two-Stage DCF", formula: "Gordon Growth Terminal Value", icon: "sitemap" },
     ddm:       { title: "Dividend Discount", formula: "Gordon Growth Model", icon: "money" },
-    multiples: { title: "Comparable Multiples", formula: "e.g., P/E × EPS", icon: "balance-scale" },
+    multiples: { title: "Comparable Multiples", formula: "e.g., P/E أ— EPS", icon: "balance-scale" },
   };
 
   const info = MODEL_INFO[model];
@@ -2025,9 +2056,9 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  HELPERS                                                           */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 function buildHistoricalMetrics(allMetrics: StockMetric[]) {
   const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
@@ -2079,9 +2110,9 @@ function scoreLabel(score: number): string {
   return "Poor";
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 /*  STYLES                                                            */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
 
 const st = StyleSheet.create({
   container: { flex: 1 },

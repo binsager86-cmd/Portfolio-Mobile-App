@@ -20,17 +20,24 @@ import { QueryClient } from "@tanstack/react-query";
 import { focusManager } from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
+import Constants from "expo-constants";
 import { AppState, Platform } from "react-native";
 
 // ── MMKV storage (native) or localStorage (web) ─────────────────────
 
-function createStorage() {
+type PersistStorage = {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+};
+
+function createStorage(): PersistStorage {
   if (Platform.OS === "web") {
     // Web: use localStorage directly (guard for SSR where it doesn't exist)
     const hasLocalStorage = typeof localStorage !== "undefined";
     return {
       getItem: (key: string) =>
-        hasLocalStorage ? localStorage.getItem(key) ?? undefined : undefined,
+        hasLocalStorage ? localStorage.getItem(key) : null,
       setItem: (key: string, value: string) => {
         if (hasLocalStorage) localStorage.setItem(key, value);
       },
@@ -40,24 +47,74 @@ function createStorage() {
     };
   }
 
-  // Native: use MMKV for fast synchronous storage
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MMKV } = require("react-native-mmkv");
-    const mmkv = new MMKV({ id: "react-query" });
-    return {
-      getItem: (key: string) => mmkv.getString(key) ?? undefined,
-      setItem: (key: string, value: string) => mmkv.set(key, value),
-      removeItem: (key: string) => mmkv.delete(key),
-    };
-  } catch {
-    // Fallback no-op storage if MMKV fails to initialize
-    return {
-      getItem: () => undefined,
-      setItem: () => {},
-      removeItem: () => {},
-    };
-  }
+  const runtimeInfo = Constants as {
+    appOwnership?: string;
+    executionEnvironment?: string;
+  };
+  const isExpoGoRuntime =
+    runtimeInfo.appOwnership === "expo" ||
+    runtimeInfo.executionEnvironment === "storeClient";
+  const mem = new Map<string, string>();
+
+  type MMKVStore = {
+    getString: (key: string) => string | undefined;
+    set: (key: string, value: string) => void;
+    delete: (key: string) => void;
+  };
+
+  let mmkvStore: MMKVStore | null | undefined;
+  const getMMKVStore = (): MMKVStore | null => {
+    if (isExpoGoRuntime) return null;
+    if (mmkvStore !== undefined) return mmkvStore;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { MMKV } = require("react-native-mmkv") as {
+        MMKV: new (cfg: { id: string }) => MMKVStore;
+      };
+      mmkvStore = new MMKV({ id: "react-query" });
+    } catch {
+      mmkvStore = null;
+    }
+    return mmkvStore;
+  };
+
+  return {
+    getItem: (key: string) => {
+      const store = getMMKVStore();
+      if (store) {
+        try {
+          return store.getString(key) ?? mem.get(key) ?? null;
+        } catch {
+          return mem.get(key) ?? null;
+        }
+      }
+      return mem.get(key) ?? null;
+    },
+    setItem: (key: string, value: string) => {
+      const store = getMMKVStore();
+      if (store) {
+        try {
+          store.set(key, value);
+          return;
+        } catch {
+          // Fall through to in-memory fallback.
+        }
+      }
+      mem.set(key, value);
+    },
+    removeItem: (key: string) => {
+      const store = getMMKVStore();
+      if (store) {
+        try {
+          store.delete(key);
+          return;
+        } catch {
+          // Fall through to in-memory fallback.
+        }
+      }
+      mem.delete(key);
+    },
+  };
 }
 
 // ── Query client ────────────────────────────────────────────────────
@@ -85,9 +142,7 @@ const persister = createSyncStoragePersister({
   storage: createStorage(),
   throttleTime: 500,
 });
-if (Platform.OS !== "web") {
-  persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
-}
+persistQueryClient({ queryClient, persister, maxAge: ONE_DAY_MS });
 
 // ── Focus manager — auto-refetch stale queries on app focus ─────────
 // Web: React Query handles visibilitychange automatically.

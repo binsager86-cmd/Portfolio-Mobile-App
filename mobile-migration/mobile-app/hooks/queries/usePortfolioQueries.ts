@@ -117,6 +117,8 @@ export function useDepositTotals() {
 
 /** Performance, snapshots-chart, and realized-profit — fire in parallel once overview loads. */
 export function useOverviewDependentQueries(overviewLoaded: boolean) {
+  type SnapshotsChartData = Awaited<ReturnType<typeof getSnapshots>>;
+
   return useQueries({
     queries: [
       {
@@ -125,6 +127,9 @@ export function useOverviewDependentQueries(overviewLoaded: boolean) {
         enabled: overviewLoaded,
         staleTime: DASHBOARD_STALE_TIME_MS,
         gcTime: DASHBOARD_GC_TIME_MS,
+        // Keep the previous payload visible during background refetch
+        // (e.g. window focus) so metric cards never flash "—" momentarily.
+        placeholderData: (prev: PerformanceData | undefined) => prev,
       },
       {
         queryKey: portfolioKeys.snapshotsChart(),
@@ -132,6 +137,7 @@ export function useOverviewDependentQueries(overviewLoaded: boolean) {
         enabled: overviewLoaded,
         staleTime: DASHBOARD_STALE_TIME_MS,
         gcTime: DASHBOARD_GC_TIME_MS,
+        placeholderData: (prev: SnapshotsChartData | undefined) => prev,
       },
       {
         queryKey: portfolioKeys.realizedProfit(),
@@ -139,6 +145,7 @@ export function useOverviewDependentQueries(overviewLoaded: boolean) {
         enabled: overviewLoaded,
         staleTime: DASHBOARD_STALE_TIME_MS,
         gcTime: DASHBOARD_GC_TIME_MS,
+        placeholderData: (prev: RealizedProfitData | undefined) => prev,
       },
     ],
   });
