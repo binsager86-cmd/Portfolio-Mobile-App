@@ -28,7 +28,7 @@ import type { MLBandLabel } from "./MLBandBadge";
 import { getActionInterpretation } from "./actionInterpretation";
 
 export const STOCK_TABLE_COL_WIDTHS = {
-  rating: 80,
+  rating: 110,
   ticker: 88,
   stage: 104,
   action: 220,
@@ -95,9 +95,13 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
   const isTable = variant === "table";
   const { data: liveAnalysis } = useEagleEyeStock(item.ticker, 0, isTable);
 
-  const confPct = Math.min(100, Math.max(0, item.confidence));
-  const confColor = confPct >= 75 ? colors.success : confPct >= 60 ? "#E6A817" : colors.textMuted;
-  const confidenceHelp = getRatingConfidenceDescription(item.rating, confPct);
+  // DAY column: Yesterday's cached confidence (before today's refresh)
+  // Falls back to current confidence if yesterday's not available
+  const yesterdayConfPct = Math.min(100, Math.max(0, item.confidence_yesterday ?? item.confidence));
+  const yesterdayConfColor = yesterdayConfPct >= 75 ? colors.success : yesterdayConfPct >= 60 ? "#E6A817" : colors.textMuted;
+  const yesterdayConfidenceHelp = getRatingConfidenceDescription(item.rating, yesterdayConfPct);
+  
+  // LIVE column: Fresh/latest confidence from today's computation (real-time endpoint)
   const liveConfidence = useMemo(() => {
     const raw = liveAnalysis?.data?.confidence;
     return Number.isFinite(raw) ? Math.min(100, Math.max(0, Number(raw))) : null;
@@ -301,11 +305,11 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
         <View style={styles.tableCellConfidence}>
           <BadgeHelpTooltip
-            title={`${confPct.toFixed(0)}% Yesterday Confidence`}
-            body={confidenceHelp}
+            title={`${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`}
+            body={yesterdayConfidenceHelp}
             align="right"
           >
-            <Text style={[styles.tableNumText, { color: confColor }]}>{`${confPct.toFixed(0)}%`}</Text>
+            <Text style={[styles.tableNumText, { color: yesterdayConfColor }]}>{`${yesterdayConfPct.toFixed(0)}%`}</Text>
           </BadgeHelpTooltip>
         </View>
 
@@ -455,16 +459,16 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             <View
               style={[
                 styles.barFill,
-                { width: `${confPct}%` as any, backgroundColor: confColor },
+                { width: `${yesterdayConfPct}%` as any, backgroundColor: yesterdayConfColor },
               ]}
             />
           </View>
           <BadgeHelpTooltip
-            title={`${confPct.toFixed(0)}% Confidence`}
-            body={confidenceHelp}
+            title={`${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`}
+            body={yesterdayConfidenceHelp}
             align="right"
           >
-            <Text style={[styles.confNum, { color: confColor }]}>{confPct.toFixed(0)}%</Text>
+            <Text style={[styles.confNum, { color: yesterdayConfColor }]}>{yesterdayConfPct.toFixed(0)}%</Text>
           </BadgeHelpTooltip>
         </View>
       </View>
@@ -680,6 +684,7 @@ const styles = StyleSheet.create({
   badgeStack: {
     gap: 4,
     alignItems: "flex-start",
+    flexWrap: "wrap",
   },
   contentCol: {
     flex: 1,
