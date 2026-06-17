@@ -805,25 +805,27 @@ export default function EagleEyeScannerScreen() {
                     },
                   ]}
                 >
-                  {`Yday${sortArrow("conf")}`}
+                  {`YESTERDAY${sortArrow("conf")}`}
                 </Text>
-                <BadgeHelpTooltip title="YDAY" body="Yesterday cached confidence from the scanner cache." align="right">
+                <BadgeHelpTooltip title="YESTERDAY" body="Yesterday's cached confidence (before today's refresh). Previous snapshot from scanner cache." align="right">
                   <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
                 </BadgeHelpTooltip>
               </View>
             </Pressable>
-            <View
+            <Pressable
+              onPress={() => toggleSort("conf")}
               style={[
                 styles.colHeaderBtn,
                 { width: STOCK_TABLE_COL_WIDTHS.liveConfidence },
               ]}
+              hitSlop={6}
             >
               <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
                 <Text
                   style={[
                     styles.colHeaderCell,
                     {
-                      color: colors.textMuted,
+                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
                       textAlign: "right",
                     },
                   ]}
@@ -834,7 +836,7 @@ export default function EagleEyeScannerScreen() {
                   <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
                 </BadgeHelpTooltip>
               </View>
-            </View>
+            </Pressable>
           </>
         ) : (
           <>

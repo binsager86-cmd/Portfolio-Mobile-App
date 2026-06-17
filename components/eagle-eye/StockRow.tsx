@@ -95,11 +95,18 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
   const isTable = variant === "table";
   const { data: liveAnalysis } = useEagleEyeStock(item.ticker, 0, isTable);
 
-  // DAY column: Yesterday's cached confidence (before today's refresh)
-  // Falls back to current confidence if yesterday's not available
-  const yesterdayConfPct = Math.min(100, Math.max(0, item.confidence_yesterday ?? item.confidence));
-  const yesterdayConfColor = yesterdayConfPct >= 75 ? colors.success : yesterdayConfPct >= 60 ? "#E6A817" : colors.textMuted;
-  const yesterdayConfidenceHelp = getRatingConfidenceDescription(item.rating, yesterdayConfPct);
+  // YESTERDAY column: Yesterday's cached confidence (before today's refresh)
+  // For now: falls back to current if database column not populated yet
+  // TODO: Once ee_ratings_cache has confidence_yesterday column, this will show true previous day
+  const yesterdayConfPct = item.confidence_yesterday != null 
+    ? Math.min(100, Math.max(0, item.confidence_yesterday))
+    : null;  // Show null until database has the actual data
+  const yesterdayConfColor = yesterdayConfPct == null 
+    ? colors.textMuted 
+    : yesterdayConfPct >= 75 ? colors.success : yesterdayConfPct >= 60 ? "#E6A817" : colors.textMuted;
+  const yesterdayConfidenceHelp = yesterdayConfPct == null
+    ? "Waiting for database migration to populate previous day's confidence."
+    : getRatingConfidenceDescription(item.rating, yesterdayConfPct);
   
   // LIVE column: Fresh/latest confidence from today's computation (real-time endpoint)
   const liveConfidence = useMemo(() => {
@@ -305,11 +312,13 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
         <View style={styles.tableCellConfidence}>
           <BadgeHelpTooltip
-            title={`${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`}
+            title={yesterdayConfPct == null ? "YESTERDAY (pending)" : `${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`}
             body={yesterdayConfidenceHelp}
             align="right"
           >
-            <Text style={[styles.tableNumText, { color: yesterdayConfColor }]}>{`${yesterdayConfPct.toFixed(0)}%`}</Text>
+            <Text style={[styles.tableNumText, { color: yesterdayConfColor }]}>
+              {yesterdayConfPct == null ? "--" : `${yesterdayConfPct.toFixed(0)}%`}
+            </Text>
           </BadgeHelpTooltip>
         </View>
 
@@ -459,16 +468,25 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             <View
               style={[
                 styles.barFill,
-                { width: `${yesterdayConfPct}%` as any, backgroundColor: yesterdayConfColor },
+                {
+                  width: yesterdayConfPct == null ? "0%" : `${yesterdayConfPct}%`,
+                  backgroundColor: yesterdayConfColor,
+                },
               ]}
             />
           </View>
           <BadgeHelpTooltip
-            title={`${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`}
+            title={
+              yesterdayConfPct == null
+                ? "YESTERDAY (pending)"
+                : `${yesterdayConfPct.toFixed(0)}% Yesterday Confidence`
+            }
             body={yesterdayConfidenceHelp}
             align="right"
           >
-            <Text style={[styles.confNum, { color: yesterdayConfColor }]}>{yesterdayConfPct.toFixed(0)}%</Text>
+            <Text style={[styles.confNum, { color: yesterdayConfColor }]}>
+              {yesterdayConfPct == null ? "--" : `${yesterdayConfPct.toFixed(0)}%`}
+            </Text>
           </BadgeHelpTooltip>
         </View>
       </View>

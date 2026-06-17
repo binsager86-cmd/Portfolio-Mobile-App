@@ -105,6 +105,7 @@ export interface RatedStock {
   stage: string;
   rating: string;
   confidence: number;
+  confidence_yesterday?: number | null;  // Yesterday's cached confidence (before today's refresh)
   thesis: string;
   continue_rising?: boolean;
   continue_rising_badge?: string | null;
