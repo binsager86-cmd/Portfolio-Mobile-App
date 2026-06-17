@@ -578,7 +578,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     position: "relative",
     overflow: "hidden",
-    width: STOCK_TABLE_TOTAL_WIDTH,
+    width: "100%",
+    minWidth: STOCK_TABLE_TOTAL_WIDTH,
     minHeight: 54,
   },
   leftStrip: {

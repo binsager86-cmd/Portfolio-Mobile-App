@@ -39,6 +39,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -119,6 +120,15 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   pe: "P/E",
 };
 
+const DESKTOP_SORT_FIELDS: readonly SortField[] = [
+  "conf",
+  "rr",
+  "rating",
+  "stage",
+  "volume",
+  "ticker",
+];
+
 const HEADER_TOOLTIP_CONFIDENCE =
   "How sure the system is about this rating. Above ~75% is strong, 60-75% is moderate, below 60% is weak - treat low-confidence signals with extra caution.";
 const HEADER_TOOLTIP_RR =
@@ -143,6 +153,7 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const authToken = useAuthStore((state) => state.token);
   const authLoading = useAuthStore((state) => state.isLoading);
 
@@ -155,7 +166,10 @@ export default function EagleEyeScannerScreen() {
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const isTableView = Platform.OS === "web";
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb = isWeb && viewportWidth >= 1120;
+  const isTableView = isDesktopWeb;
+  const contentMaxWidth = isDesktopWeb ? undefined : isWeb ? 1200 : undefined;
 
   // Avoid startup 401s while auth hydration or token refresh is still running.
   const fetchEnabled = !authLoading && !!authToken;
@@ -461,6 +475,11 @@ export default function EagleEyeScannerScreen() {
   const updatedAgo = getUpdatedAgo(dataUpdatedAt ?? 0);
   const totalStocks = data?.stocks?.length ?? 0;
   const hiddenStocks = Math.max(totalStocks - stocks.length, 0);
+  const avgVisibleConfidence = useMemo(() => {
+    if (!stocks.length) return 0;
+    const total = stocks.reduce((sum, stock) => sum + (Number.isFinite(stock.confidence) ? stock.confidence : 0), 0);
+    return Math.round(total / stocks.length);
+  }, [stocks]);
 
   const handleExportScanner = useCallback(async () => {
     try {
@@ -1202,12 +1221,125 @@ export default function EagleEyeScannerScreen() {
               </View>
             </View>
 
-            <View
-              style={[
-                styles.filterPanel,
-                { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
-              ]}
-            >
+            {isDesktopWeb ? (
+              <View
+                style={[
+                  styles.desktopWorkbench,
+                  { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.desktopWorkbenchPanel,
+                    { borderColor: colors.borderColor, backgroundColor: colors.bgCard },
+                  ]}
+                >
+                  <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
+                  <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
+                  <View style={[styles.searchRow, styles.searchRowDesktop]}>
+                    <View
+                      style={[
+                        styles.searchInput,
+                        { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
+                      ]}
+                    >
+                      <FontAwesome name="search" size={13} color={colors.textMuted} />
+                      <TextInput
+                        style={[styles.searchText, { color: colors.textPrimary }]}
+                        placeholder="Search ticker or name..."
+                        placeholderTextColor={colors.textMuted}
+                        value={search}
+                        onChangeText={setSearch}
+                        autoCapitalize="characters"
+                        returnKeyType="search"
+                      />
+                      {search.length > 0 && (
+                        <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                          <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.filterBarWrap}>
+                    <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.desktopWorkbenchPanel,
+                    styles.desktopWorkbenchAside,
+                    { borderColor: colors.borderColor, backgroundColor: colors.bgCard },
+                  ]}
+                >
+                  <Text style={[styles.desktopPanelTitle, { color: colors.textPrimary }]}>DESKTOP INSIGHTS</Text>
+                  <Text style={[styles.desktopPanelSubTitle, { color: colors.textMuted }]}>Higher density controls for analyst workflow.</Text>
+
+                  <View style={styles.desktopMetricsRow}>
+                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
+                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>VISIBLE</Text>
+                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{stocks.length}</Text>
+                    </View>
+                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
+                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>AVG CONF</Text>
+                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{`${avgVisibleConfidence}%`}</Text>
+                    </View>
+                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
+                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>HIDDEN</Text>
+                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{hiddenStocks}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.desktopSortWrap}>
+                    <Text style={[styles.desktopSortLabel, { color: colors.textSecondary }]}>Quick sort</Text>
+                    <View style={styles.desktopSortButtons}>
+                      {DESKTOP_SORT_FIELDS.map((field) => {
+                        const active = sortBy === field;
+                        return (
+                          <Pressable
+                            key={field}
+                            onPress={() => toggleSort(field)}
+                            style={[
+                              styles.desktopSortButton,
+                              {
+                                borderColor: active ? colors.accentPrimary : colors.borderColor,
+                                backgroundColor: active ? colors.accentPrimary + "18" : colors.bgPrimary,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.desktopSortButtonText, { color: active ? colors.accentPrimary : colors.textPrimary }]}>
+                              {SORT_LABEL_BY_FIELD[field]}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {hasActiveFilters ? (
+                    <Pressable
+                      onPress={handleClearFilters}
+                      style={[
+                        styles.clearFiltersButton,
+                        styles.clearFiltersButtonDesktop,
+                        { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
+                      ]}
+                    >
+                      <FontAwesome name="times" size={12} color={colors.textMuted} />
+                      <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear All Filters</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {!isDesktopWeb ? (
+              <View
+                style={[
+                  styles.filterPanel,
+                  { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
+                ]}
+              >
               <View style={styles.filterPanelHeader}>
                 <View>
                   <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
@@ -1253,7 +1385,7 @@ export default function EagleEyeScannerScreen() {
               </View>
 
               <View style={styles.filterBarWrap}>
-                {Platform.OS === "web" ? (
+                {isDesktopWeb ? (
                   <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
                 ) : (
                   <ScrollView
@@ -1269,7 +1401,8 @@ export default function EagleEyeScannerScreen() {
                   </ScrollView>
                 )}
               </View>
-            </View>
+              </View>
+            ) : null}
           </View>
         </>
       }
@@ -1299,6 +1432,7 @@ export default function EagleEyeScannerScreen() {
     <View
       style={[
         styles.root,
+        isDesktopWeb ? styles.rootDesktop : null,
         { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
       ]}
     >
@@ -1306,9 +1440,16 @@ export default function EagleEyeScannerScreen() {
       <View
         style={[
           styles.header,
+          isDesktopWeb ? styles.headerDesktop : null,
           { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
         ]}
       >
+        <View
+          style={[
+            styles.contentShell,
+            contentMaxWidth ? { maxWidth: contentMaxWidth } : null,
+          ]}
+        >
         <View style={styles.headerTop}>
           <View>
 
@@ -1392,12 +1533,15 @@ export default function EagleEyeScannerScreen() {
             </Pressable>
           </View>
         </View>
+        </View>
       </View>
 
       {showLoadingBanner ? (
         <View
           style={[
             styles.loadingBanner,
+            isDesktopWeb ? styles.loadingBannerDesktop : null,
+            contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center" } : null,
             { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
           ]}
         >
@@ -1435,6 +1579,8 @@ export default function EagleEyeScannerScreen() {
       <View
         style={[
           styles.tableCard,
+          isDesktopWeb ? styles.tableCardDesktop : null,
+          contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center" } : null,
           { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
         ]}
       >
@@ -1459,6 +1605,10 @@ export default function EagleEyeScannerScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  rootDesktop: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
   header: {
     paddingHorizontal: UITokens.spacing.md,
     paddingVertical: UITokens.spacing.sm + 2,
@@ -1470,10 +1620,19 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  headerDesktop: {
+    paddingHorizontal: 8,
+  },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    rowGap: 8,
+  },
+  contentShell: {
+    width: "100%",
+    alignSelf: "center",
   },
   headerTitle: { fontSize: 20, fontWeight: "700" },
   updatedText: { fontSize: 11, marginTop: 1 },
@@ -1507,6 +1666,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+  tableCardDesktop: {
+    width: "100%",
+    alignSelf: "stretch",
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+  },
   loadingBanner: {
     marginHorizontal: UITokens.spacing.md,
     marginTop: 8,
@@ -1515,6 +1683,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  loadingBannerDesktop: {
+    marginHorizontal: 0,
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   },
   loadingBannerRow: {
     flexDirection: "row",
@@ -1560,6 +1734,84 @@ const styles = StyleSheet.create({
   },
   tableTopSection: {
     gap: 0,
+  },
+  desktopWorkbench: {
+    marginHorizontal: UITokens.spacing.md,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 10,
+    gap: 10,
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  desktopWorkbenchPanel: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    flex: 1,
+  },
+  desktopWorkbenchAside: {
+    maxWidth: 420,
+    minWidth: 340,
+    gap: 10,
+  },
+  desktopPanelTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  desktopPanelSubTitle: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  desktopMetricsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  desktopMetricCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  desktopMetricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+  desktopMetricValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    marginTop: 2,
+    fontVariant: ["tabular-nums"],
+  },
+  desktopSortWrap: {
+    gap: 6,
+  },
+  desktopSortLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  desktopSortButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  desktopSortButton: {
+    borderWidth: 1,
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  desktopSortButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  clearFiltersButtonDesktop: {
+    alignSelf: "flex-start",
+    marginTop: 4,
   },
   previewHeader: {
     paddingHorizontal: UITokens.spacing.md,
@@ -1641,6 +1893,10 @@ const styles = StyleSheet.create({
   searchRow: {
     marginBottom: 2,
   },
+  searchRowDesktop: {
+    marginTop: 10,
+    marginBottom: 8,
+  },
   searchInput: {
     flexDirection: "row",
     alignItems: "center",
@@ -1702,16 +1958,19 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   colHeaderTable: {
-    width: STOCK_TABLE_TOTAL_WIDTH,
+    width: "100%",
+    minWidth: STOCK_TABLE_TOTAL_WIDTH,
   },
   tableHorizontalScroll: {
     flex: 1,
   },
   tableHorizontalContent: {
+    width: "100%",
     minWidth: STOCK_TABLE_TOTAL_WIDTH,
   },
   tableFlatList: {
-    width: STOCK_TABLE_TOTAL_WIDTH,
+    width: "100%",
+    minWidth: STOCK_TABLE_TOTAL_WIDTH,
   },
   colHeaderCell: {
     fontSize: 10,
@@ -1768,4 +2027,7 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   eeRunBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  
+  // Desktop web gets a denser, data-rich view while mobile/tablet keeps compact card scanning.
+  // These breakpoints intentionally optimize readability and touch targets separately.
 });
