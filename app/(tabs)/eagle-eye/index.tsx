@@ -22,6 +22,7 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -170,11 +171,7 @@ export default function EagleEyeScannerScreen() {
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isDesktopWeb;
   const contentMaxWidth = isDesktopWeb ? undefined : isWeb ? 1200 : undefined;
-  // On mobile native (and web mobile), the Tabs navigator renders its own header
-  // which already accounts for the status bar safe area. Applying paddingTop: insets.top
-  // on top of that creates a large blank gap. Only apply it when the sidebar is shown
-  // (web tablet/desktop) where there is no Tabs header and the screen handles its own top inset.
-  const showSidebar = isWeb && viewportWidth >= 768;
+  const { showSidebar } = useResponsive();
 
   // Avoid startup 401s while auth hydration or token refresh is still running.
   const fetchEnabled = !authLoading && !!authToken;
