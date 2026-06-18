@@ -37,14 +37,26 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// ── Responsive layout constants ─────────────────────────────────────────────
+/** Phones narrower than this threshold get the compact vertical hero layout. */
+const NARROW_PHONE_BREAKPOINT = 420;
+/** Chart height on narrow phones — keeps the page from feeling too chart-heavy. */
+const CHART_HEIGHT_NARROW = 280;
+/** Chart height on wider phones and tablets. */
+const CHART_HEIGHT_NORMAL = 340;
 
 export default function EagleEyeDetailScreen() {
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const { colors } = useThemeStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  // Breakpoint: phones narrower than NARROW_PHONE_BREAKPOINT get compact hero layout
+  const isNarrow = screenWidth < NARROW_PHONE_BREAKPOINT;
 
   // Expo Router v6 sometimes routes [ticker]-dna URLs here instead of to
   // [ticker]-dna.tsx because fully-dynamic [ticker].tsx wins the match.
@@ -161,9 +173,14 @@ export default function EagleEyeDetailScreen() {
             { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
           ]}
         >
-          <View style={styles.heroTop}>
-            <View style={styles.heroLeft}>
-              <Text style={[styles.heroTicker, { color: colors.textPrimary }]}>
+          <View style={[styles.heroTop, isNarrow && styles.heroTopNarrow]}>
+            <View style={[styles.heroLeft, isNarrow && styles.heroLeftNarrow]}>
+              <Text
+                style={[
+                  styles.heroTicker,
+                  { color: colors.textPrimary, fontSize: isNarrow ? 21 : 26 },
+                ]}
+              >
                 {analysis.ticker}
               </Text>
               <Text style={[styles.heroName, { color: colors.textMuted }]} numberOfLines={1}>
@@ -173,10 +190,14 @@ export default function EagleEyeDetailScreen() {
                 {analysis.sector}
               </Text>
             </View>
-            <View style={styles.heroRight}>
+            <View style={[styles.heroRight, isNarrow && styles.heroRightNarrow]}>
               <RatingBadge rating={analysis.rating} />
               <View style={styles.stageRow}>
-                <StageTag stage={analysis.stage} size="sm" variant="full" />
+                <StageTag
+                  stage={analysis.stage}
+                  size="sm"
+                  variant={isNarrow ? "short" : "full"}
+                />
               </View>
               <BadgeHelpTooltip
                 title={`${analysis.confidence.toFixed(0)}% Confidence`}
@@ -221,7 +242,7 @@ export default function EagleEyeDetailScreen() {
               supports={analysis?.supports ?? []}
               resistances={analysis?.resistances ?? []}
               lastPrice={analysis?.last_price}
-              height={400}
+              height={isNarrow ? CHART_HEIGHT_NARROW : CHART_HEIGHT_NORMAL}
             />
           </View>
         )}
@@ -382,13 +403,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
+  // On narrow phones, stack the info blocks vertically so neither side is squeezed.
+  heroTopNarrow: {
+    flexWrap: "wrap",
+    gap: UITokens.spacing.sm,
+  },
   heroLeft: {
     flex: 1,
     gap: 4,
+    paddingRight: UITokens.spacing.sm,
+  },
+  // On narrow phones heroLeft fills the full row before heroRight wraps below.
+  heroLeftNarrow: {
+    width: "100%",
+    flexShrink: 0,
+    paddingRight: 0,
   },
   heroRight: {
     alignItems: "flex-end",
     gap: 6,
+    flexShrink: 0,
+  },
+  // On narrow phones heroRight aligns to the leading edge to avoid orphaned padding.
+  heroRightNarrow: {
+    alignSelf: "flex-start",
+    alignItems: "flex-start",
   },
   stageRow: {
     flexDirection: "row",
@@ -396,7 +435,6 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   heroTicker: {
-    fontSize: 26,
     fontWeight: "800",
     letterSpacing: 1,
   },

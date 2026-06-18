@@ -1491,6 +1491,7 @@ export default function EagleEyeScannerScreen() {
             {hasActiveFilters && hiddenStocks > 0 ? (
               <Pressable
                 onPress={handleClearFilters}
+                hitSlop={UITokens.hitSlop.sm}
                 style={[
                   styles.showAllBtn,
                   {
@@ -1508,6 +1509,7 @@ export default function EagleEyeScannerScreen() {
             <Pressable
               onPress={handleRunEagleEye}
               disabled={eeRefresh.isPending}
+              hitSlop={UITokens.hitSlop.sm}
               style={[
                 styles.eeRunBtn,
                 {
@@ -1638,7 +1640,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: "700" },
   updatedText: { fontSize: 11, marginTop: 1 },
-  headerRight: { alignItems: "flex-end", gap: 4 },
+  headerRight: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    flexShrink: 1,
+  },
   regimeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1651,10 +1660,10 @@ const styles = StyleSheet.create({
     borderRadius: UITokens.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: Platform.OS === "web" ? 5 : 8,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 26,
+    minHeight: Platform.OS === "web" ? 26 : UITokens.touchTarget.mobile,
   },
   showAllBtnText: {
     fontSize: 11,
@@ -2021,12 +2030,12 @@ const styles = StyleSheet.create({
   retryText: { fontWeight: "600", fontSize: 14 },
   eeRunBtn: {
     borderRadius: UITokens.radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "web" ? 5 : 8,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 52,
-    minHeight: 28,
+    minWidth: 56,
+    minHeight: Platform.OS === "web" ? 28 : UITokens.touchTarget.mobile,
   },
   eeRunBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   
