@@ -52,7 +52,7 @@ function normalizePath(pathname: string): string {
   return pathname.replace("/(tabs)", "");
 }
 
-/** Minimum horizontal drag distance (px) to trigger a tab change. */
+/** Minimum horizontal drag distance (dp) to trigger a tab change. */
 const SWIPE_THRESHOLD = 60;
 
 /**
@@ -84,31 +84,30 @@ export function EagleEyeTopTabs() {
   pathnameRef.current = pathname;
 
   // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
-  // Only active on native (web uses mouse/trackpad which already works with taps).
+  // PanResponder is always created; handlers are only applied on native
+  // (Platform.OS is a constant — it never changes at runtime).
   const isNative = Platform.OS !== "web";
   const panResponder = useRef(
-    isNative
-      ? PanResponder.create({
-          // Don't claim on touch start — let Pressable children handle taps normally.
-          onStartShouldSetPanResponder: () => false,
-          // Claim the gesture only when horizontal movement clearly dominates.
-          onMoveShouldSetPanResponder: (_, { dx, dy }) => {
-            const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
-            const isHorizontallyDominant =
-              Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
-            return hasMinimumDistance && isHorizontallyDominant;
-          },
-          onPanResponderRelease: (_, { dx }) => {
-            const currentIndex = findActiveTabIndex(pathnameRef.current);
-            if (currentIndex === -1) return;
-            if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
-              router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
-            } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
-              router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
-            }
-          },
-        })
-      : null
+    PanResponder.create({
+      // Don't claim on touch start — let Pressable children handle taps normally.
+      onStartShouldSetPanResponder: () => false,
+      // Claim the gesture only when horizontal movement clearly dominates.
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+        const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
+        const isHorizontallyDominant =
+          Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
+        return hasMinimumDistance && isHorizontallyDominant;
+      },
+      onPanResponderRelease: (_, { dx }) => {
+        const currentIndex = findActiveTabIndex(pathnameRef.current);
+        if (currentIndex === -1) return;
+        if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
+          router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
+        } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
+          router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
+        }
+      },
+    })
   ).current;
 
   return (
@@ -117,7 +116,7 @@ export function EagleEyeTopTabs() {
         styles.container,
         { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
       ]}
-      {...(panResponder?.panHandlers ?? {})}
+      {...(isNative ? panResponder.panHandlers : {})}
     >
       <ScrollView
         horizontal
