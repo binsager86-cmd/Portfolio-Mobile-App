@@ -84,11 +84,12 @@ export function EagleEyeTopTabs() {
   pathnameRef.current = pathname;
 
   // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
-  // PanResponder is always created; handlers are only applied on native
+  // PanResponder is lazily initialized once; handlers are only applied on native
   // (Platform.OS is a constant — it never changes at runtime).
   const isNative = Platform.OS !== "web";
-  const panResponder = useRef(
-    PanResponder.create({
+  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
       // Don't claim on touch start — let Pressable children handle taps normally.
       onStartShouldSetPanResponder: () => false,
       // Claim the gesture only when horizontal movement clearly dominates.
@@ -107,8 +108,9 @@ export function EagleEyeTopTabs() {
           router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
         }
       },
-    })
-  ).current;
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   return (
     <View
@@ -127,6 +129,7 @@ export function EagleEyeTopTabs() {
         contentContainerStyle={styles.content}
       >
         {EAGLE_EYE_TABS.map((tab, index) => {
+          // When activeTabIndex is -1 (no route match), all tabs show as inactive — correct fallback.
           const active = index === activeTabIndex;
 
           return (
