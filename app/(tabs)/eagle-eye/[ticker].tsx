@@ -41,14 +41,22 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// ── Responsive layout constants ─────────────────────────────────────────────
+/** Phones narrower than this threshold get the compact vertical hero layout. */
+const NARROW_PHONE_BREAKPOINT = 420;
+/** Chart height on narrow phones — keeps the page from feeling too chart-heavy. */
+const CHART_HEIGHT_NARROW = 280;
+/** Chart height on wider phones and tablets. */
+const CHART_HEIGHT_NORMAL = 340;
+
 export default function EagleEyeDetailScreen() {
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const { colors } = useThemeStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  // Breakpoint: phones narrower than 420 logical px get compact hero layout
-  const isNarrow = screenWidth < 420;
+  // Breakpoint: phones narrower than NARROW_PHONE_BREAKPOINT get compact hero layout
+  const isNarrow = screenWidth < NARROW_PHONE_BREAKPOINT;
 
   // Expo Router v6 sometimes routes [ticker]-dna URLs here instead of to
   // [ticker]-dna.tsx because fully-dynamic [ticker].tsx wins the match.
@@ -234,7 +242,7 @@ export default function EagleEyeDetailScreen() {
               supports={analysis?.supports ?? []}
               resistances={analysis?.resistances ?? []}
               lastPrice={analysis?.last_price}
-              height={isNarrow ? 280 : 340}
+              height={isNarrow ? CHART_HEIGHT_NARROW : CHART_HEIGHT_NORMAL}
             />
           </View>
         )}
