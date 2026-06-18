@@ -14,6 +14,7 @@ import {
   getStageDescription,
 } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -183,10 +184,11 @@ export default function EagleEyeMethodologyScreen() {
   const { colors } = useThemeStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { showSidebar } = useResponsive();
 
   return (
     <View
-      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}
+      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}
     >
       <View
         style={[

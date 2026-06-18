@@ -25,6 +25,7 @@ import {
 } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeScanner, useEagleEyeStock, useEagleEyeDnaRecentBars } from "@/hooks/useEagleEye";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -54,6 +55,7 @@ export default function EagleEyeDetailScreen() {
   const { colors } = useThemeStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { showSidebar } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
   // Breakpoint: phones narrower than NARROW_PHONE_BREAKPOINT get compact hero layout
   const isNarrow = screenWidth < NARROW_PHONE_BREAKPOINT;
@@ -104,7 +106,7 @@ export default function EagleEyeDetailScreen() {
   // ── Loading state ────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
         <BackHeader title={t} colors={colors} />
         <View style={styles.centred}>
           <ActivityIndicator color={colors.accentPrimary} size="large" />
@@ -115,7 +117,7 @@ export default function EagleEyeDetailScreen() {
 
   if (isError || !analysis) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
         <BackHeader title={t} colors={colors} />
         <View style={styles.centred}>
           <FontAwesome name="exclamation-triangle" size={28} color={colors.danger} />
@@ -155,7 +157,7 @@ export default function EagleEyeDetailScreen() {
 
   return (
     <View
-      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}
+      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}
     >
       <BackHeader title={analysis.ticker} colors={colors} />
 

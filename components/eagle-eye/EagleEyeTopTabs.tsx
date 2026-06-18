@@ -2,8 +2,8 @@ import { UITokens } from "@/constants/uiTokens";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useRef } from "react";
+import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type EagleEyeTab = {
   key: "scanner" | "simulator" | "methodology" | "settings";
@@ -52,11 +52,47 @@ function normalizePath(pathname: string): string {
   return pathname.replace("/(tabs)", "");
 }
 
+/** Minimum horizontal drag distance (px) to trigger a tab change. */
+const SWIPE_THRESHOLD = 60;
+
 export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
   const pathname = normalizePath(usePathname());
   const router = useRouter();
   const activeTextColor = "#ffffff";
+
+  // Keep a live ref so the PanResponder callbacks (created once) always read
+  // the latest pathname without needing to be recreated on every render.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
+  // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
+  // Only active on native (web uses mouse/trackpad which already works with taps).
+  const panResponder = useRef(
+    Platform.OS === "web"
+      ? null
+      : PanResponder.create({
+          // Don't claim on touch start — let Pressable children handle taps normally.
+          onStartShouldSetPanResponder: () => false,
+          // Claim the gesture only when horizontal movement clearly dominates.
+          onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+            Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 2,
+          onPanResponderRelease: (_, { dx }) => {
+            const currentPath = pathnameRef.current;
+            const currentIndex = EAGLE_EYE_TABS.findIndex((tab) =>
+              tab.matches.some((prefix) =>
+                prefix === "/eagle-eye" ? currentPath === prefix : currentPath.startsWith(prefix)
+              )
+            );
+            if (currentIndex === -1) return;
+            if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
+              router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
+            } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
+              router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
+            }
+          },
+        })
+  ).current;
 
   return (
     <View
@@ -64,6 +100,7 @@ export function EagleEyeTopTabs() {
         styles.container,
         { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
       ]}
+      {...(panResponder?.panHandlers ?? {})}
     >
       <ScrollView
         horizontal

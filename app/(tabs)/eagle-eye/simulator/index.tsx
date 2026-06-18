@@ -8,6 +8,7 @@
 
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StageTag } from "@/components/eagle-eye/StageTag";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import {
   useResetSimulator,
@@ -294,6 +295,7 @@ function ActivityFeed() {
 export default function SimulatorIndexScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { showSidebar } = useResponsive();
 
   const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios();
   const runNow = useRunSimulatorNow();
@@ -358,7 +360,7 @@ export default function SimulatorIndexScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
+    <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
       <EagleEyeTopTabs />
 
       <ScrollView

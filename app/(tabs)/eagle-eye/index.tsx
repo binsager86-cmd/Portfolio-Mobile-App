@@ -170,6 +170,11 @@ export default function EagleEyeScannerScreen() {
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isDesktopWeb;
   const contentMaxWidth = isDesktopWeb ? undefined : isWeb ? 1200 : undefined;
+  // On mobile native (and web mobile), the Tabs navigator renders its own header
+  // which already accounts for the status bar safe area. Applying paddingTop: insets.top
+  // on top of that creates a large blank gap. Only apply it when the sidebar is shown
+  // (web tablet/desktop) where there is no Tabs header and the screen handles its own top inset.
+  const showSidebar = isWeb && viewportWidth >= 768;
 
   // Avoid startup 401s while auth hydration or token refresh is still running.
   const fetchEnabled = !authLoading && !!authToken;
@@ -1435,7 +1440,7 @@ export default function EagleEyeScannerScreen() {
       style={[
         styles.root,
         isDesktopWeb ? styles.rootDesktop : null,
-        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
+        { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 },
       ]}
     >
       {/* Header */}
