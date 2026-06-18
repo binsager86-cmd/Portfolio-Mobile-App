@@ -55,11 +55,28 @@ function normalizePath(pathname: string): string {
 /** Minimum horizontal drag distance (px) to trigger a tab change. */
 const SWIPE_THRESHOLD = 60;
 
+/**
+ * How much more the horizontal movement must dominate vertical movement before
+ * a gesture is claimed as a horizontal swipe (vs. a vertical scroll attempt).
+ * A ratio of 2 means dx must be at least 2× larger than dy.
+ */
+const VERTICAL_TO_HORIZONTAL_RATIO = 2;
+
+/** Returns the index of the currently active tab, or -1 if none matches. */
+function findActiveTabIndex(pathname: string): number {
+  return EAGLE_EYE_TABS.findIndex((tab) =>
+    tab.matches.some((prefix) =>
+      prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
+    )
+  );
+}
+
 export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
   const pathname = normalizePath(usePathname());
   const router = useRouter();
   const activeTextColor = "#ffffff";
+  const activeTabIndex = findActiveTabIndex(pathname);
 
   // Keep a live ref so the PanResponder callbacks (created once) always read
   // the latest pathname without needing to be recreated on every render.
@@ -76,14 +93,9 @@ export function EagleEyeTopTabs() {
           onStartShouldSetPanResponder: () => false,
           // Claim the gesture only when horizontal movement clearly dominates.
           onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-            Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 2,
+            Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO,
           onPanResponderRelease: (_, { dx }) => {
-            const currentPath = pathnameRef.current;
-            const currentIndex = EAGLE_EYE_TABS.findIndex((tab) =>
-              tab.matches.some((prefix) =>
-                prefix === "/eagle-eye" ? currentPath === prefix : currentPath.startsWith(prefix)
-              )
-            );
+            const currentIndex = findActiveTabIndex(pathnameRef.current);
             if (currentIndex === -1) return;
             if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
               router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
@@ -110,10 +122,8 @@ export function EagleEyeTopTabs() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        {EAGLE_EYE_TABS.map((tab) => {
-          const active = tab.matches.some((prefix) =>
-            prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
-          );
+        {EAGLE_EYE_TABS.map((tab, index) => {
+          const active = index === activeTabIndex;
 
           return (
             <Pressable
