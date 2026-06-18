@@ -22,6 +22,7 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -170,6 +171,7 @@ export default function EagleEyeScannerScreen() {
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isDesktopWeb;
   const contentMaxWidth = isDesktopWeb ? undefined : isWeb ? 1200 : undefined;
+  const { showSidebar } = useResponsive();
 
   // Avoid startup 401s while auth hydration or token refresh is still running.
   const fetchEnabled = !authLoading && !!authToken;
@@ -1435,7 +1437,7 @@ export default function EagleEyeScannerScreen() {
       style={[
         styles.root,
         isDesktopWeb ? styles.rootDesktop : null,
-        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
+        { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 },
       ]}
     >
       {/* Header */}

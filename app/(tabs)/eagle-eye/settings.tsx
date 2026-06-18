@@ -13,6 +13,7 @@ import { API_BASE_URL } from "@/constants/Config";
 import { UITokens } from "@/constants/uiTokens";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { useEagleEyeRefresh } from "@/hooks/useEagleEye";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -82,6 +83,7 @@ export default function EagleEyeSettingsScreen() {
   const eeRefresh = useEagleEyeRefresh();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { showSidebar } = useResponsive();
 
   const [settings, setSettings] = useState<EagleEyeSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -192,7 +194,7 @@ export default function EagleEyeSettingsScreen() {
       <View
         style={[
           styles.root,
-          { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
+          { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 },
         ]}
       >
         <BackHeader title={EE.settingsTitle} colors={colors} />
@@ -205,7 +207,7 @@ export default function EagleEyeSettingsScreen() {
 
   return (
     <View
-      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}
+      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}
     >
       <BackHeader title={EE.settingsTitle} colors={colors} />
       <EagleEyeTopTabs />

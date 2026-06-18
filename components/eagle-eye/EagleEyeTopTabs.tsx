@@ -2,8 +2,8 @@ import { UITokens } from "@/constants/uiTokens";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useRef } from "react";
+import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type EagleEyeTab = {
   key: "scanner" | "simulator" | "methodology" | "settings";
@@ -52,11 +52,65 @@ function normalizePath(pathname: string): string {
   return pathname.replace("/(tabs)", "");
 }
 
+/** Minimum horizontal drag distance (dp) to trigger a tab change. */
+const SWIPE_THRESHOLD = 60;
+
+/**
+ * How much more the horizontal movement must dominate vertical movement before
+ * a gesture is claimed as a horizontal swipe (vs. a vertical scroll attempt).
+ * A ratio of 2 means dx must be at least 2× larger than dy.
+ */
+const VERTICAL_TO_HORIZONTAL_RATIO = 2;
+
+/** Returns the index of the currently active tab, or -1 if none matches. */
+function findActiveTabIndex(pathname: string): number {
+  return EAGLE_EYE_TABS.findIndex((tab) =>
+    tab.matches.some((prefix) =>
+      prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
+    )
+  );
+}
+
 export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
   const pathname = normalizePath(usePathname());
   const router = useRouter();
   const activeTextColor = "#ffffff";
+  const activeTabIndex = findActiveTabIndex(pathname);
+
+  // Keep a live ref so the PanResponder callbacks (created once) always read
+  // the latest pathname without needing to be recreated on every render.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
+  // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
+  // PanResponder is lazily initialized once; handlers are only applied on native
+  // (Platform.OS is a constant — it never changes at runtime).
+  const isNative = Platform.OS !== "web";
+  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
+      // Don't claim on touch start — let Pressable children handle taps normally.
+      onStartShouldSetPanResponder: () => false,
+      // Claim the gesture only when horizontal movement clearly dominates.
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+        const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
+        const isHorizontallyDominant =
+          Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
+        return hasMinimumDistance && isHorizontallyDominant;
+      },
+      onPanResponderRelease: (_, { dx }) => {
+        const currentIndex = findActiveTabIndex(pathnameRef.current);
+        if (currentIndex === -1) return;
+        if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
+          router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
+        } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
+          router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
+        }
+      },
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   return (
     <View
@@ -64,6 +118,7 @@ export function EagleEyeTopTabs() {
         styles.container,
         { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
       ]}
+      {...(isNative ? panResponder.panHandlers : {})}
     >
       <ScrollView
         horizontal
@@ -73,10 +128,9 @@ export function EagleEyeTopTabs() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        {EAGLE_EYE_TABS.map((tab) => {
-          const active = tab.matches.some((prefix) =>
-            prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
-          );
+        {EAGLE_EYE_TABS.map((tab, index) => {
+          // When activeTabIndex is -1 (no route match), all tabs show as inactive — correct fallback.
+          const active = index === activeTabIndex;
 
           return (
             <Pressable
