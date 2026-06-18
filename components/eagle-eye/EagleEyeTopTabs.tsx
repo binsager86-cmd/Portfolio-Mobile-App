@@ -85,15 +85,19 @@ export function EagleEyeTopTabs() {
 
   // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
   // Only active on native (web uses mouse/trackpad which already works with taps).
+  const isNative = Platform.OS !== "web";
   const panResponder = useRef(
-    Platform.OS === "web"
-      ? null
-      : PanResponder.create({
+    isNative
+      ? PanResponder.create({
           // Don't claim on touch start — let Pressable children handle taps normally.
           onStartShouldSetPanResponder: () => false,
           // Claim the gesture only when horizontal movement clearly dominates.
-          onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-            Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO,
+          onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+            const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
+            const isHorizontallyDominant =
+              Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
+            return hasMinimumDistance && isHorizontallyDominant;
+          },
           onPanResponderRelease: (_, { dx }) => {
             const currentIndex = findActiveTabIndex(pathnameRef.current);
             if (currentIndex === -1) return;
@@ -104,6 +108,7 @@ export function EagleEyeTopTabs() {
             }
           },
         })
+      : null
   ).current;
 
   return (
