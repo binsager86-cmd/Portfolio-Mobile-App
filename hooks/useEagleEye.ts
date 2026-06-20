@@ -105,17 +105,7 @@ export interface RatedStock {
   stage: string;
   rating: string;
   confidence: number;
-  confidence_yesterday?: number | null;  // Yesterday's cached confidence (before today's refresh)
   thesis: string;
-  continue_rising?: boolean;
-  continue_rising_badge?: string | null;
-  continue_rising_label?: string | null;
-  continue_rising_reason?: string | null;
-  continue_rising_exhaustion_count?: number | null;
-  continue_rising_exhaustion_signals?: string[] | null;
-  risk_warning_score?: number | null;
-  risky_near_resistance?: boolean;
-  risk_reward_ratio?: number | null;
   entry_primary?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
@@ -146,14 +136,6 @@ export interface FullStockAnalysis {
   rating: string;
   confidence: number;
   thesis: string;
-  continue_rising?: boolean;
-  continue_rising_badge?: string | null;
-  continue_rising_label?: string | null;
-  continue_rising_reason?: string | null;
-  continue_rising_exhaustion_count?: number | null;
-  continue_rising_exhaustion_signals?: string[] | null;
-  risk_warning_score?: number | null;
-  risky_near_resistance?: boolean;
   supports: SupportResistanceLevel[];
   resistances: SupportResistanceLevel[];
   entry_primary?: number | null;
@@ -281,74 +263,6 @@ export interface VolumeProfile {
   min_rel_vol_for_real_move?: number | null;
 }
 
-export interface PullbackEntryProfile {
-  median_pullback_pct: number;
-  max_pullback_pct: number;
-  pullback_within_days: number;
-  recovery_days: number;
-  pullback_success_rate: number;
-  sample_count: number;
-}
-
-export interface HistoricalTargetCluster {
-  gain_pct_from_entry: number;
-  cluster_strength: number;
-  avg_days_to_reach: number;
-  hit_rate: number;
-}
-
-export interface CycleProfile {
-  period_days: number;
-  std_days: number;
-  period_confidence: "STRONG" | "MODERATE" | "WEAK" | "IRREGULAR" | string;
-  sample_count: number;
-  days_since_last: number;
-  days_to_next: number;
-}
-
-export interface SimilarSetup {
-  date: string | null;
-  similarity: number;
-  primary_label: number | null;
-  max_excursion_pct: number | null;
-}
-
-export interface SimilarSetupsResponse {
-  ticker: string;
-  status: "ok" | "no_index" | "insufficient_data" | string;
-  as_of?: string;
-  feature_count?: number;
-  setups: SimilarSetup[];
-}
-
-export interface PreDropSignal {
-  signal: string;
-  label: string;
-  description: string;
-  fired_before_drop_pct: number;
-  avg_bars_before_drop: number;
-  sample_count: number;
-}
-
-export interface PostDropBehavior {
-  classification: "STRONG_BOUNCER" | "CONTINUATION_SELLER" | "MIXED" | string;
-  bounce_rate_pct: number;
-  avg_recovery_days: number;
-  avg_continuation_pct: number;
-  bounce_window_days: number;
-  sample_count: number;
-  classification_reason: string;
-}
-
-export interface ExitSignalProfile {
-  drop_threshold_pct: number;
-  historical_drop_events: number;
-  avg_drop_magnitude_pct: number;
-  avg_days_peak_to_trough: number;
-  pre_drop_signals: PreDropSignal[];
-  post_drop_behavior: PostDropBehavior | null;
-}
-
 export interface BehavioralDNA {
   ticker: string;
   total_events_analyzed: number;
@@ -367,12 +281,6 @@ export interface BehavioralDNA {
   computed_at?: string | null;
   pre_move_volume_profile?: VolumeProfile | null;
   fakeout_volume_profile?: VolumeProfile | null;
-  cycle_profile?: CycleProfile | null;
-  optimal_hold_window_days?: number | null;
-  avg_entry_quality_score?: number | null;
-  pullback_entry_profile?: PullbackEntryProfile | null;
-  historical_target_clusters?: HistoricalTargetCluster[];
-  exit_signal_profile?: ExitSignalProfile | null;
 }
 
 export interface DNAResponse {
@@ -428,12 +336,11 @@ export interface RefreshResponse {
 
 export const eagleEyeKeys = {
   all: ["eagle-eye"] as const,
-  scanner: (filters?: ScannerFilters) => [...eagleEyeKeys.all, "scanner", "v3", filters ?? {}] as const,
+  scanner: (filters?: ScannerFilters) => [...eagleEyeKeys.all, "scanner", filters ?? {}] as const,
   stock: (ticker: string, portfolioKwd?: number) =>
     [...eagleEyeKeys.all, "stock", ticker.toUpperCase(), portfolioKwd ?? 0] as const,
   dna: (ticker: string) => [...eagleEyeKeys.all, "dna", ticker.toUpperCase()] as const,
   dnaRecentBars: (ticker: string) => [...eagleEyeKeys.all, "dna-recent-bars-v2", ticker.toUpperCase()] as const,
-  similarSetups: (ticker: string) => [...eagleEyeKeys.all, "similar-setups", ticker.toUpperCase()] as const,
   events: (ticker: string) => [...eagleEyeKeys.all, "events", ticker.toUpperCase()] as const,
   regime: () => [...eagleEyeKeys.all, "regime"] as const,
   mlDisplayState: () => [...eagleEyeKeys.all, "ml-display-state"] as const,
@@ -707,10 +614,7 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
   const serverFilters: ScannerFilters = {
     sector: _filters?.sector,
     tier: _filters?.tier,
-    // Always force full-universe fetch for production parity, even if backend
-    // defaults differ across environments or older deployments.
-    min_confidence: 0,
-    limit: 500,
+    // limit: intentionally omitted — backend now defaults to 200 (full universe)
   };
   return useQuery<ScannerResponse>({
     // Key does NOT include min_confidence so filter chips hit the cache
@@ -724,13 +628,10 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
     retry: 2,
     enabled,
     placeholderData: (prev) => prev,
-    // Always re-check the live backend on mount so persisted stale responses
-    // (for example, a pre-deploy 66-row cache) cannot survive a release.
-    refetchOnMount: "always",
-    // Auto-poll frequently while warmup is active so progress looks real-time
+    // Auto-poll every 30 s while the backend is still warming up
     refetchInterval: (query) =>
       (query.state.data as ScannerResponse | undefined)?.status === "warming_up"
-        ? 2_000
+        ? 30_000
         : false,
   });
 }
@@ -817,31 +718,6 @@ export function useEagleEyeDnaRecentBars(ticker: string, enabled = true) {
     retry: 1,
     enabled: enabled && !!t,
     placeholderData: (prev) => prev,
-  });
-}
-
-/**
- * useSimilarSetups
- * GET /api/v1/eagle-eye/stocks/{ticker}/similar-setups
- *
- * Finds the top-K historical dates whose indicator fingerprint most resembles
- * the current market state using cosine similarity (ML pattern store).
- * staleTime: 30 minutes — recalculates once per session at most.
- */
-export function useSimilarSetups(ticker: string, topK = 5, enabled = true) {
-  const t = ticker.toUpperCase().trim();
-  return useQuery<SimilarSetupsResponse>({
-    queryKey: eagleEyeKeys.similarSetups(t),
-    queryFn: async () => {
-      const { data } = await api.get<SimilarSetupsResponse>(
-        `/api/v1/eagle-eye/stocks/${encodeURIComponent(t)}/similar-setups?top_k=${topK}`
-      );
-      return data;
-    },
-    staleTime: 30 * 60_000,
-    gcTime: 60 * 60_000,
-    retry: 1,
-    enabled: enabled && !!t,
   });
 }
 

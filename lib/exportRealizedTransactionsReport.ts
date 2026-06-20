@@ -307,7 +307,8 @@ export async function exportRealizedTransactionsReport(input: RealizedTransactio
   const filename = `realized_transactions_${todayISO()}.xlsx`;
 
   if (Platform.OS === "web") {
-    const blob = new Blob([workbook], {
+    const blobBytes = Uint8Array.from(workbook);
+    const blob = new Blob([blobBytes.buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     const url = URL.createObjectURL(blob);

@@ -52,17 +52,9 @@ function normalizePath(pathname: string): string {
   return pathname.replace("/(tabs)", "");
 }
 
-/** Minimum horizontal drag distance (dp) to trigger a tab change. */
 const SWIPE_THRESHOLD = 60;
-
-/**
- * How much more the horizontal movement must dominate vertical movement before
- * a gesture is claimed as a horizontal swipe (vs. a vertical scroll attempt).
- * A ratio of 2 means dx must be at least 2× larger than dy.
- */
 const VERTICAL_TO_HORIZONTAL_RATIO = 2;
 
-/** Returns the index of the currently active tab, or -1 if none matches. */
 function findActiveTabIndex(pathname: string): number {
   return EAGLE_EYE_TABS.findIndex((tab) =>
     tab.matches.some((prefix) =>
@@ -78,21 +70,14 @@ export function EagleEyeTopTabs() {
   const activeTextColor = "#ffffff";
   const activeTabIndex = findActiveTabIndex(pathname);
 
-  // Keep a live ref so the PanResponder callbacks (created once) always read
-  // the latest pathname without needing to be recreated on every render.
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
-  // Swipe-to-navigate: left swipe → next tab, right swipe → previous tab.
-  // PanResponder is lazily initialized once; handlers are only applied on native
-  // (Platform.OS is a constant — it never changes at runtime).
   const isNative = Platform.OS !== "web";
   const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
   if (panResponderRef.current === null) {
     panResponderRef.current = PanResponder.create({
-      // Don't claim on touch start — let Pressable children handle taps normally.
       onStartShouldSetPanResponder: () => false,
-      // Claim the gesture only when horizontal movement clearly dominates.
       onMoveShouldSetPanResponder: (_, { dx, dy }) => {
         const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
         const isHorizontallyDominant =
@@ -129,7 +114,6 @@ export function EagleEyeTopTabs() {
         contentContainerStyle={styles.content}
       >
         {EAGLE_EYE_TABS.map((tab, index) => {
-          // When activeTabIndex is -1 (no route match), all tabs show as inactive — correct fallback.
           const active = index === activeTabIndex;
 
           return (

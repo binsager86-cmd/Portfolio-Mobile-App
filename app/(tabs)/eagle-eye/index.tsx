@@ -12,20 +12,17 @@ import { EE, REGIME_LABELS, getStageLabelShort } from "@/constants/eagleEyeStrin
 import { UITokens } from "@/constants/uiTokens";
 import { exportEagleEyeScannerReport } from "@/lib/exportEagleEyeScannerReport";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
-import { BadgeHelpTooltip } from "@/components/eagle-eye/BadgeHelpTooltip";
 import {
   STOCK_TABLE_COL_WIDTHS,
-  STOCK_TABLE_TOTAL_WIDTH,
   StockRow,
   StockRowSkeleton,
   computeRR,
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
-import { useResponsive } from "@/hooks/useResponsive";
-import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -121,28 +118,6 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   pe: "P/E",
 };
 
-const DESKTOP_SORT_FIELDS: readonly SortField[] = [
-  "conf",
-  "rr",
-  "rating",
-  "stage",
-  "volume",
-  "ticker",
-];
-
-const HEADER_TOOLTIP_CONFIDENCE =
-  "How sure the system is about this rating. Above ~75% is strong, 60-75% is moderate, below 60% is weak - treat low-confidence signals with extra caution.";
-const HEADER_TOOLTIP_RR =
-  "How much you can gain versus lose. 1:3 means about 3 up for every 1 risked. Above 1:2 is healthy. Red means the stock is near resistance - little room up, so riskier.";
-const HEADER_TOOLTIP_STAGE =
-  "Where the stock is in its cycle: Rising = trending up now; Turning Up = just starting to turn; Accumulating = building a base; Topping = may be peaking, be careful; Mixed = no clear direction.";
-const HEADER_TOOLTIP_VOLUME =
-  "Trading activity versus its normal level. High means lots of interest (moves are more reliable). Low means thin trading (moves are less trustworthy and harder to exit).";
-const HEADER_TOOLTIP_TP1 =
-  "First target price if the trade works out - a sensible spot to consider taking some profit.";
-const HEADER_TOOLTIP_ENTRY =
-  "The suggested price area to buy, if you decide to enter.";
-
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
   const mins = Math.floor((Date.now() - ts) / 60_000);
@@ -155,8 +130,7 @@ export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
-  const authToken = useAuthStore((state) => state.token);
-  const authLoading = useAuthStore((state) => state.isLoading);
+  const isFocused = useIsFocused();
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
@@ -170,11 +144,14 @@ export default function EagleEyeScannerScreen() {
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isDesktopWeb;
-  const contentMaxWidth = isDesktopWeb ? undefined : isWeb ? 1200 : undefined;
-  const { showSidebar } = useResponsive();
 
-  // Avoid startup 401s while auth hydration or token refresh is still running.
-  const fetchEnabled = !authLoading && !!authToken;
+  const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
+  useEffect(() => {
+    if (isFocused) {
+      setHasFocusedOnce(true);
+    }
+  }, [isFocused]);
+  const fetchEnabled = hasFocusedOnce || isFocused;
 
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);
@@ -274,49 +251,6 @@ export default function EagleEyeScannerScreen() {
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
   const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const getRunErrorMessage = useCallback((error: unknown): string => {
-    const fallback = "Run failed. Please try again in a moment.";
-    if (!error || typeof error !== "object") return fallback;
-
-    const e = error as {
-      message?: string;
-      response?: {
-        status?: number;
-        data?: {
-          detail?: unknown;
-          message?: unknown;
-        };
-      };
-    };
-
-    const status = e.response?.status;
-    const detail = e.response?.data?.detail;
-    const message = e.response?.data?.message;
-    const serverMessage =
-      typeof detail === "string"
-        ? detail
-        : typeof message === "string"
-        ? message
-        : null;
-
-    if (status === 401) {
-      return "Session expired. Please sign in again.";
-    }
-    if (status === 403) {
-      return "This production account is not allowed to run Eagle Eye refresh.";
-    }
-    if (status === 429) {
-      return "Too many requests right now. Wait a few seconds and retry.";
-    }
-    if (serverMessage) {
-      return serverMessage;
-    }
-    if (typeof e.message === "string" && e.message.trim()) {
-      return e.message;
-    }
-    return fallback;
-  }, []);
-
   const handleRunEagleEye = useCallback(async () => {
     if (eeRefresh.isPending) return;
     if (runStatusTimer.current) clearTimeout(runStatusTimer.current);
@@ -324,12 +258,11 @@ export default function EagleEyeScannerScreen() {
     try {
       await eeRefresh.mutateAsync({ tickers: [] });
       setRunStatus("ok");
-    } catch (error) {
+    } catch {
       setRunStatus("err");
-      Alert.alert("Run failed", getRunErrorMessage(error));
     }
     runStatusTimer.current = setTimeout(() => setRunStatus("idle"), 5000);
-  }, [eeRefresh, getRunErrorMessage]);
+  }, [eeRefresh]);
 
   useEffect(() => {
     return () => {
@@ -475,13 +408,6 @@ export default function EagleEyeScannerScreen() {
   const regimeColors = getRegimeColors(regime, colors);
   const regimeLabel = REGIME_LABELS[regime] ?? regime;
   const updatedAgo = getUpdatedAgo(dataUpdatedAt ?? 0);
-  const totalStocks = data?.stocks?.length ?? 0;
-  const hiddenStocks = Math.max(totalStocks - stocks.length, 0);
-  const avgVisibleConfidence = useMemo(() => {
-    if (!stocks.length) return 0;
-    const total = stocks.reduce((sum, stock) => sum + (Number.isFinite(stock.confidence) ? stock.confidence : 0), 0);
-    return Math.round(total / stocks.length);
-  }, [stocks]);
 
   const handleExportScanner = useCallback(async () => {
     try {
@@ -574,7 +500,6 @@ export default function EagleEyeScannerScreen() {
       <View
         style={[
           styles.colHeader,
-          isTableView ? styles.colHeaderTable : null,
           { backgroundColor: colors.bgSecondary, borderBottomColor: colors.borderColor },
         ]}
       >
@@ -613,43 +538,28 @@ export default function EagleEyeScannerScreen() {
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.stage }]}
               hitSlop={6}
             >
-              <View style={styles.colHeaderWithInfo}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    { color: sortBy === "stage" ? colors.accentPrimary : colors.textMuted },
-                  ]}
-                >
-                  {`Stage${sortArrow("stage")}`}
-                </Text>
-                <BadgeHelpTooltip title="STAGE" body={HEADER_TOOLTIP_STAGE}>
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
-            </Pressable>
-            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.action }]}>
-              <Text style={[styles.colHeaderCell, { color: colors.textMuted }]}>
-                ACTION
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "stage" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Stage${sortArrow("stage")}`}
               </Text>
-            </View>
+            </Pressable>
             <Pressable
               onPress={() => toggleSort("volume")}
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.volume }]}
               hitSlop={6}
             >
-              <View style={styles.colHeaderWithInfo}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    { color: sortBy === "volume" ? colors.accentPrimary : colors.textMuted },
-                  ]}
-                >
-                  {`Volume${sortArrow("volume")}`}
-                </Text>
-                <BadgeHelpTooltip title="VOLUME" body={HEADER_TOOLTIP_VOLUME}>
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "volume" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`Volume${sortArrow("volume")}`}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("price")}
@@ -681,22 +591,17 @@ export default function EagleEyeScannerScreen() {
               ]}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "entry" ? colors.accentPrimary : colors.textMuted,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  {`Entry${sortArrow("entry")}`}
-                </Text>
-                <BadgeHelpTooltip title="ENTRY" body={HEADER_TOOLTIP_ENTRY} align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "entry" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Entry${sortArrow("entry")}`}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("tp1")}
@@ -707,22 +612,17 @@ export default function EagleEyeScannerScreen() {
               ]}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "tp1" ? colors.accentPrimary : colors.textMuted,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  {`TP1${sortArrow("tp1")}`}
-                </Text>
-                <BadgeHelpTooltip title="TP1" body={HEADER_TOOLTIP_TP1} align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "tp1" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`TP1${sortArrow("tp1")}`}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("bvps")}
@@ -771,73 +671,38 @@ export default function EagleEyeScannerScreen() {
               style={[styles.colHeaderBtn, styles.colHeaderSortBtn, { width: STOCK_TABLE_COL_WIDTHS.rr }]}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  {`R:R${sortArrow("rr")}`}
-                </Text>
-                <BadgeHelpTooltip title="R:R" body={HEADER_TOOLTIP_RR} align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`R:R${sortArrow("rr")}`}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("conf")}
               style={[
                 styles.colHeaderBtn,
                 styles.colHeaderSortBtn,
-                { width: STOCK_TABLE_COL_WIDTHS.yesterdayConfidence },
+                { width: STOCK_TABLE_COL_WIDTHS.confidence },
               ]}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  {`YESTERDAY${sortArrow("conf")}`}
-                </Text>
-                <BadgeHelpTooltip title="YESTERDAY" body="Yesterday's cached confidence (before today's refresh). Previous snapshot from scanner cache." align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
-            </Pressable>
-            <Pressable
-              onPress={() => toggleSort("conf")}
-              style={[
-                styles.colHeaderBtn,
-                { width: STOCK_TABLE_COL_WIDTHS.liveConfidence },
-              ]}
-              hitSlop={6}
-            >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  LIVE
-                </Text>
-                <BadgeHelpTooltip title="LIVE" body="Fresh confidence recomputed from the stock detail endpoint." align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Conf${sortArrow("conf")}`}
+              </Text>
             </Pressable>
           </>
         ) : (
@@ -853,42 +718,32 @@ export default function EagleEyeScannerScreen() {
               style={styles.colHeaderBtn}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
-                  ]}
-                >
-                  {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-                </Text>
-                <BadgeHelpTooltip title="R:R" body={HEADER_TOOLTIP_RR} align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "rr" ? colors.accentPrimary : colors.textMuted },
+                ]}
+              >
+                {`R:R${sortBy === "rr" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => toggleSort("conf")}
               style={styles.colHeaderBtn}
               hitSlop={6}
             >
-              <View style={[styles.colHeaderWithInfo, styles.colHeaderWithInfoRight]}>
-                <Text
-                  style={[
-                    styles.colHeaderCell,
-                    {
-                      color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
-                      width: 72,
-                      textAlign: "right",
-                    },
-                  ]}
-                >
-                  {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
-                </Text>
-                <BadgeHelpTooltip title="CONF" body={HEADER_TOOLTIP_CONFIDENCE} align="right">
-                  <Text style={[styles.colHeaderInfoIcon, { color: colors.textMuted }]}>i</Text>
-                </BadgeHelpTooltip>
-              </View>
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "conf" ? colors.accentPrimary : colors.textMuted,
+                    width: 72,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+              </Text>
             </Pressable>
             {mlBandsData?.enabled ? (
               <Text
@@ -1175,285 +1030,20 @@ export default function EagleEyeScannerScreen() {
     </>
   );
 
-  const scannerList = (
-    <FlatList
-      data={listData}
-      keyExtractor={keyExtractor}
-      renderItem={renderItem}
-      // ListHeaderComponent occupies index 0; keep only the data column header sticky.
-      stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
-      ListEmptyComponent={renderEmpty}
-      ListHeaderComponent={
-        <>
-          <EagleEyeTopTabs />
-
-          {mlBandsData?.enabled ? (
-            <MLDisclaimerBanner
-              autoDisabled={mlDisplayState?.auto_disabled ?? false}
-              disabledReason={mlDisplayState?.disabled_reason}
-            />
-          ) : mlDisplayState?.auto_disabled ? (
-            <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
-          ) : null}
-
-          <View style={styles.tableTopSection}>
-            <View style={styles.previewHeader}>
-              <View style={styles.previewHeaderRow}>
-                <View style={styles.previewHeaderCopy}>
-                  <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
-                  <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
-                    {`${stocks.length} of ${totalStocks || stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
-                  </Text>
-                </View>
-
-                <Pressable
-                  testID="export-eagle-eye-scanner"
-                  onPress={handleExportScanner}
-                  style={[
-                    styles.exportButton,
-                    {
-                      backgroundColor: colors.accentPrimary + "18",
-                      borderColor: colors.accentPrimary + "55",
-                      opacity: stocks.length ? 1 : 0.5,
-                    },
-                  ]}
-                  disabled={!stocks.length}
-                >
-                  <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
-                  <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>Export Excel</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {isDesktopWeb ? (
-              <View
-                style={[
-                  styles.desktopWorkbench,
-                  { borderColor: colors.borderColor, backgroundColor: colors.bgSecondary },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.desktopWorkbenchPanel,
-                    { borderColor: colors.borderColor, backgroundColor: colors.bgCard },
-                  ]}
-                >
-                  <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
-                  <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
-                  <View style={[styles.searchRow, styles.searchRowDesktop]}>
-                    <View
-                      style={[
-                        styles.searchInput,
-                        { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
-                      ]}
-                    >
-                      <FontAwesome name="search" size={13} color={colors.textMuted} />
-                      <TextInput
-                        style={[styles.searchText, { color: colors.textPrimary }]}
-                        placeholder="Search ticker or name..."
-                        placeholderTextColor={colors.textMuted}
-                        value={search}
-                        onChangeText={setSearch}
-                        autoCapitalize="characters"
-                        returnKeyType="search"
-                      />
-                      {search.length > 0 && (
-                        <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                          <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-                  <View style={styles.filterBarWrap}>
-                    <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
-                  </View>
-                </View>
-
-                <View
-                  style={[
-                    styles.desktopWorkbenchPanel,
-                    styles.desktopWorkbenchAside,
-                    { borderColor: colors.borderColor, backgroundColor: colors.bgCard },
-                  ]}
-                >
-                  <Text style={[styles.desktopPanelTitle, { color: colors.textPrimary }]}>DESKTOP INSIGHTS</Text>
-                  <Text style={[styles.desktopPanelSubTitle, { color: colors.textMuted }]}>Higher density controls for analyst workflow.</Text>
-
-                  <View style={styles.desktopMetricsRow}>
-                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
-                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>VISIBLE</Text>
-                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{stocks.length}</Text>
-                    </View>
-                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
-                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>AVG CONF</Text>
-                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{`${avgVisibleConfidence}%`}</Text>
-                    </View>
-                    <View style={[styles.desktopMetricCard, { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary }]}>
-                      <Text style={[styles.desktopMetricLabel, { color: colors.textMuted }]}>HIDDEN</Text>
-                      <Text style={[styles.desktopMetricValue, { color: colors.textPrimary }]}>{hiddenStocks}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.desktopSortWrap}>
-                    <Text style={[styles.desktopSortLabel, { color: colors.textSecondary }]}>Quick sort</Text>
-                    <View style={styles.desktopSortButtons}>
-                      {DESKTOP_SORT_FIELDS.map((field) => {
-                        const active = sortBy === field;
-                        return (
-                          <Pressable
-                            key={field}
-                            onPress={() => toggleSort(field)}
-                            style={[
-                              styles.desktopSortButton,
-                              {
-                                borderColor: active ? colors.accentPrimary : colors.borderColor,
-                                backgroundColor: active ? colors.accentPrimary + "18" : colors.bgPrimary,
-                              },
-                            ]}
-                          >
-                            <Text style={[styles.desktopSortButtonText, { color: active ? colors.accentPrimary : colors.textPrimary }]}>
-                              {SORT_LABEL_BY_FIELD[field]}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {hasActiveFilters ? (
-                    <Pressable
-                      onPress={handleClearFilters}
-                      style={[
-                        styles.clearFiltersButton,
-                        styles.clearFiltersButtonDesktop,
-                        { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
-                      ]}
-                    >
-                      <FontAwesome name="times" size={12} color={colors.textMuted} />
-                      <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear All Filters</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
-            {!isDesktopWeb ? (
-              <View
-                style={[
-                  styles.filterPanel,
-                  { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
-                ]}
-              >
-              <View style={styles.filterPanelHeader}>
-                <View>
-                  <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
-                  <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
-                </View>
-                {hasActiveFilters ? (
-                  <Pressable
-                    onPress={handleClearFilters}
-                    style={[
-                      styles.clearFiltersButton,
-                      { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
-                    ]}
-                  >
-                    <FontAwesome name="times" size={12} color={colors.textMuted} />
-                    <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              <View style={styles.searchRow}>
-                <View
-                  style={[
-                    styles.searchInput,
-                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
-                  ]}
-                >
-                  <FontAwesome name="search" size={13} color={colors.textMuted} />
-                  <TextInput
-                    style={[styles.searchText, { color: colors.textPrimary }]}
-                    placeholder="Search ticker or name..."
-                    placeholderTextColor={colors.textMuted}
-                    value={search}
-                    onChangeText={setSearch}
-                    autoCapitalize="characters"
-                    returnKeyType="search"
-                  />
-                  {search.length > 0 && (
-                    <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                      <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
-                    </Pressable>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.filterBarWrap}>
-                {isDesktopWeb ? (
-                  <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
-                ) : (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.filterBar}
-                    nestedScrollEnabled
-                    directionalLockEnabled
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={styles.filterBarContent}
-                  >
-                    {renderFilterChips()}
-                  </ScrollView>
-                )}
-              </View>
-              </View>
-            ) : null}
-          </View>
-        </>
-      }
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching && !isLoading}
-          onRefresh={onRefresh}
-          tintColor={colors.accentPrimary}
-          colors={[colors.accentPrimary]}
-        />
-      }
-      keyboardShouldPersistTaps="handled"
-      nestedScrollEnabled
-      contentContainerStyle={[
-        styles.listContent,
-        { paddingBottom: insets.bottom + UITokens.spacing.lg },
-        stocks.length === 0 && styles.listEmpty,
-      ]}
-      style={isTableView ? styles.tableFlatList : undefined}
-      initialNumToRender={15}
-      maxToRenderPerBatch={15}
-      windowSize={5}
-    />
-  );
-
   return (
     <View
       style={[
         styles.root,
-        isDesktopWeb ? styles.rootDesktop : null,
-        { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 },
+        { backgroundColor: colors.bgPrimary, paddingTop: insets.top },
       ]}
     >
       {/* Header */}
       <View
         style={[
           styles.header,
-          isDesktopWeb ? styles.headerDesktop : null,
           { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
         ]}
       >
-        <View
-          style={[
-            styles.contentShell,
-            contentMaxWidth ? { maxWidth: contentMaxWidth } : null,
-          ]}
-        >
         <View style={styles.headerTop}>
           <View>
 
@@ -1487,31 +1077,12 @@ export default function EagleEyeScannerScreen() {
             ) : null}
 
             <Text style={[styles.countBadge, { color: colors.textMuted }]}>
-              {totalStocks > 0 ? `${stocks.length} of ${totalStocks} stocks` : `${stocks.length} stocks`}
+              {stocks.length} stocks
             </Text>
-
-            {hasActiveFilters && hiddenStocks > 0 ? (
-              <Pressable
-                onPress={handleClearFilters}
-                hitSlop={UITokens.hitSlop.sm}
-                style={[
-                  styles.showAllBtn,
-                  {
-                    borderColor: colors.accentPrimary + "66",
-                    backgroundColor: colors.accentPrimary + "16",
-                  },
-                ]}
-              >
-                <Text style={[styles.showAllBtnText, { color: colors.accentPrimary }]}>
-                  {`Show all ${totalStocks}`}
-                </Text>
-              </Pressable>
-            ) : null}
 
             <Pressable
               onPress={handleRunEagleEye}
               disabled={eeRefresh.isPending}
-              hitSlop={UITokens.hitSlop.sm}
               style={[
                 styles.eeRunBtn,
                 {
@@ -1539,15 +1110,12 @@ export default function EagleEyeScannerScreen() {
             </Pressable>
           </View>
         </View>
-        </View>
       </View>
 
       {showLoadingBanner ? (
         <View
           style={[
             styles.loadingBanner,
-            isDesktopWeb ? styles.loadingBannerDesktop : null,
-            contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center" } : null,
             { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
           ]}
         >
@@ -1585,25 +1153,147 @@ export default function EagleEyeScannerScreen() {
       <View
         style={[
           styles.tableCard,
-          isDesktopWeb ? styles.tableCardDesktop : null,
-          contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center" } : null,
           { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
         ]}
       >
-        {isTableView ? (
-          <ScrollView
-            horizontal
-            nestedScrollEnabled
-            directionalLockEnabled
-            keyboardShouldPersistTaps="handled"
-            style={styles.tableHorizontalScroll}
-            contentContainerStyle={styles.tableHorizontalContent}
-          >
-            {scannerList}
-          </ScrollView>
-        ) : (
-          scannerList
-        )}
+        <FlatList
+          data={listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
+          ListEmptyComponent={renderEmpty}
+          ListHeaderComponent={
+            <>
+              <EagleEyeTopTabs />
+
+              {mlBandsData?.enabled ? (
+                <MLDisclaimerBanner
+                  autoDisabled={mlDisplayState?.auto_disabled ?? false}
+                  disabledReason={mlDisplayState?.disabled_reason}
+                />
+              ) : mlDisplayState?.auto_disabled ? (
+                <MLDisclaimerBanner autoDisabled disabledReason={mlDisplayState.disabled_reason} />
+              ) : null}
+
+              <View style={styles.tableTopSection}>
+                <View style={styles.previewHeader}>
+                  <View style={styles.previewHeaderRow}>
+                    <View style={styles.previewHeaderCopy}>
+                      <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
+                      <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
+                        {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      testID="export-eagle-eye-scanner"
+                      onPress={handleExportScanner}
+                      style={[
+                        styles.exportButton,
+                        {
+                          backgroundColor: colors.accentPrimary + "18",
+                          borderColor: colors.accentPrimary + "55",
+                          opacity: stocks.length ? 1 : 0.5,
+                        },
+                      ]}
+                      disabled={!stocks.length}
+                    >
+                      <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
+                      <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>Export Excel</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.filterPanel,
+                    { backgroundColor: colors.accentPrimary + "08", borderColor: colors.borderColor },
+                  ]}
+                >
+                  <View style={styles.filterPanelHeader}>
+                    <View>
+                      <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
+                      <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
+                    </View>
+                    {hasActiveFilters ? (
+                      <Pressable
+                        onPress={handleClearFilters}
+                        style={[
+                          styles.clearFiltersButton,
+                          { borderColor: colors.borderColor, backgroundColor: colors.bgPrimary },
+                        ]}
+                      >
+                        <FontAwesome name="times" size={12} color={colors.textMuted} />
+                        <Text style={[styles.clearFiltersButtonText, { color: colors.textSecondary }]}>Clear</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.searchRow}>
+                    <View
+                      style={[
+                        styles.searchInput,
+                        { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor },
+                      ]}
+                    >
+                      <FontAwesome name="search" size={13} color={colors.textMuted} />
+                      <TextInput
+                        style={[styles.searchText, { color: colors.textPrimary }]}
+                        placeholder="Search ticker or name..."
+                        placeholderTextColor={colors.textMuted}
+                        value={search}
+                        onChangeText={setSearch}
+                        autoCapitalize="characters"
+                        returnKeyType="search"
+                      />
+                      {search.length > 0 && (
+                        <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                          <FontAwesome name="times-circle" size={14} color={colors.textMuted} />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={styles.filterBarWrap}>
+                    {isDesktopWeb ? (
+                      <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.filterBar}
+                        nestedScrollEnabled
+                        directionalLockEnabled
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={styles.filterBarContent}
+                      >
+                        {renderFilterChips()}
+                      </ScrollView>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching && !isLoading}
+              onRefresh={onRefresh}
+              tintColor={colors.accentPrimary}
+              colors={[colors.accentPrimary]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + UITokens.spacing.lg },
+            stocks.length === 0 && styles.listEmpty,
+          ]}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={5}
+        />
       </View>
     </View>
   );
@@ -1611,10 +1301,6 @@ export default function EagleEyeScannerScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  rootDesktop: {
-    width: "100%",
-    alignSelf: "stretch",
-  },
   header: {
     paddingHorizontal: UITokens.spacing.md,
     paddingVertical: UITokens.spacing.sm + 2,
@@ -1626,30 +1312,14 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  headerDesktop: {
-    paddingHorizontal: 8,
-  },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    flexWrap: "wrap",
-    rowGap: 8,
-  },
-  contentShell: {
-    width: "100%",
-    alignSelf: "center",
   },
   headerTitle: { fontSize: 20, fontWeight: "700" },
   updatedText: { fontSize: 11, marginTop: 1 },
-  headerRight: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 6,
-    flexShrink: 1,
-  },
+  headerRight: { alignItems: "flex-end", gap: 4 },
   regimeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1658,19 +1328,6 @@ const styles = StyleSheet.create({
   },
   regimeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4 },
   countBadge: { fontSize: 11, fontVariant: ["tabular-nums"] },
-  showAllBtn: {
-    borderRadius: UITokens.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === "web" ? 5 : 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: Platform.OS === "web" ? 26 : UITokens.touchTarget.mobile,
-  },
-  showAllBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
   tableCard: {
     flex: 1,
     marginHorizontal: UITokens.spacing.md,
@@ -1678,15 +1335,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     overflow: "hidden",
-  },
-  tableCardDesktop: {
-    width: "100%",
-    alignSelf: "stretch",
-    marginHorizontal: 0,
-    marginBottom: 0,
-    borderRadius: 0,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
   },
   loadingBanner: {
     marginHorizontal: UITokens.spacing.md,
@@ -1696,12 +1344,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
-  },
-  loadingBannerDesktop: {
-    marginHorizontal: 0,
-    borderRadius: 0,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
   },
   loadingBannerRow: {
     flexDirection: "row",
@@ -1747,84 +1389,6 @@ const styles = StyleSheet.create({
   },
   tableTopSection: {
     gap: 0,
-  },
-  desktopWorkbench: {
-    marginHorizontal: UITokens.spacing.md,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 10,
-    gap: 10,
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-  desktopWorkbenchPanel: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    flex: 1,
-  },
-  desktopWorkbenchAside: {
-    maxWidth: 420,
-    minWidth: 340,
-    gap: 10,
-  },
-  desktopPanelTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-  desktopPanelSubTitle: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  desktopMetricsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  desktopMetricCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  desktopMetricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.7,
-  },
-  desktopMetricValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    marginTop: 2,
-    fontVariant: ["tabular-nums"],
-  },
-  desktopSortWrap: {
-    gap: 6,
-  },
-  desktopSortLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  desktopSortButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  desktopSortButton: {
-    borderWidth: 1,
-    borderRadius: UITokens.radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  desktopSortButtonText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  clearFiltersButtonDesktop: {
-    alignSelf: "flex-start",
-    marginTop: 4,
   },
   previewHeader: {
     paddingHorizontal: UITokens.spacing.md,
@@ -1906,10 +1470,6 @@ const styles = StyleSheet.create({
   searchRow: {
     marginBottom: 2,
   },
-  searchRowDesktop: {
-    marginTop: 10,
-    marginBottom: 8,
-  },
   searchInput: {
     flexDirection: "row",
     alignItems: "center",
@@ -1970,46 +1530,11 @@ const styles = StyleSheet.create({
     zIndex: 8,
     elevation: 4,
   },
-  colHeaderTable: {
-    width: "100%",
-    minWidth: STOCK_TABLE_TOTAL_WIDTH,
-  },
-  tableHorizontalScroll: {
-    flex: 1,
-  },
-  tableHorizontalContent: {
-    width: "100%",
-    minWidth: STOCK_TABLE_TOTAL_WIDTH,
-  },
-  tableFlatList: {
-    width: "100%",
-    minWidth: STOCK_TABLE_TOTAL_WIDTH,
-  },
   colHeaderCell: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
-  },
-  colHeaderWithInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  colHeaderWithInfoRight: {
-    justifyContent: "flex-end",
-  },
-  colHeaderInfoIcon: {
-    fontSize: 10,
-    fontWeight: "700",
-    lineHeight: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    width: 13,
-    height: 13,
-    textAlign: "center",
-    textAlignVertical: "center",
-    opacity: 0.85,
   },
   colHeaderBtn: { paddingHorizontal: 2 },
   colHeaderSortBtn: { alignItems: "flex-end" },
@@ -2032,15 +1557,12 @@ const styles = StyleSheet.create({
   retryText: { fontWeight: "600", fontSize: 14 },
   eeRunBtn: {
     borderRadius: UITokens.radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "web" ? 5 : 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 56,
-    minHeight: Platform.OS === "web" ? 28 : UITokens.touchTarget.mobile,
+    minWidth: 52,
+    minHeight: 28,
   },
   eeRunBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  
-  // Desktop web gets a denser, data-rich view while mobile/tablet keeps compact card scanning.
-  // These breakpoints intentionally optimize readability and touch targets separately.
 });

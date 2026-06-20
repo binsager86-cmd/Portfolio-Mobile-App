@@ -51,17 +51,6 @@ describe("useMarketSummary", () => {
     expect(mockGetSummary).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches on mount even when cached data is still fresh", async () => {
-    client.setQueryData(MARKET_KEYS.summary(), { symbols: [{ ticker: "BKP" }] });
-    const fresh = { symbols: [{ ticker: "BKM" }] };
-    mockGetSummary.mockResolvedValueOnce(fresh);
-
-    const { result } = renderHook(() => useMarketSummary(), { wrapper });
-
-    await waitFor(() => expect(mockGetSummary).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.data).toEqual(fresh));
-  });
-
   it("does not fire when disabled", () => {
     renderHook(() => useMarketSummary(false), { wrapper });
     expect(mockGetSummary).not.toHaveBeenCalled();

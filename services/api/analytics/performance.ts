@@ -2,7 +2,6 @@
  * Performance, risk, snapshots & trading endpoints.
  */
 
-import { dedupeSnapshotsByDate } from "@/lib/historicalPerformanceData";
 import api from "../client";
 import type {
   PerformanceData,
@@ -29,21 +28,26 @@ function roundKwd(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+function asLooseRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
 function normalizeRealizedProfitDetail(detail: RealizedProfitDetail | Record<string, unknown>): RealizedProfitDetail {
-  const realizedPnlKwd = asFiniteNumber(detail.realized_pnl_kwd) ?? asFiniteNumber(detail.realizedPnlKwd) ?? 0;
+  const detailRecord = asLooseRecord(detail);
+  const realizedPnlKwd = asFiniteNumber(detail.realized_pnl_kwd) ?? asFiniteNumber(detailRecord.realizedPnlKwd) ?? 0;
   const explicitDividend =
     asFiniteNumber(detail.dividends_allocated_kwd) ??
-    asFiniteNumber(detail.dividendsAllocatedKwd) ??
-    asFiniteNumber(detail.cash_dividends_kwd) ??
-    asFiniteNumber(detail.cashDividendsKwd) ??
-    asFiniteNumber(detail.cash_dividend) ??
-    asFiniteNumber(detail.cashDividend) ??
-    asFiniteNumber(detail.dividend) ??
-    asFiniteNumber(detail.dividends_received_kwd) ??
-    asFiniteNumber(detail.dividendsReceivedKwd) ??
-    asFiniteNumber(detail.dividends_received) ??
-    asFiniteNumber(detail.dividendsReceived);
-  const rawNetPnlKwd = asFiniteNumber(detail.net_pnl_kwd) ?? asFiniteNumber(detail.netPnlKwd);
+    asFiniteNumber(detailRecord.dividendsAllocatedKwd) ??
+    asFiniteNumber(detailRecord.cash_dividends_kwd) ??
+    asFiniteNumber(detailRecord.cashDividendsKwd) ??
+    asFiniteNumber(detailRecord.cash_dividend) ??
+    asFiniteNumber(detailRecord.cashDividend) ??
+    asFiniteNumber(detailRecord.dividend) ??
+    asFiniteNumber(detailRecord.dividends_received_kwd) ??
+    asFiniteNumber(detailRecord.dividendsReceivedKwd) ??
+    asFiniteNumber(detailRecord.dividends_received) ??
+    asFiniteNumber(detailRecord.dividendsReceived);
+  const rawNetPnlKwd = asFiniteNumber(detail.net_pnl_kwd) ?? asFiniteNumber(detailRecord.netPnlKwd);
   const derivedDividend = rawNetPnlKwd != null ? roundKwd(rawNetPnlKwd - realizedPnlKwd) : undefined;
   const dividendsAllocatedKwd = roundKwd(explicitDividend ?? derivedDividend ?? 0);
   const netPnlKwd = roundKwd(rawNetPnlKwd ?? (realizedPnlKwd + dividendsAllocatedKwd));
@@ -51,13 +55,13 @@ function normalizeRealizedProfitDetail(detail: RealizedProfitDetail | Record<str
   return {
     ...(detail as RealizedProfitDetail),
     id: asFiniteNumber(detail.id) ?? 0,
-    symbol: typeof detail.symbol === "string" ? detail.symbol : typeof detail.stock_symbol === "string" ? detail.stock_symbol : "",
+    symbol: typeof detail.symbol === "string" ? detail.symbol : typeof detailRecord.stock_symbol === "string" ? detailRecord.stock_symbol : "",
     portfolio: typeof detail.portfolio === "string" ? detail.portfolio : "",
-    txn_date: typeof detail.txn_date === "string" ? detail.txn_date : typeof detail.txnDate === "string" ? detail.txnDate : "",
+    txn_date: typeof detail.txn_date === "string" ? detail.txn_date : typeof detailRecord.txnDate === "string" ? detailRecord.txnDate : "",
     shares: asFiniteNumber(detail.shares) ?? 0,
-    sell_value: asFiniteNumber(detail.sell_value) ?? asFiniteNumber(detail.sellValue) ?? 0,
-    avg_cost_at_txn: asFiniteNumber(detail.avg_cost_at_txn) ?? asFiniteNumber(detail.avgCostAtTxn) ?? 0,
-    realized_pnl: asFiniteNumber(detail.realized_pnl) ?? asFiniteNumber(detail.realizedPnl) ?? realizedPnlKwd,
+    sell_value: asFiniteNumber(detail.sell_value) ?? asFiniteNumber(detailRecord.sellValue) ?? 0,
+    avg_cost_at_txn: asFiniteNumber(detail.avg_cost_at_txn) ?? asFiniteNumber(detailRecord.avgCostAtTxn) ?? 0,
+    realized_pnl: asFiniteNumber(detail.realized_pnl) ?? asFiniteNumber(detailRecord.realizedPnl) ?? realizedPnlKwd,
     realized_pnl_kwd: roundKwd(realizedPnlKwd),
     dividends_allocated_kwd: dividendsAllocatedKwd,
     net_pnl_kwd: netPnlKwd,
@@ -67,18 +71,19 @@ function normalizeRealizedProfitDetail(detail: RealizedProfitDetail | Record<str
 }
 
 function normalizeRealizedProfit(data: RealizedProfitData | Record<string, unknown>): RealizedProfitData {
+  const dataRecord = asLooseRecord(data);
   const details = Array.isArray(data.details)
     ? data.details.map((detail) => normalizeRealizedProfitDetail(detail as RealizedProfitDetail | Record<string, unknown>))
     : [];
 
   return {
     ...(data as RealizedProfitData),
-    total_realized_kwd: roundKwd(asFiniteNumber(data.total_realized_kwd) ?? asFiniteNumber(data.totalRealizedKwd) ?? 0),
-    total_profit_kwd: roundKwd(asFiniteNumber(data.total_profit_kwd) ?? asFiniteNumber(data.totalProfitKwd) ?? 0),
-    total_loss_kwd: roundKwd(asFiniteNumber(data.total_loss_kwd) ?? asFiniteNumber(data.totalLossKwd) ?? 0),
+    total_realized_kwd: roundKwd(asFiniteNumber(data.total_realized_kwd) ?? asFiniteNumber(dataRecord.totalRealizedKwd) ?? 0),
+    total_profit_kwd: roundKwd(asFiniteNumber(data.total_profit_kwd) ?? asFiniteNumber(dataRecord.totalProfitKwd) ?? 0),
+    total_loss_kwd: roundKwd(asFiniteNumber(data.total_loss_kwd) ?? asFiniteNumber(dataRecord.totalLossKwd) ?? 0),
     total_dividends_allocated_kwd: roundKwd(
       asFiniteNumber(data.total_dividends_allocated_kwd) ??
-        asFiniteNumber(data.totalDividendsAllocatedKwd) ??
+        asFiniteNumber(dataRecord.totalDividendsAllocatedKwd) ??
         details.reduce((sum, detail) => sum + (detail.dividends_allocated_kwd ?? 0), 0),
     ),
     details,
@@ -147,14 +152,7 @@ export async function getSnapshots(params?: {
     "/api/v1/analytics/snapshots",
     { params }
   );
-  const normalized = dedupeSnapshotsByDate(data.data.snapshots).sort((a, b) =>
-    b.snapshot_date.localeCompare(a.snapshot_date),
-  );
-  return {
-    ...data.data,
-    snapshots: normalized,
-    count: normalized.length,
-  };
+  return data.data;
 }
 
 // ── Trading ─────────────────────────────────────────────────────────

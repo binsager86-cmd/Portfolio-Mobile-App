@@ -10,22 +10,15 @@
 
 import { ConfluenceBar } from "@/components/eagle-eye/ConfluenceBar";
 import { EagleEyeChart } from "@/components/eagle-eye/EagleEyeChart";
-import { BadgeHelpTooltip } from "@/components/eagle-eye/BadgeHelpTooltip";
 import { RatingBadge } from "@/components/eagle-eye/RatingBadge";
 import { SafetyConfirmModal } from "@/components/eagle-eye/SafetyConfirmModal";
 import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
 import { TradePlanCard } from "@/components/eagle-eye/TradePlanCard";
 import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
-import { getActionInterpretation } from "@/components/eagle-eye/actionInterpretation";
-import {
-  EE,
-  getRatingConfidenceDescription,
-  STAGE_INTERPRETATIONS,
-} from "@/constants/eagleEyeStrings";
+import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
-import { useEagleEyeScanner, useEagleEyeStock, useEagleEyeDnaRecentBars } from "@/hooks/useEagleEye";
-import { useResponsive } from "@/hooks/useResponsive";
+import { useEagleEyeStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -33,32 +26,21 @@ import React, { useCallback, useEffect, useState } from "react";
 import EagleEyeDnaScreen from "./[ticker]-dna";
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// ── Responsive layout constants ─────────────────────────────────────────────
-/** Phones narrower than this threshold get the compact vertical hero layout. */
-const NARROW_PHONE_BREAKPOINT = 420;
-/** Chart height on narrow phones — keeps the page from feeling too chart-heavy. */
-const CHART_HEIGHT_NARROW = 280;
-/** Chart height on wider phones and tablets. */
-const CHART_HEIGHT_NORMAL = 340;
 
 export default function EagleEyeDetailScreen() {
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const { colors } = useThemeStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { showSidebar } = useResponsive();
-  const { width: screenWidth } = useWindowDimensions();
-  // Breakpoint: phones narrower than NARROW_PHONE_BREAKPOINT get compact hero layout
-  const isNarrow = screenWidth < NARROW_PHONE_BREAKPOINT;
 
   // Expo Router v6 sometimes routes [ticker]-dna URLs here instead of to
   // [ticker]-dna.tsx because fully-dynamic [ticker].tsx wins the match.
@@ -69,17 +51,12 @@ export default function EagleEyeDetailScreen() {
 
   const { data, isLoading, isError, refetch } = useEagleEyeStock(t, 0, !isDnaRoute);
   const analysis = data?.data;
-  const { data: scannerData } = useEagleEyeScanner(undefined, !isDnaRoute);
-  // Fetch recent OHLCV bars for the candlestick chart only after core
-  // analysis loads, so detail page becomes interactive faster.
-  const { data: recentBarsData } = useEagleEyeDnaRecentBars(
-    t,
-    !isDnaRoute && !!t && !isLoading && !!analysis,
-  );
 
   // Safety modal — auto-show when requires_confirmation
   const [safetyVisible, setSafetyVisible] = useState(false);
   const [safetyDismissed, setSafetyDismissed] = useState(false);
+  // Stage tooltip (web hover)
+  const [stageTooltipVisible, setStageTooltipVisible] = useState(false);
 
   useEffect(() => {
     if (analysis?.requires_confirmation && !safetyDismissed) {
@@ -106,7 +83,7 @@ export default function EagleEyeDetailScreen() {
   // ── Loading state ────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
         <BackHeader title={t} colors={colors} />
         <View style={styles.centred}>
           <ActivityIndicator color={colors.accentPrimary} size="large" />
@@ -117,7 +94,7 @@ export default function EagleEyeDetailScreen() {
 
   if (isError || !analysis) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
         <BackHeader title={t} colors={colors} />
         <View style={styles.centred}>
           <FontAwesome name="exclamation-triangle" size={28} color={colors.danger} />
@@ -136,28 +113,10 @@ export default function EagleEyeDetailScreen() {
   }
 
   const stageInterpretation = STAGE_INTERPRETATIONS[analysis.stage];
-  const scannerRow = scannerData?.stocks?.find((stock) => stock.ticker === analysis.ticker);
-  const actionInterpretation = getActionInterpretation({
-    rating: analysis.rating,
-    continue_rising: analysis.continue_rising,
-    continue_rising_exhaustion_count:
-      analysis.continue_rising_exhaustion_count
-      ?? scannerRow?.continue_rising_exhaustion_count
-      ?? null,
-    risk_warning_score:
-      analysis.risk_warning_score
-      ?? scannerRow?.risk_warning_score
-      ?? null,
-    risky_near_resistance:
-      analysis.risky_near_resistance ?? scannerRow?.risky_near_resistance ?? null,
-    risk_reward_ratio: analysis.risk_reward_ratio ?? null,
-    close: analysis.last_price ?? scannerRow?.last_price ?? null,
-    stage: analysis.stage,
-  });
 
   return (
     <View
-      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}
+      style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}
     >
       <BackHeader title={analysis.ticker} colors={colors} />
 
@@ -175,14 +134,9 @@ export default function EagleEyeDetailScreen() {
             { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
           ]}
         >
-          <View style={[styles.heroTop, isNarrow && styles.heroTopNarrow]}>
-            <View style={[styles.heroLeft, isNarrow && styles.heroLeftNarrow]}>
-              <Text
-                style={[
-                  styles.heroTicker,
-                  { color: colors.textPrimary, fontSize: isNarrow ? 21 : 26 },
-                ]}
-              >
+          <View style={styles.heroTop}>
+            <View style={styles.heroLeft}>
+              <Text style={[styles.heroTicker, { color: colors.textPrimary }]}>
                 {analysis.ticker}
               </Text>
               <Text style={[styles.heroName, { color: colors.textMuted }]} numberOfLines={1}>
@@ -192,24 +146,50 @@ export default function EagleEyeDetailScreen() {
                 {analysis.sector}
               </Text>
             </View>
-            <View style={[styles.heroRight, isNarrow && styles.heroRightNarrow]}>
+            <View style={styles.heroRight}>
               <RatingBadge rating={analysis.rating} />
               <View style={styles.stageRow}>
-                <StageTag
-                  stage={analysis.stage}
-                  size="sm"
-                  variant={isNarrow ? "short" : "full"}
-                />
+                <StageTag stage={analysis.stage} size="sm" variant="full" />
+                {Platform.OS !== "web" ? (
+                  <Pressable
+                    onPress={() =>
+                      Alert.alert(
+                        getStageLabelFull(analysis.stage),
+                        getStageDescription(analysis.stage),
+                      )
+                    }
+                    hitSlop={8}
+                    style={({ pressed }: any) => ({ opacity: pressed ? 0.5 : 1 })}
+                  >
+                    <FontAwesome name="info-circle" size={14} color={colors.textMuted} />
+                  </Pressable>
+                ) : (
+                  <View
+                    {...({
+                      onMouseEnter: () => setStageTooltipVisible(true),
+                      onMouseLeave: () => setStageTooltipVisible(false),
+                    } as any)}
+                    style={{ position: "relative" }}
+                  >
+                    <FontAwesome name="info-circle" size={14} color={colors.textMuted} />
+                    {stageTooltipVisible && (
+                      <View
+                        style={[
+                          styles.stageTooltip,
+                          { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+                        ]}
+                      >
+                        <Text style={[styles.stageTooltipText, { color: colors.textSecondary }]}>
+                          {getStageDescription(analysis.stage)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
-              <BadgeHelpTooltip
-                title={`${analysis.confidence.toFixed(0)}% Confidence`}
-                body={getRatingConfidenceDescription(analysis.rating, analysis.confidence)}
-                align="right"
-              >
-                <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
-                  {analysis.confidence.toFixed(0)}% confidence
-                </Text>
-              </BadgeHelpTooltip>
+              <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
+                {analysis.confidence.toFixed(0)}% confidence
+              </Text>
             </View>
           </View>
 
@@ -228,23 +208,18 @@ export default function EagleEyeDetailScreen() {
               </Text>
             </View>
           ) : null}
-
-          <View style={[styles.meaningBox, { backgroundColor: colors.bgCardHover }]}>
-            <Text style={[styles.meaningLabel, { color: colors.textSecondary }]}>What this means</Text>
-            <Text style={[styles.meaningAction, { color: colors.textPrimary }]}>{actionInterpretation.action}</Text>
-            <Text style={[styles.meaningDetail, { color: colors.textMuted }]}>{actionInterpretation.detail}</Text>
-          </View>
         </View>
 
         {/* ── Chart ─────────────────────────────────────────────────────────── */}
-        {(recentBarsData?.bars?.length || analysis?.last_price != null) && (
+        {analysis.last_price != null && (
           <View style={styles.section}>
             <EagleEyeChart
-              bars={recentBarsData?.bars ?? []}
-              supports={analysis?.supports ?? []}
-              resistances={analysis?.resistances ?? []}
-              lastPrice={analysis?.last_price}
-              height={isNarrow ? CHART_HEIGHT_NARROW : CHART_HEIGHT_NORMAL}
+              prices={[analysis.last_price]} // real charts need OHLCV endpoint (future)
+              supports={analysis.supports ?? []}
+              resistances={analysis.resistances ?? []}
+              lastPrice={analysis.last_price}
+              width={360}
+              height={120}
             />
           </View>
         )}
@@ -405,38 +380,36 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  // On narrow phones, stack the info blocks vertically so neither side is squeezed.
-  heroTopNarrow: {
-    flexWrap: "wrap",
-    gap: UITokens.spacing.sm,
-  },
   heroLeft: {
     flex: 1,
     gap: 4,
-    paddingRight: UITokens.spacing.sm,
-  },
-  // On narrow phones heroLeft fills the full row before heroRight wraps below.
-  heroLeftNarrow: {
-    width: "100%",
-    flexShrink: 0,
-    paddingRight: 0,
   },
   heroRight: {
     alignItems: "flex-end",
     gap: 6,
-    flexShrink: 0,
-  },
-  // On narrow phones heroRight aligns to the leading edge to avoid orphaned padding.
-  heroRightNarrow: {
-    alignSelf: "flex-start",
-    alignItems: "flex-start",
   },
   stageRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
   },
+  stageTooltip: {
+    position: "absolute",
+    right: 0,
+    top: 20,
+    width: 220,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    zIndex: 100,
+    ...UITokens.shadows.card,
+  },
+  stageTooltipText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
   heroTicker: {
+    fontSize: 26,
     fontWeight: "800",
     letterSpacing: 1,
   },
@@ -462,25 +435,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontStyle: "italic",
-  },
-  meaningBox: {
-    borderRadius: UITokens.radius.sm,
-    padding: UITokens.spacing.sm,
-    gap: 4,
-  },
-  meaningLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  meaningAction: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  meaningDetail: {
-    fontSize: 12,
-    lineHeight: 18,
   },
   section: {
     gap: UITokens.spacing.sm,

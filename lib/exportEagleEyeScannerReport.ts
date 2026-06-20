@@ -313,8 +313,7 @@ async function buildWorkbook(input: EagleEyeScannerReportInput): Promise<Uint8Ar
       cell.t = "n";
       let numFmt = "#,##0.000";
       if (c === 6) numFmt = "0.0";
-      if (c === 12 || c === 13) numFmt = "0.00";
-      if (c === 11) numFmt = "0.00";
+      if (c === 11 || c === 12 || c === 13) numFmt = "0.00";
       cell.s = {
         ...textStyle,
         numFmt,
@@ -355,7 +354,8 @@ export async function exportEagleEyeScannerReport(input: EagleEyeScannerReportIn
   const filename = `eagle_eye_scanner_${todayISO()}.xlsx`;
 
   if (Platform.OS === "web") {
-    const blob = new Blob([workbook], {
+    const blobBytes = Uint8Array.from(workbook);
+    const blob = new Blob([blobBytes.buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     const url = URL.createObjectURL(blob);
