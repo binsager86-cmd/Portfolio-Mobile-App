@@ -255,7 +255,7 @@ const TRIGGER_CONFIG: Record<string, { bg: string; border: string; color: string
   HOLD: {
     bg: "#94a3b818", border: "#94a3b8", color: "#94a3b8",
     icon: "clock-o", label: "HOLD — NOT YET",
-    hint: "No entry trigger detected. Wait for price action confirmation before buying.",
+    hint: "No entry trigger detected. Wait for price action confirmation before entering.",
   },
 };
 
@@ -571,6 +571,8 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
     if (sym) setTicker(sym);
   }
 
+  const hasLoadedSignal = !!signal && !isLoading;
+
   return (
     <ScrollView
       contentContainerStyle={[styles.container, { paddingBottom: 80 }]}
@@ -655,10 +657,10 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
       )}
 
       {/* ── Signal output ─────────────────────────────────── */}
-      {signal && !isLoading && <SignalOutput signal={signal} colors={colors} />}
+      {hasLoadedSignal && <SignalOutput signal={signal} colors={colors} />}
 
       {/* ── Empty state ───────────────────────────────────── */}
-      {!ticker && !isLoading && (
+      {!ticker && !signal && !isLoading && !isError && (
         <View style={styles.emptyState}>
           <FontAwesome name="line-chart" size={40} color={colors.accentPrimary + "60"} />
           <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>
@@ -681,6 +683,37 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
   const p = signal.probabilities;
   const raw = c.raw_sub_scores as KuwaitSignalSubScores;
   const adj = c.sub_scores as KuwaitSignalSubScores;
+  const isBuySignal = signal.signal === "BUY" || signal.signal === "STRONG_BUY";
+  const isSellSignal = signal.signal === "SELL";
+  const isDirectionalSignal = isBuySignal || isSellSignal;
+  const entryLabel = isSellSignal ? "Sell Between" : "Buy Between";
+  const entryHint = isSellSignal
+    ? "Place a limit sell order in this price range"
+    : "Place a limit buy order in this price range";
+  const stopLabel = isSellSignal
+    ? "🛑 Stop Loss — Exit If Rises Above"
+    : "🛑 Stop Loss — Exit If Falls Below";
+  const stopHint = isSellSignal
+    ? "Cover immediately if price rises through this level. It limits your short-side risk."
+    : "Set this as a sell order immediately after buying. Limits your loss.";
+  const tp1Hint = isSellSignal
+    ? "Cover HALF the position here — lock in profits early"
+    : "Sell HALF your shares here — lock in profits early";
+  const tp2Hint = isSellSignal
+    ? "Cover the REMAINING position here — your maximum profit target"
+    : "Sell REMAINING shares here — your maximum profit";
+  const tp3Hint = isSellSignal
+    ? "Bonus cover target — only pursue if downside momentum stays strong"
+    : "Bonus target — only pursue if momentum is very strong";
+  const tp1Description = isSellSignal
+    ? "Based on 1.5× your risk. Shorts usually aim to cover part of the position here first."
+    : "Based on 1.5× your risk. Statistically, this target is hit more often than TP2.";
+  const tp2Description = isSellSignal
+    ? "Based on 3.0× your risk. Lower chance, but a deeper downside move if the selloff continues."
+    : "Based on 3.0× your risk. Lower chance but bigger reward if reached.";
+  const tp3Description = isSellSignal
+    ? "Based on 4.0× your risk using Fibonacci extensions and deeper support pockets."
+    : "Based on 4.0× your risk using Fibonacci extensions and 52-week extremes.";
 
   const entryMid =
     e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
@@ -715,23 +748,23 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </View>
 
       {/* ── Entry Trigger ──────────────────────────────────────── */}
-      {signal.entry_trigger && (
+      {isBuySignal && signal.entry_trigger && (
         <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
-      <PriceLadder signal={signal} colors={colors} />
+      {isDirectionalSignal && <PriceLadder signal={signal} colors={colors} />}
 
       {/* ── Execution levels ─────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
+      {isDirectionalSignal && (
         <SectionCard
           title="📋 Your Trade Plan"
-          subtitle="Exactly where to buy, where to exit if wrong, and where to take profits"
+          subtitle="Exactly where to enter, where to exit if wrong, and where to take profits"
           colors={colors}
         >
           <Row
-            label="Buy Between"
-            hint="Place a limit order in this price range"
+            label={entryLabel}
+            hint={entryHint}
             value={
               e.entry_zone_fils[0] != null
                 ? `${e.entry_zone_fils[0]?.toFixed(1)} – ${e.entry_zone_fils[1]?.toFixed(1)} fils`
@@ -741,8 +774,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
             colors={colors}
           />
           <Row
-            label="🛑 Stop Loss — Exit If Falls Below"
-            hint="Set this as a sell order immediately after buying. Limits your loss."
+            label={stopLabel}
+            hint={stopHint}
             value={fmtFils(e.stop_loss_fils)}
             valueColor="#ef4444"
             colors={colors}
@@ -750,8 +783,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           <TPTargetCard
             icon="✅"
             label="First Target (TP1)"
-            hint="Sell HALF your shares here — lock in profits early"
-            description="Based on 1.5× your risk. Statistically, this target is hit more often than TP2."
+            hint={tp1Hint}
+            description={tp1Description}
             price={e.tp1_fils}
             probability={p.p_tp1_before_sl}
             gainFils={entryMid != null && e.tp1_fils != null ? Math.abs(e.tp1_fils - entryMid) : null}
@@ -762,8 +795,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           <TPTargetCard
             icon="🎯"
             label="Full Target (TP2)"
-            hint="Sell REMAINING shares here — your maximum profit"
-            description="Based on 3.0× your risk. Lower chance but bigger reward if reached."
+            hint={tp2Hint}
+            description={tp2Description}
             price={e.tp2_fils}
             probability={p.p_tp2_before_sl}
             gainFils={entryMid != null && e.tp2_fils != null ? Math.abs(e.tp2_fils - entryMid) : null}
@@ -775,8 +808,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
             <TPTargetCard
               icon="🚀"
               label="Aggressive Target (TP3)"
-              hint="Bonus target — only pursue if momentum is very strong"
-              description="Based on 4.0× your risk using Fibonacci extensions and 52-week extremes."
+              hint={tp3Hint}
+              description={tp3Description}
               price={e.tp3_fils}
               probability={null}
               gainFils={entryMid != null ? Math.abs(e.tp3_fils - entryMid) : null}
@@ -795,13 +828,21 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       )}
 
       {/* ── Win chances ──────────────────────────────────────── */}
-      <SectionCard
-        title="🎲 Probability — What Are the Chances?"
-        subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
-        colors={colors}
-      >
-        <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
-      </SectionCard>
+      {isDirectionalSignal && (
+        <SectionCard
+          title="🎲 Probability — What Are the Chances?"
+          subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
+          colors={colors}
+        >
+          <WinChancesBlock
+            p={p}
+            riskPerShare={r.risk_per_share_fils}
+            entryMid={entryMid}
+            signalDir={isSellSignal ? "SELL" : "BUY"}
+            colors={colors}
+          />
+        </SectionCard>
+      )}
 
       {/* ── Rich S/R Map ─────────────────────────────────────── */}
       {signal.confluence_details.rich_sr && (
@@ -999,62 +1040,64 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </SectionCard>
 
       {/* ── Position sizing ───────────────────────────────────── */}
-      <SectionCard
-        title="💰 Risk & Position Sizing"
-        subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
-        colors={colors}
-      >
-        <Row
-          label="Suggested Position Size"
-          hint="Percentage of your total account to allocate to this trade"
-          value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
+      {isDirectionalSignal && (
+        <SectionCard
+          title="💰 How Much to Invest"
+          subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
           colors={colors}
-        />
-        <Row
-          label="Profit vs Risk Ratio"
-          hint="For every 1 fil you risk, you could potentially make this much"
-          value={
-            r.risk_reward_ratio != null
-              ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
-              : "—"
-          }
-          valueColor={
-            (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
-              : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
-              : "#ef4444"
-          }
-          colors={colors}
-        />
-        <Row
-          label="Max Loss per Share"
-          hint="If stop loss is hit, this is how many fils you lose per share"
-          value={fmtFils(r.risk_per_share_fils)}
-          valueColor="#ef444499"
-          colors={colors}
-        />
-        <Row
-          label="Worst-Case Daily Loss"
-          hint="Statistical worst single day loss — happens in about 5% of cases"
-          value={fmtFils(r.cvar_95_fils)}
-          valueColor="#ef444499"
-          colors={colors}
-        />
-        <Row
-          label="Ease of Trading (Liquidity)"
-          hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
-          value={
-            r.liquidity_adjustment_factor != null
-              ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
-              : "—"
-          }
-          valueColor={
-            (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
-              : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
-              : "#ef4444"
-          }
-          colors={colors}
-        />
-      </SectionCard>
+        >
+          <Row
+            label="Suggested Position Size"
+            hint="Percentage of your total account to allocate to this trade"
+            value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
+            colors={colors}
+          />
+          <Row
+            label="Profit vs Risk Ratio"
+            hint="For every 1 fil you risk, you could potentially make this much"
+            value={
+              r.risk_reward_ratio != null
+                ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
+                : "—"
+            }
+            valueColor={
+              (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
+                : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
+                : "#ef4444"
+            }
+            colors={colors}
+          />
+          <Row
+            label="Max Loss per Share"
+            hint="If stop loss is hit, this is how many fils you lose per share"
+            value={fmtFils(r.risk_per_share_fils)}
+            valueColor="#ef444499"
+            colors={colors}
+          />
+          <Row
+            label="Worst-Case Daily Loss"
+            hint="Statistical worst single day loss — happens in about 5% of cases"
+            value={fmtFils(r.cvar_95_fils)}
+            valueColor="#ef444499"
+            colors={colors}
+          />
+          <Row
+            label="Ease of Trading (Liquidity)"
+            hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
+            value={
+              r.liquidity_adjustment_factor != null
+                ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
+                : "—"
+            }
+            valueColor={
+              (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
+                : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
+                : "#ef4444"
+            }
+            colors={colors}
+          />
+        </SectionCard>
+      )}
 
       {/* ── Alerts ───────────────────────────────────────────── */}
       {signal.alerts.length > 0 && (
@@ -1199,11 +1242,13 @@ function WinChancesBlock({
   p,
   riskPerShare,
   entryMid,
+  signalDir,
   colors,
 }: {
   p: KuwaitSignal["probabilities"];
   riskPerShare: number | null;
   entryMid: number | null;
+  signalDir: "BUY" | "SELL";
   colors: ThemePalette;
 }) {
   const ci = p.confidence_interval_95;
@@ -1242,10 +1287,10 @@ function WinChancesBlock({
             ? `${isPos ? "+" : ""}${expectedFils.toFixed(1)} fils`
             : "—"}
         </Text>
-        {/* Secondary: as % of buy price */}
+        {/* Secondary: as % of entry price */}
         {expectedPct != null && (
           <Text style={[{ fontSize: 11, fontWeight: "700", color: retColor, marginTop: 1 }]}>
-            ({isPos ? "+" : ""}{expectedPct.toFixed(2)}% of buy price)
+            ({isPos ? "+" : ""}{expectedPct.toFixed(2)}% of entry price)
           </Text>
         )}
         <Text style={[styles.winChancesLabel, { color: colors.textMuted, marginTop: 4 }]}>
@@ -1308,6 +1353,8 @@ function humaniseAlert(raw: string): string {
     return "⏰ This signal is too old (over 72 hours). Wait for a fresh signal before trading.";
   if (raw.includes("Major resistance"))
     return "⛔ A strong resistance level is very close above the entry — not enough room for profit. Signal blocked.";
+  if (raw.includes("Major support"))
+    return "⛔ A strong support level is very close below the entry — not enough room for downside profit. Signal blocked.";
   if (raw.includes("Extended neutral"))
     return "📉 The market has been moving sideways for a long time. Momentum signals may give false readings.";
   if (raw.includes("Bear-regime"))

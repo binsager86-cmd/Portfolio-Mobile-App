@@ -208,7 +208,7 @@ describe("fmtFils helper", () => {
   it("shows — for null stop loss", () => {
     renderWithSignal(makeSignal({ execution: { ...makeSignal().execution, stop_loss_fils: null } }));
     // Stop Loss row should show —
-    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
 
@@ -241,12 +241,12 @@ describe("Expected return display math", () => {
     expect(screen.getByText(/\+5\.5 fils/)).toBeTruthy();
   });
 
-  it("shows % of buy price as secondary line", () => {
+  it("shows % of entry price as secondary line", () => {
     // entryMid = (460 + 465) / 2 = 462.5 fils
     // expectedFils = 0.44 * 12.5 = 5.5 fils
     // pct = 5.5 / 462.5 * 100 = 1.189...%
     renderWithSignal(makeSignal());
-    expect(screen.getByText(/\+1\.19% of buy price/)).toBeTruthy();
+    expect(screen.getByText(/\+1\.19% of entry price/)).toBeTruthy();
   });
 
   it("shows negative fils for negative R-multiple", () => {
