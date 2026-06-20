@@ -141,7 +141,7 @@ export default function EagleEyeScannerScreen() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
-  const isTableView = isDesktopWeb;
+  const isTableView = isWeb && viewportWidth >= 768;
 
   const fetchEnabled = true;
 
