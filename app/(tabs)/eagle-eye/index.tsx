@@ -22,7 +22,6 @@ import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -130,7 +129,6 @@ export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
-  const isFocused = useIsFocused();
 
   const [minConfidence, setMinConfidence] = useState(0);
   const [search, setSearch] = useState("");
@@ -145,13 +143,7 @@ export default function EagleEyeScannerScreen() {
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isDesktopWeb;
 
-  const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
-  useEffect(() => {
-    if (isFocused) {
-      setHasFocusedOnce(true);
-    }
-  }, [isFocused]);
-  const fetchEnabled = hasFocusedOnce || isFocused;
+  const fetchEnabled = true;
 
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);
