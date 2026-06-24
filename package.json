@@ -2,5 +2,11 @@
   "dependencies": {
     "expo-notifications": "^55.0.20",
     "react-native-gifted-charts": "^1.4.76"
+  },
+  "scripts": {
+    "web": "npm --prefix mobile-migration/mobile-app run web",
+    "mobile:start": "npm --prefix mobile-migration/mobile-app run start",
+    "mobile:typecheck": "npm --prefix mobile-migration/mobile-app run typecheck",
+    "backend:dev": "mobile-migration/.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8004 --app-dir mobile-migration/backend-api"
   }
 }
