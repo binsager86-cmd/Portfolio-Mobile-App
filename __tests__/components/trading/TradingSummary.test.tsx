@@ -250,6 +250,26 @@ describe("TradingSummaryCards", () => {
     });
   });
 
+  it("triggers recalculation from the realized transactions header", async () => {
+    const onRecalculate = jest.fn().mockResolvedValue(undefined);
+
+    render(
+      <TradingSummaryCards
+        summary={summary}
+        realizedData={realizedData}
+        activeTab="realizedTransactions"
+        onTabChange={() => undefined}
+        onRecalculate={onRecalculate}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId("recalculate-realized-transactions"));
+
+    await waitFor(() => {
+      expect(onRecalculate).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("renders derived dividends when the API row only provides net P&L", async () => {
     const realizedFromApi = {
       total_realized_kwd: 55,

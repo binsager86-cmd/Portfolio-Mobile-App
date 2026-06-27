@@ -8,7 +8,7 @@ import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 export type SummaryTab = "capitalFlow" | "realizedTransactions";
 
@@ -66,6 +66,8 @@ export function TradingSummaryCards({
   realizedData,
   activeTab,
   onTabChange,
+  onRecalculate,
+  isRecalculating = false,
 }: {
   summary: TradingSummary;
   dateFrom?: string;
@@ -73,6 +75,8 @@ export function TradingSummaryCards({
   realizedData?: RealizedProfitData | null;
   activeTab: SummaryTab;
   onTabChange: (tab: SummaryTab) => void;
+  onRecalculate?: () => Promise<void> | void;
+  isRecalculating?: boolean;
 }) {
   const { colors } = useThemeStore();
   const { isPhone } = useResponsive();
@@ -344,6 +348,15 @@ export function TradingSummaryCards({
     }
   };
 
+  const handleRecalculate = async () => {
+    if (!onRecalculate) return;
+    try {
+      await onRecalculate();
+    } catch (error) {
+      Alert.alert("Recalculate Failed", error instanceof Error ? error.message : "Could not refresh realized calculations.");
+    }
+  };
+
   return (
     <View style={styles.wrapper}>
       <View style={[styles.periodBadge, { backgroundColor: colors.accentPrimary + "12", borderColor: colors.accentPrimary + "30" }]}>
@@ -438,24 +451,53 @@ export function TradingSummaryCards({
                     })}
                   </Text>
                 </View>
-                <Pressable
-                  testID="export-realized-transactions"
-                  onPress={handleExportRealized}
-                  style={[
-                    styles.exportButton,
-                    {
-                      backgroundColor: colors.accentPrimary + "18",
-                      borderColor: colors.accentPrimary + "55",
-                      opacity: realizedTransactions.length ? 1 : 0.5,
-                    },
-                  ]}
-                  disabled={!realizedTransactions.length}
-                >
-                  <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
-                  <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>
-                    {t("trading.exportExcel", "Export Excel")}
-                  </Text>
-                </Pressable>
+                <View style={styles.headerActions}>
+                  {onRecalculate ? (
+                    <Pressable
+                      testID="recalculate-realized-transactions"
+                      onPress={handleRecalculate}
+                      style={[
+                        styles.exportButton,
+                        {
+                          backgroundColor: colors.accentSecondary + "18",
+                          borderColor: colors.accentSecondary + "55",
+                          opacity: isRecalculating ? 0.6 : 1,
+                        },
+                      ]}
+                      disabled={isRecalculating}
+                    >
+                      {isRecalculating ? (
+                        <ActivityIndicator size="small" color={colors.accentSecondary} />
+                      ) : (
+                        <FontAwesome name="refresh" size={14} color={colors.accentSecondary} />
+                      )}
+                      <Text style={[styles.exportButtonText, { color: colors.accentSecondary }]}>
+                        {isRecalculating
+                          ? t("trading.recalculating", "Recalculating...")
+                          : t("trading.recalculateWAC", "Recalculate")}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  <Pressable
+                    testID="export-realized-transactions"
+                    onPress={handleExportRealized}
+                    style={[
+                      styles.exportButton,
+                      {
+                        backgroundColor: colors.accentPrimary + "18",
+                        borderColor: colors.accentPrimary + "55",
+                        opacity: realizedTransactions.length ? 1 : 0.5,
+                      },
+                    ]}
+                    disabled={!realizedTransactions.length}
+                  >
+                    <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
+                    <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>
+                      {t("trading.exportExcel", "Export Excel")}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
 
@@ -699,6 +741,13 @@ const styles = StyleSheet.create({
   },
   previewHeaderCopy: {
     flexGrow: 1,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
   },
   exportButton: {
     flexDirection: "row",

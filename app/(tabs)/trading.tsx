@@ -98,7 +98,15 @@ function TradingScreen() {
   const hasActiveFilters = !!(portfolios.length || txnTypes.length || dateFrom || dateTo || search);
 
   const { data: riskData } = useRiskMetrics();
-  const { data: realizedData } = useRealizedProfit();
+  const { data: realizedData, refetch: refetchRealized } = useRealizedProfit();
+
+  const invalidateTradingDerivedData = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["trading-summary"] }),
+      queryClient.invalidateQueries({ queryKey: ["realized-profit"] }),
+      queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] }),
+    ]);
+  }, [queryClient]);
 
   const clearAllFilters = useCallback(() => {
     setPortfolios([]);
@@ -122,8 +130,9 @@ function TradingScreen() {
   // Recalculate WAC mutation
   const recalcMutation = useMutation({
     mutationFn: recalculateWAC,
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+    onSuccess: async (result) => {
+      await invalidateTradingDerivedData();
+      await refetchRealized();
       Alert.alert(
         t('trading.recalculateComplete'),
         `${t('trading.updated')} ${result.updated} transactions across ${result.positions_processed} positions.`
@@ -137,8 +146,8 @@ function TradingScreen() {
   const renameMutation = useMutation({
     mutationFn: ({ symbol, name }: { symbol: string; name: string }) =>
       renameStockBySymbol(symbol, name),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+    onSuccess: async (result) => {
+      await invalidateTradingDerivedData();
       Alert.alert(t('trading.updated'), `"${result.symbol}" ${t('trading.renamedTo')} "${result.name}"`);
     },
     onError: (err: unknown) => {
@@ -173,9 +182,14 @@ function TradingScreen() {
   }, []);
 
   const onRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+    void invalidateTradingDerivedData();
+    void refetchRealized();
     refetch();
-  }, [refetch, queryClient]);
+  }, [invalidateTradingDerivedData, refetch, refetchRealized]);
+
+  const handleRecalculateRealized = useCallback(async () => {
+    await recalcMutation.mutateAsync();
+  }, [recalcMutation]);
 
   const totalPages = data?.pagination?.total_pages ?? 1;
 
@@ -308,10 +322,10 @@ function TradingScreen() {
       }
 
       if (changes > 0) {
-        queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+        await invalidateTradingDerivedData();
         // Recalculate WAC after edits
         try { await recalculateWAC(); } catch (_) { /* non-critical */ }
-        queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+        await invalidateTradingDerivedData();
         Alert.alert(
           t('trading.saved'),
           t('trading.updatedCount', { count: changes }) +
@@ -345,9 +359,9 @@ function TradingScreen() {
         }
       }
       if (deleted > 0) {
-        queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+        await invalidateTradingDerivedData();
         try { await recalculateWAC(); } catch (_) { /* non-critical */ }
-        queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+        await invalidateTradingDerivedData();
         Alert.alert(
           t('trading.deleted'),
           t('trading.deletedCount', { count: deleted }) +
@@ -427,6 +441,8 @@ function TradingScreen() {
           realizedData={realizedData}
           activeTab={summaryTab}
           onTabChange={setSummaryTab}
+          onRecalculate={handleRecalculateRealized}
+          isRecalculating={recalcMutation.isPending}
         />
       )}
 
