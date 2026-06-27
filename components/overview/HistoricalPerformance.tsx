@@ -84,11 +84,14 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       divByYear.set(yr, (divByYear.get(yr) ?? 0) + d.cash_dividend_kwd);
     }
 
-    // Realized P&L by year
+    // Realized P&L by year.
+    // Keep this aligned with TradingSummaryCards semantics:
+    // use net trade outcome first, and fall back to realized + allocated dividends.
     const realByYear = new Map<string, number>();
     for (const r of (realizedData?.details ?? [])) {
       const yr = r.txn_date.slice(0, 4);
-      realByYear.set(yr, (realByYear.get(yr) ?? 0) + r.realized_pnl_kwd);
+      const netPnlKwd = r.net_pnl_kwd ?? (r.realized_pnl_kwd + (r.dividends_allocated_kwd ?? 0));
+      realByYear.set(yr, (realByYear.get(yr) ?? 0) + netPnlKwd);
     }
 
     // Cumulative cost basis by year from transactions
