@@ -132,19 +132,19 @@ export function TradingSummaryCards({
     };
   }, [realizedTransactions]);
   const realizedSummary = useMemo(() => {
-    let totalRealizedKwd = 0;
+    let totalNetPnlKwd = 0;
     let grossGainsKwd = 0;
     let grossLossesKwd = 0;
 
     for (const trade of realizedTransactions) {
-      const realized = trade.realized_pnl_kwd ?? 0;
-      totalRealizedKwd += realized;
-      if (realized > 0) grossGainsKwd += realized;
-      else if (realized < 0) grossLossesKwd += realized;
+      const net = trade.netPnlKwd ?? 0;
+      totalNetPnlKwd += net;
+      if (net > 0) grossGainsKwd += net;
+      else if (net < 0) grossLossesKwd += net;
     }
 
     return {
-      totalRealizedKwd,
+      totalNetPnlKwd,
       grossGainsKwd,
       grossLossesKwd,
       totalTrades: realizedTransactions.length,
@@ -329,7 +329,7 @@ export function TradingSummaryCards({
           toDate: toFilter.trim(),
         },
         summary: {
-          totalRealizedKwd: realizedSummary.totalRealizedKwd,
+          totalRealizedKwd: realizedSummary.totalNetPnlKwd,
           grossGainsKwd: realizedSummary.grossGainsKwd,
           grossLossesKwd: realizedSummary.grossLossesKwd,
           totalTrades: realizedData?.details?.length ?? 0,
@@ -387,11 +387,11 @@ export function TradingSummaryCards({
           <ResponsiveGrid columns={{ phone: 2, tablet: 4, desktop: 4 }}>
             <Card
               icon="check-circle"
-              iconColor={pnlColor(realizedSummary.totalRealizedKwd)}
+              iconColor={pnlColor(realizedSummary.totalNetPnlKwd)}
               label={t("realizedTrades.totalRealized", "Total Realized")}
-              value={formatSignedCurrency(realizedSummary.totalRealizedKwd, "KWD")}
+              value={formatSignedCurrency(realizedSummary.totalNetPnlKwd, "KWD")}
               sub={t("realizedTrades.netPL", "Net P/L")}
-              borderAccent={pnlColor(realizedSummary.totalRealizedKwd)}
+              borderAccent={pnlColor(realizedSummary.totalNetPnlKwd)}
             />
             <Card
               icon="arrow-up"
