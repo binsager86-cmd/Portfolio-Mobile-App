@@ -10,7 +10,7 @@ import { NAV_ITEMS } from "@/components/WebSidebar";
 import type { ThemePalette } from "@/constants/theme";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
-import { ExpertiseLevel, useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { hasExpertiseAccess, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
@@ -122,7 +122,6 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
   const insets = useSafeAreaInsets();
 
   const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
-  const levelOrder: ExpertiseLevel[] = ["normal", "intermediate", "advanced"];
 
   const navItems = useMemo(
     () => NAV_ITEMS.filter((item) => {
@@ -130,7 +129,7 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
       if (item.adminOnly && !isAdmin) return false;
       // Check expertise level
       const minLevel = item.minLevel ?? "normal";
-      return levelOrder.indexOf(expertiseLevel) >= levelOrder.indexOf(minLevel);
+      return hasExpertiseAccess(expertiseLevel, minLevel);
     }),
     [isAdmin, expertiseLevel],
   );

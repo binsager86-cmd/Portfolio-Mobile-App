@@ -11,7 +11,7 @@
 import { useResponsive } from "@/hooks/useResponsive";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
-import { ExpertiseLevel, useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { ExpertiseLevel, hasExpertiseAccess, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter, type Href } from "expo-router";
 import React from "react";
@@ -44,23 +44,23 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "overview", icon: "line-chart", path: "/(tabs)", section: "sectionDashboard" },
   { label: "market", icon: "globe", path: "/(tabs)/market" },
   { label: "holdings", icon: "briefcase", path: "/(tabs)/portfolio-analysis" },
-  { label: "trading", icon: "bar-chart-o", path: "/(tabs)/trading", section: "sectionAnalysis", minLevel: "normal" },
-  { label: "fundamentals", icon: "flask", path: "/(tabs)/fundamental-analysis", minLevel: "normal" },
-  { label: "tradeSignals", icon: "signal", path: "/(tabs)/trade-signals", minLevel: "normal" },
-  { label: "eagleEye", icon: "eye", path: "/(tabs)/eagle-eye", minLevel: "normal" },
-  { label: "simulator", icon: "play-circle", path: "/(tabs)/eagle-eye/simulator", minLevel: "normal" },
-  { label: "tracker", icon: "camera", path: "/(tabs)/portfolio-tracker" },
-  { label: "dividends", icon: "money", path: "/(tabs)/dividends" },
+  { label: "trading", icon: "bar-chart-o", path: "/(tabs)/trading", section: "sectionAnalysis", minLevel: "advanced" },
+  { label: "fundamentals", icon: "flask", path: "/(tabs)/fundamental-analysis", minLevel: "intermediate" },
+  { label: "tradeSignals", icon: "signal", path: "/(tabs)/trade-signals", minLevel: "intermediate" },
+  { label: "eagleEye", icon: "eye", path: "/(tabs)/eagle-eye", minLevel: "advanced" },
+  { label: "simulator", icon: "play-circle", path: "/(tabs)/eagle-eye/simulator", minLevel: "advanced" },
+  { label: "tracker", icon: "camera", path: "/(tabs)/portfolio-tracker", minLevel: "intermediate" },
+  { label: "dividends", icon: "money", path: "/(tabs)/dividends", minLevel: "intermediate" },
   { label: "transactions", icon: "exchange", path: "/(tabs)/transactions", section: "sectionManagement" },
   { label: "deposits", icon: "bank", path: "/(tabs)/deposits" },
-  { label: "alerts", icon: "bell", path: "/(tabs)/alerts", minLevel: "normal" },
-  { label: "news", icon: "newspaper-o", path: "/(tabs)/news", minLevel: "normal" },
-  { label: "planner", icon: "calculator", path: "/(tabs)/planner", minLevel: "normal" },
-  { label: "pfm", icon: "pie-chart", path: "/(tabs)/pfm", minLevel: "advanced" },
-  { label: "integrity", icon: "stethoscope", path: "/(tabs)/integrity", section: "sectionSystem", minLevel: "advanced" },
-  { label: "backup", icon: "cloud-download", path: "/(tabs)/backup", minLevel: "advanced" },
+  { label: "alerts", icon: "bell", path: "/(tabs)/alerts" },
+  { label: "news", icon: "newspaper-o", path: "/(tabs)/news" },
+  { label: "planner", icon: "calculator", path: "/(tabs)/planner", minLevel: "intermediate" },
+  { label: "pfm", icon: "pie-chart", path: "/(tabs)/pfm", minLevel: "intermediate" },
+  { label: "integrity", icon: "stethoscope", path: "/(tabs)/integrity", section: "sectionSystem" },
+  { label: "backup", icon: "cloud-download", path: "/(tabs)/backup" },
   { label: "settings", icon: "cog", path: "/(tabs)/settings" },
-  { label: "admin", icon: "shield", path: "/(tabs)/admin", section: "sectionAdmin", adminOnly: true },
+  { label: "admin", icon: "shield", path: "/(tabs)/admin", section: "sectionAdmin", adminOnly: true, minLevel: "advanced" },
 ];
 
 // ── Widths ───────────────────────────────────────────────────────────
@@ -86,13 +86,12 @@ export default function WebSidebar({ collapsed: collapsedProp, onToggleCollapse 
   const { isTablet } = useResponsive();
   const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
 
-  const levelOrder: ExpertiseLevel[] = ["normal", "intermediate", "advanced"];
   const navItems = NAV_ITEMS.filter((item) => {
     // Hide admin-only items from non-admin users
     if (item.adminOnly && !isAdmin) return false;
     // Check expertise level
     const minLevel = item.minLevel ?? "normal";
-    return levelOrder.indexOf(expertiseLevel) >= levelOrder.indexOf(minLevel);
+    return hasExpertiseAccess(expertiseLevel, minLevel);
   });
 
   // Auto-collapse on tablet unless prop overrides

@@ -39,6 +39,19 @@ async function syncUserPrefsToBackend(prefs: UserPreferences): Promise<void> {
 export type ExpertiseLevel = "normal" | "intermediate" | "advanced";
 export type AppLanguage = "en" | "ar";
 
+export const EXPERTISE_LEVEL_ORDER: ExpertiseLevel[] = [
+  "normal",
+  "intermediate",
+  "advanced",
+];
+
+export function hasExpertiseAccess(
+  level: ExpertiseLevel,
+  minLevel: ExpertiseLevel,
+): boolean {
+  return EXPERTISE_LEVEL_ORDER.indexOf(level) >= EXPERTISE_LEVEL_ORDER.indexOf(minLevel);
+}
+
 export interface ExpertiseLevelConfig {
   key: ExpertiseLevel;
   label: string;

@@ -23,7 +23,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { trackEvent } from "@/lib/gtag";
 import { useAuthStore } from "@/services/authStore";
 import { useThemeStore } from "@/services/themeStore";
-import { ExpertiseLevel, useUserPrefsStore } from "@/src/store/userPrefsStore";
+import { ExpertiseLevel, hasExpertiseAccess, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { useTranslation } from "react-i18next";
 
 // ── Shared icon helper ──────────────────────────────────────────────
@@ -92,8 +92,7 @@ export default function TabLayout() {
 
   /** Returns true if the tab should be visible for the current expertise level */
   const tabVisible = (minLevel: ExpertiseLevel): boolean => {
-    const order: ExpertiseLevel[] = ["normal", "intermediate", "advanced"];
-    return order.indexOf(expertiseLevel) >= order.indexOf(minLevel);
+    return hasExpertiseAccess(expertiseLevel, minLevel);
   };
 
   const handleLogout = async () => {
@@ -280,7 +279,7 @@ export default function TabLayout() {
             name="trading"
             options={{
               title: t("nav.trading"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart-o" color={color} />,
             }}
           />
@@ -288,7 +287,7 @@ export default function TabLayout() {
             name="fundamental-analysis"
             options={{
               title: t("tabs.analysis"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="flask" color={color} />
               ),
@@ -298,7 +297,7 @@ export default function TabLayout() {
             name="trade-signals"
             options={{
               title: t("nav.tradeSignals"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="signal" color={color} />
               ),
@@ -308,7 +307,7 @@ export default function TabLayout() {
             name="eagle-eye"
             options={{
               title: t("nav.eagleEye", "Eagle Eye"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="eye" color={color} />
               ),
@@ -318,7 +317,7 @@ export default function TabLayout() {
             name="portfolio-tracker"
             options={{
               title: t("nav.tracker"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="camera" color={color} />,
             }}
           />
@@ -326,7 +325,7 @@ export default function TabLayout() {
             name="dividends"
             options={{
               title: t("nav.dividends"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="money" color={color} />
               ),
@@ -346,7 +345,7 @@ export default function TabLayout() {
             name="planner"
             options={{
               title: t("nav.planner"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="calculator" color={color} />
               ),
@@ -356,7 +355,7 @@ export default function TabLayout() {
             name="pfm"
             options={{
               title: t("nav.pfm"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="pie-chart" color={color} />,
             }}
           />
@@ -392,7 +391,7 @@ export default function TabLayout() {
             name="admin"
             options={{
               title: t("nav.admin"),
-              href: isAdmin ? undefined : null,
+              href: isAdmin && tabVisible("advanced") ? undefined : null,
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="shield" color={color} />
               ),
