@@ -40,6 +40,8 @@ interface YearlyData {
 interface Props {
   snapshotData?: { snapshots: SnapshotRecord[]; count: number };
   realizedData?: { total_realized_kwd: number; total_profit_kwd: number; total_loss_kwd: number; details: RealizedProfitDetail[] };
+  livePortfolioValue?: number;
+  liveAsOfDate?: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ function groupSnapshotsByYear(snapshots: SnapshotRecord[]): Map<string, Snapshot
 
 // ── Component ───────────────────────────────────────────────────────
 
-export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
+export function HistoricalPerformance({ snapshotData, realizedData, livePortfolioValue, liveAsOfDate }: Props) {
   const { colors } = useThemeStore();
   const { t } = useTranslation();
   const { isPhone, spacing, fonts } = useResponsive();
@@ -71,6 +73,12 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
   // ── Compute yearly data ─────────────────────────────────────────
 
   const yearlyData = useMemo((): YearlyData[] => {
+    const hasLiveValue = typeof livePortfolioValue === "number" && Number.isFinite(livePortfolioValue);
+    const normalizedLiveAsOfDate =
+      typeof liveAsOfDate === "string" && liveAsOfDate.length >= 10
+        ? liveAsOfDate.slice(0, 10)
+        : null;
+
     const snapshots = [...(snapshotData?.snapshots ?? [])].sort(
       (a, b) => a.snapshot_date.localeCompare(b.snapshot_date),
     );
@@ -94,7 +102,8 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
       realByYear.set(yr, (realByYear.get(yr) ?? 0) + netPnlKwd);
     }
 
-    // Cumulative cost basis by year from transactions
+    // Transaction years are included in the union so filter chips can still
+    // show years with activity even when snapshot rows are missing.
     const txnCostByYear = new Map<string, number>();
     const txns = allTxnData?.transactions ?? [];
     for (const txn of txns) {
@@ -115,12 +124,11 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
     const years = Array.from(allYearsSet).sort();
     if (!years.length) return [];
 
+    let hasPrevSnapshotYear = false;
     let prevYearEndValue = 0;
-    // FIX: track the prior year-end deposit_cash so net-deposits uses the correct
-    // cumulative baseline — not the first snapshot of the current year, which
-    // silently drops any deposits made between the prior year's last snapshot and
-    // this year's first snapshot.
-    let prevYearEndDepositCash = 0;
+    // deposit_cash in snapshots is a per-snapshot flow, while accumulated_cash
+    // is cumulative invested cash. Yearly net deposits must use accumulated deltas.
+    let prevYearEndAccumulatedCash = 0;
     let cumulativeCost = 0;
 
     return years.map((year) => {
@@ -136,28 +144,37 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
         const yearEnd = sorted[sorted.length - 1];
         const yearStart = sorted[0];
 
-        // Portfolio growth = year-end value
-        const portfolioValue = yearEnd.portfolio_value;
+        // Portfolio growth uses year-end snapshot value, with a live-value override
+        // for the current year when snapshots are behind today's overview value.
+        const snapshotYearEndValue = yearEnd.portfolio_value;
+        let portfolioValue = snapshotYearEndValue;
+        if (
+          hasLiveValue &&
+          normalizedLiveAsOfDate &&
+          normalizedLiveAsOfDate.slice(0, 4) === year &&
+          normalizedLiveAsOfDate >= yearEnd.snapshot_date
+        ) {
+          portfolioValue = livePortfolioValue;
+        }
 
         // Dividends
         const dividends = divByYear.get(year) ?? 0;
 
         // Appreciation = (year-end − year-start) minus net new cash injected this year.
         // startValue: use prior year-end to bridge cross-year continuity.
-        const startValue = prevYearEndValue > 0 ? prevYearEndValue : yearStart.portfolio_value;
-        // FIX: baseline for deposits is the prior year-end deposit_cash (not this
-        // year's first snapshot — which misses year-boundary deposits).
-        const depositBaseline = prevYearEndDepositCash > 0
-          ? prevYearEndDepositCash
-          : yearStart.deposit_cash;
-        const netDepositsThisYear = yearEnd.deposit_cash - depositBaseline;
-        const appreciation = (yearEnd.portfolio_value - startValue) - netDepositsThisYear;
+        const startValue = hasPrevSnapshotYear ? prevYearEndValue : yearStart.portfolio_value;
+        const depositBaseline = hasPrevSnapshotYear
+          ? prevYearEndAccumulatedCash
+          : yearStart.accumulated_cash;
+        const netDepositsThisYear = yearEnd.accumulated_cash - depositBaseline;
+        const appreciation = (snapshotYearEndValue - startValue) - netDepositsThisYear;
 
         // Realized P&L
         const realizedPnl = realByYear.get(year) ?? 0;
 
-        prevYearEndValue = yearEnd.portfolio_value;
-        prevYearEndDepositCash = yearEnd.deposit_cash;
+        hasPrevSnapshotYear = true;
+        prevYearEndValue = portfolioValue;
+        prevYearEndAccumulatedCash = yearEnd.accumulated_cash;
 
         return { year, portfolioValue, dividends, appreciation, realizedPnl };
       }
@@ -171,7 +188,7 @@ export function HistoricalPerformance({ snapshotData, realizedData }: Props) {
 
       return { year, portfolioValue: 0, dividends, appreciation: 0, realizedPnl };
     });
-  }, [snapshotData, allDivData, realizedData, allTxnData]);
+  }, [snapshotData, allDivData, realizedData, allTxnData, livePortfolioValue, liveAsOfDate]);
 
   // ── Year filter ─────────────────────────────────────────────────
 

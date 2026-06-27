@@ -775,6 +775,8 @@ function OverviewScreen() {
         <HistoricalPerformance
           snapshotData={snapshotData}
           realizedData={realizedData}
+          livePortfolioValue={data?.total_value}
+          liveAsOfDate={new Date().toISOString().slice(0, 10)}
         />
       )}
 
