@@ -285,6 +285,6 @@ describe("TradingSummaryCards", () => {
     );
 
     expect(screen.getByText("+25.000 KWD")).toBeTruthy();
-    expect(screen.getByText("+80.000 KWD")).toBeTruthy();
+    expect(screen.getAllByText("+80.000 KWD").length).toBeGreaterThanOrEqual(1);
   });
 });

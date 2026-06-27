@@ -131,6 +131,25 @@ export function TradingSummaryCards({
       winRate: decidedTrades ? (wins / decidedTrades) * 100 : 0,
     };
   }, [realizedTransactions]);
+  const realizedSummary = useMemo(() => {
+    let totalNetPnlKwd = 0;
+    let grossGainsKwd = 0;
+    let grossLossesKwd = 0;
+
+    for (const trade of realizedTransactions) {
+      const net = trade.netPnlKwd ?? 0;
+      totalNetPnlKwd += net;
+      if (net > 0) grossGainsKwd += net;
+      else if (net < 0) grossLossesKwd += net;
+    }
+
+    return {
+      totalNetPnlKwd,
+      grossGainsKwd,
+      grossLossesKwd,
+      totalTrades: realizedTransactions.length,
+    };
+  }, [realizedTransactions]);
 
   const Card = ({
     icon,
@@ -310,9 +329,9 @@ export function TradingSummaryCards({
           toDate: toFilter.trim(),
         },
         summary: {
-          totalRealizedKwd: realizedData?.total_realized_kwd ?? 0,
-          grossGainsKwd: realizedData?.total_profit_kwd ?? 0,
-          grossLossesKwd: realizedData?.total_loss_kwd ?? 0,
+          totalRealizedKwd: realizedSummary.totalNetPnlKwd,
+          grossGainsKwd: realizedSummary.grossGainsKwd,
+          grossLossesKwd: realizedSummary.grossLossesKwd,
           totalTrades: realizedData?.details?.length ?? 0,
           visibleTrades: realizedTransactions.length,
           currency: "KWD",
@@ -368,17 +387,17 @@ export function TradingSummaryCards({
           <ResponsiveGrid columns={{ phone: 2, tablet: 4, desktop: 4 }}>
             <Card
               icon="check-circle"
-              iconColor={pnlColor(realizedData?.total_realized_kwd ?? 0)}
+              iconColor={pnlColor(realizedSummary.totalNetPnlKwd)}
               label={t("realizedTrades.totalRealized", "Total Realized")}
-              value={formatSignedCurrency(realizedData?.total_realized_kwd ?? 0, "KWD")}
+              value={formatSignedCurrency(realizedSummary.totalNetPnlKwd, "KWD")}
               sub={t("realizedTrades.netPL", "Net P/L")}
-              borderAccent={pnlColor(realizedData?.total_realized_kwd ?? 0)}
+              borderAccent={pnlColor(realizedSummary.totalNetPnlKwd)}
             />
             <Card
               icon="arrow-up"
               iconColor={colors.success}
               label={t("realizedTrades.grossGains", "Gross Gains")}
-              value={formatCurrency(realizedData?.total_profit_kwd ?? 0, "KWD")}
+              value={formatCurrency(realizedSummary.grossGainsKwd, "KWD")}
               sub={t("realizedTrades.winningTrades", "Winning trades")}
               borderAccent={colors.success}
             />
@@ -386,7 +405,7 @@ export function TradingSummaryCards({
               icon="arrow-down"
               iconColor={colors.danger}
               label={t("realizedTrades.grossLosses", "Gross Losses")}
-              value={formatCurrency(Math.abs(realizedData?.total_loss_kwd ?? 0), "KWD")}
+              value={formatCurrency(Math.abs(realizedSummary.grossLossesKwd), "KWD")}
               sub={t("realizedTrades.losingTrades", "Losing trades")}
               borderAccent={colors.danger}
             />
@@ -394,8 +413,8 @@ export function TradingSummaryCards({
               icon="list-ol"
               iconColor={colors.accentSecondary}
               label={t("realizedTrades.totalTrades", "Total Trades")}
-              value={fmtNum(realizedData?.details?.length ?? 0, 0)}
-              sub={t("trading.recordsCount", { count: realizedData?.details?.length ?? 0 })}
+              value={fmtNum(realizedSummary.totalTrades, 0)}
+              sub={t("trading.recordsCount", { count: realizedSummary.totalTrades })}
               borderAccent={colors.accentSecondary}
             />
             <OutcomeCard
