@@ -1,8 +1,9 @@
 import { UITokens } from "@/constants/uiTokens";
 import { useThemeStore } from "@/services/themeStore";
+import { hasExpertiseAccess, useUserPrefsStore } from "@/src/store/userPrefsStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type EagleEyeTab = {
@@ -55,8 +56,8 @@ function normalizePath(pathname: string): string {
 const SWIPE_THRESHOLD = 60;
 const VERTICAL_TO_HORIZONTAL_RATIO = 2;
 
-function findActiveTabIndex(pathname: string): number {
-  return EAGLE_EYE_TABS.findIndex((tab) =>
+function findActiveTabIndex(pathname: string, tabs: readonly EagleEyeTab[]): number {
+  return tabs.findIndex((tab) =>
     tab.matches.some((prefix) =>
       prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
     )
@@ -65,10 +66,15 @@ function findActiveTabIndex(pathname: string): number {
 
 export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
+  const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
   const pathname = normalizePath(usePathname());
   const router = useRouter();
+  const visibleTabs = useMemo(
+    () => EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || hasExpertiseAccess(expertiseLevel, "advanced")),
+    [expertiseLevel],
+  );
   const activeTextColor = "#ffffff";
-  const activeTabIndex = findActiveTabIndex(pathname);
+  const activeTabIndex = findActiveTabIndex(pathname, visibleTabs);
 
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
@@ -85,12 +91,12 @@ export function EagleEyeTopTabs() {
         return hasMinimumDistance && isHorizontallyDominant;
       },
       onPanResponderRelease: (_, { dx }) => {
-        const currentIndex = findActiveTabIndex(pathnameRef.current);
+        const currentIndex = findActiveTabIndex(pathnameRef.current, visibleTabs);
         if (currentIndex === -1) return;
-        if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
-          router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
+        if (dx < -SWIPE_THRESHOLD && currentIndex < visibleTabs.length - 1) {
+          router.push(visibleTabs[currentIndex + 1].href);
         } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
-          router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
+          router.push(visibleTabs[currentIndex - 1].href);
         }
       },
     });
@@ -113,7 +119,7 @@ export function EagleEyeTopTabs() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        {EAGLE_EYE_TABS.map((tab, index) => {
+        {visibleTabs.map((tab, index) => {
           const active = index === activeTabIndex;
 
           return (

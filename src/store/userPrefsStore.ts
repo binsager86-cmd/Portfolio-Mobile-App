@@ -45,11 +45,20 @@ export const EXPERTISE_LEVEL_ORDER: ExpertiseLevel[] = [
   "advanced",
 ];
 
+function normalizeExpertiseLevel(value: unknown): ExpertiseLevel {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "advanced") return "advanced";
+  if (normalized === "intermediate") return "intermediate";
+  return "normal";
+}
+
 export function hasExpertiseAccess(
   level: ExpertiseLevel,
   minLevel: ExpertiseLevel,
 ): boolean {
-  return EXPERTISE_LEVEL_ORDER.indexOf(level) >= EXPERTISE_LEVEL_ORDER.indexOf(minLevel);
+  const current = normalizeExpertiseLevel(level);
+  const required = normalizeExpertiseLevel(minLevel);
+  return EXPERTISE_LEVEL_ORDER.indexOf(current) >= EXPERTISE_LEVEL_ORDER.indexOf(required);
 }
 
 export interface ExpertiseLevelConfig {
@@ -163,7 +172,11 @@ async function loadPrefs(): Promise<UserPreferences> {
     }
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_PREFS, ...parsed };
+      return {
+        ...DEFAULT_PREFS,
+        ...parsed,
+        expertiseLevel: normalizeExpertiseLevel(parsed?.expertiseLevel),
+      };
     }
   } catch (err) {
     if (__DEV__) console.warn("[UserPrefsStore] Failed to load preferences:", err);
@@ -222,7 +235,7 @@ export const useUserPrefsStore = create<UserPrefsState>((set, get) => ({
       const prev = get().preferences;
       const merged: UserPreferences = {
         ...prev,
-        expertiseLevel: remote.expertiseLevel ?? prev.expertiseLevel,
+        expertiseLevel: normalizeExpertiseLevel(remote.expertiseLevel ?? prev.expertiseLevel),
         language: remote.language ?? prev.language,
         showAdvancedMetrics:
           remote.showAdvancedMetrics ?? prev.showAdvancedMetrics,

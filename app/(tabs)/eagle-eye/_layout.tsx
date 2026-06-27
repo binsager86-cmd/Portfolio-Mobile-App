@@ -1,5 +1,7 @@
- 
 import { Stack } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
+import { useEffect } from "react";
+import { hasExpertiseAccess, useUserPrefsStore } from "@/src/store/userPrefsStore";
 
 /**
  * Stack navigator for the Eagle Eye tab.
@@ -12,6 +14,16 @@ import { Stack } from "expo-router";
  * - simulator/position/[id]         → position detail
  */
 export default function EagleEyeLayout() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const expertiseLevel = useUserPrefsStore((s) => s.preferences.expertiseLevel);
+
+  useEffect(() => {
+    if (!pathname.includes("/eagle-eye/simulator")) return;
+    if (hasExpertiseAccess(expertiseLevel, "advanced")) return;
+    router.replace("/(tabs)/eagle-eye");
+  }, [expertiseLevel, pathname, router]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
