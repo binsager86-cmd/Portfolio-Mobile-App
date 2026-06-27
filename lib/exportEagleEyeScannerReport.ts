@@ -1,32 +1,37 @@
 import { todayISO } from "@/lib/dateUtils";
 import { Platform } from "react-native";
 
-export type ExportableRealizedTransaction = {
-  symbol: string;
-  portfolio: string;
-  txnDate: string;
-  purchaseValueKwd: number;
-  shares: number;
-  realizedPnlKwd: number;
-  cashDividendsKwd: number;
-  netPnlKwd: number;
-  pnlPct: number | null;
+export type ExportableEagleEyeScannerRow = {
+  ticker: string;
+  nameEn: string;
+  sector: string;
+  stage: string;
+  rating: string;
+  confidence: number;
+  lastPrice?: number | null;
+  entryPrimary?: number | null;
+  tp1?: number | null;
+  bookValuePerShare?: number | null;
+  peRatio?: number | null;
+  rrRatio?: number | null;
+  relativeVolume?: number | null;
+  volumeConfirmed?: boolean;
+  computedAt?: string | null;
 };
 
-export type RealizedTransactionsReportInput = {
-  rows: ExportableRealizedTransaction[];
+export type EagleEyeScannerReportInput = {
+  rows: ExportableEagleEyeScannerRow[];
   filters: {
-    symbol?: string;
-    fromDate?: string;
-    toDate?: string;
+    search?: string;
+    minConfidence?: number;
+    ratingFilter?: string;
+    statusFilter?: string;
+    stageFilter?: string;
+    highVolumeOnly?: boolean;
   };
   summary: {
-    totalRealizedKwd: number;
-    grossGainsKwd: number;
-    grossLossesKwd: number;
-    totalTrades: number;
-    visibleTrades: number;
-    currency: string;
+    visibleRows: number;
+    totalRows: number;
     sortColumn: string;
     sortDirection: "asc" | "desc";
   };
@@ -54,9 +59,15 @@ function safeFilterValue(value?: string): string {
   return value && value.trim() ? value.trim() : "All";
 }
 
-async function buildWorkbook(input: RealizedTransactionsReportInput): Promise<Uint8Array> {
+function formatVolumeConfirmed(v?: boolean): string {
+  if (v == null) return "-";
+  return v ? "Yes" : "No";
+}
+
+async function buildWorkbook(input: EagleEyeScannerReportInput): Promise<Uint8Array> {
   const XLSX = await import("xlsx-js-style");
   const workbook = XLSX.utils.book_new();
+
   const border = {
     top: { style: "thin", color: { rgb: COLORS.border } },
     bottom: { style: "thin", color: { rgb: COLORS.border } },
@@ -101,33 +112,41 @@ async function buildWorkbook(input: RealizedTransactionsReportInput): Promise<Ui
     border,
   };
 
+  const avgConfidence =
+    input.rows.length > 0
+      ? input.rows.reduce((sum, row) => sum + (Number.isFinite(row.confidence) ? row.confidence : 0), 0) /
+        input.rows.length
+      : 0;
+
   const overviewRows: Array<Array<string | number>> = [
-    ["Realized Transactions Report", "", "", ""],
-    ["Filtered, sorted, and dividend-adjusted realized trade breakdown", "", "", ""],
+    ["Eagle Eye Scanner Report", "", "", ""],
+    ["Filtered scanner table export", "", "", ""],
     ["", "", "", ""],
-    ["Generated", todayISO(), "Visible Trades", input.summary.visibleTrades],
-    ["Currency", input.summary.currency, "All Trades", input.summary.totalTrades],
-    ["Sort", `${input.summary.sortColumn} (${input.summary.sortDirection.toUpperCase()})`, "Symbol Filter", safeFilterValue(input.filters.symbol)],
-    ["From Date", safeFilterValue(input.filters.fromDate), "To Date", safeFilterValue(input.filters.toDate)],
+    ["Generated", todayISO(), "Visible Rows", input.summary.visibleRows],
+    ["Sort", `${input.summary.sortColumn} (${input.summary.sortDirection.toUpperCase()})`, "Total Rows", input.summary.totalRows],
+    ["Search", safeFilterValue(input.filters.search), "Min Confidence", input.filters.minConfidence ?? 0],
+    ["Rating Filter", safeFilterValue(input.filters.ratingFilter), "Status Filter", safeFilterValue(input.filters.statusFilter)],
+    ["Stage Filter", safeFilterValue(input.filters.stageFilter), "High Volume Only", input.filters.highVolumeOnly ? "Yes" : "No"],
     ["", "", "", ""],
     ["Summary", "", "", ""],
-    ["Total Realized", input.summary.totalRealizedKwd, "Gross Gains", input.summary.grossGainsKwd],
-    ["Gross Losses", Math.abs(input.summary.grossLossesKwd), "Exported Rows", input.rows.length],
+    ["Average Confidence", avgConfidence, "Exported Rows", input.rows.length],
   ];
 
   const overviewSheet = XLSX.utils.aoa_to_sheet(overviewRows);
   overviewSheet["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
     { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
-    { s: { r: 8, c: 0 }, e: { r: 8, c: 3 } },
+    { s: { r: 9, c: 0 }, e: { r: 9, c: 3 } },
   ];
-  overviewSheet["!cols"] = [{ wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 22 }];
+  overviewSheet["!cols"] = [{ wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 22 }];
   overviewSheet["!rows"] = overviewRows.map((_, index) => ({ hpt: index <= 1 ? 24 : 20 }));
 
   Object.keys(overviewSheet).forEach((address) => {
     if (address.startsWith("!")) return;
+
     const cell = overviewSheet[address] as { t?: string; v?: unknown; s?: Record<string, unknown> };
     const { r, c } = XLSX.utils.decode_cell(address);
+
     if (r === 0) {
       applyStyle(cell, titleStyle);
       return;
@@ -136,31 +155,50 @@ async function buildWorkbook(input: RealizedTransactionsReportInput): Promise<Ui
       applyStyle(cell, subtitleStyle);
       return;
     }
-    if (r === 8) {
+    if (r === 9) {
       applyStyle(cell, sectionHeaderStyle);
       return;
     }
-    if (r === 2 || r === 7) {
+    if (r === 2 || r === 8) {
       applyStyle(cell, { border, fill: { fgColor: { rgb: COLORS.surface } } });
       return;
     }
+
     const style = c % 2 === 0 ? labelStyle : valueStyle;
     applyStyle(cell, style);
-    if ((r === 9 || r === 10) && (c === 1 || c === 3)) {
+
+    if (r === 10 && (c === 1 || c === 3)) {
       cell.t = "n";
       cell.s = {
         ...style,
-        numFmt: '#,##0.000 "KWD"',
+        numFmt: c === 1 ? "0.00" : "#,##0",
+        alignment: { horizontal: "right", vertical: "center" },
+      };
+      return;
+    }
+
+    if (r === 5 && c === 3) {
+      cell.t = "n";
+      cell.s = {
+        ...style,
+        numFmt: "0",
         alignment: { horizontal: "right", vertical: "center" },
       };
     }
   });
+
   XLSX.utils.book_append_sheet(workbook, overviewSheet, "Overview");
 
-  const transactionRows: Array<Array<string | number | null>> = [
-    ["Realized Transactions", "", "", "", "", "", "", "", "", ""],
+  const scannerRows: Array<Array<string | number>> = [
+    ["Eagle Eye Scanner Table", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
     [
-      `Exported ${todayISO()} | ${input.summary.visibleTrades} visible trades | Sorted by ${input.summary.sortColumn} ${input.summary.sortDirection.toUpperCase()}`,
+      `Exported ${todayISO()} | ${input.summary.visibleRows} visible rows | Sorted by ${input.summary.sortColumn} ${input.summary.sortDirection.toUpperCase()}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
       "",
       "",
       "",
@@ -171,44 +209,74 @@ async function buildWorkbook(input: RealizedTransactionsReportInput): Promise<Ui
       "",
       "",
     ],
-    ["#", "Symbol", "Portfolio", "Date", "Purchase Value (KWD)", "Shares", "Realized P&L (KWD)", "Cash Dividends (KWD)", "Net P/L (KWD)", "P&L %"],
+    [
+      "#",
+      "Ticker",
+      "Name",
+      "Sector",
+      "Stage",
+      "Rating",
+      "Confidence",
+      "Current",
+      "Entry",
+      "TP1",
+      "BVPS",
+      "P/E",
+      "R:R",
+      "Rel Vol",
+      "Vol Confirmed",
+      "Computed At",
+    ],
     ...input.rows.map((row, index) => [
       index + 1,
-      row.symbol,
-      row.portfolio,
-      row.txnDate,
-      row.purchaseValueKwd,
-      row.shares,
-      row.realizedPnlKwd,
-      row.cashDividendsKwd,
-      row.netPnlKwd,
-      row.pnlPct == null ? null : row.pnlPct / 100,
+      row.ticker,
+      row.nameEn,
+      row.sector,
+      row.stage,
+      row.rating,
+      row.confidence,
+      row.lastPrice ?? "",
+      row.entryPrimary ?? "",
+      row.tp1 ?? "",
+      row.bookValuePerShare ?? "",
+      row.peRatio ?? "",
+      row.rrRatio ?? "",
+      row.relativeVolume ?? "",
+      formatVolumeConfirmed(row.volumeConfirmed),
+      row.computedAt ?? "",
     ]),
   ];
 
-  const transactionSheet = XLSX.utils.aoa_to_sheet(transactionRows);
-  transactionSheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+  const tableSheet = XLSX.utils.aoa_to_sheet(scannerRows);
+  tableSheet["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 15 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 15 } },
   ];
-  transactionSheet["!cols"] = [
+  tableSheet["!cols"] = [
     { wch: 5 },
-    { wch: 14 },
     { wch: 12 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 20 },
+    { wch: 24 },
     { wch: 16 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
     { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 13 },
+    { wch: 14 },
   ];
-  transactionSheet["!rows"] = transactionRows.map((_, index) => ({ hpt: index <= 1 ? 22 : 20 }));
-  transactionSheet["!autofilter"] = { ref: `A3:J${Math.max(transactionRows.length, 3)}` };
+  tableSheet["!rows"] = scannerRows.map((_, index) => ({ hpt: index <= 1 ? 22 : 20 }));
+  tableSheet["!autofilter"] = { ref: `A3:P${Math.max(scannerRows.length, 3)}` };
 
-  Object.keys(transactionSheet).forEach((address) => {
+  Object.keys(tableSheet).forEach((address) => {
     if (address.startsWith("!")) return;
-    const cell = transactionSheet[address] as { t?: string; v?: unknown; s?: Record<string, unknown> };
+
+    const cell = tableSheet[address] as { t?: string; v?: unknown; s?: Record<string, unknown> };
     const { r, c } = XLSX.utils.decode_cell(address);
 
     if (r === 0) {
@@ -225,86 +293,65 @@ async function buildWorkbook(input: RealizedTransactionsReportInput): Promise<Ui
     }
 
     const rowFill = (r - 3) % 2 === 0 ? COLORS.surface : COLORS.surfaceAlt;
-    const numericStyle = {
-      fill: { fgColor: { rgb: rowFill } },
-      font: { color: { rgb: COLORS.ink }, sz: 10 },
-      alignment: { horizontal: "right", vertical: "center" },
-      border,
-    };
     const textStyle = {
       fill: { fgColor: { rgb: rowFill } },
       font: { color: { rgb: COLORS.ink }, sz: 10 },
-      alignment: { horizontal: c >= 4 ? "right" : "left", vertical: "center" },
+      alignment: { horizontal: c >= 6 && c <= 13 ? "right" : "left", vertical: "center" },
       border,
     };
 
-    applyStyle(cell, c >= 4 ? numericStyle : textStyle);
+    applyStyle(cell, textStyle);
 
-    if (c === 4 || c === 6 || c === 8) {
-      const value = typeof cell.v === "number" ? cell.v : Number(cell.v ?? 0);
-      cell.t = "n";
-      cell.s = {
-        ...numericStyle,
-        font: {
-          color: { rgb: c === 4 ? COLORS.ink : value >= 0 ? COLORS.positive : COLORS.negative },
-          bold: c !== 4,
-          sz: 10,
-        },
-        numFmt: '#,##0.000 "KWD"',
-      };
-      return;
-    }
-
-    if (c === 7) {
-      const value = typeof cell.v === "number" ? cell.v : Number(cell.v ?? 0);
-      cell.t = "n";
-      cell.s = {
-        ...numericStyle,
-        font: {
-          color: { rgb: value > 0 ? COLORS.positive : COLORS.muted },
-          sz: 10,
-        },
-        numFmt: '#,##0.000 "KWD"',
-      };
-      return;
-    }
-
-    if (c === 5) {
-      cell.t = "n";
-      cell.s = { ...numericStyle, numFmt: "#,##0" };
-      return;
-    }
-
-    if (c === 9) {
-      if (cell.v == null || cell.v === "") {
+    if (c >= 6 && c <= 13) {
+      if (cell.v === "" || cell.v == null) {
         cell.t = "s";
         cell.v = "-";
-        cell.s = { ...numericStyle, alignment: { horizontal: "center", vertical: "center" } };
+        cell.s = { ...textStyle, alignment: { horizontal: "center", vertical: "center" } };
         return;
       }
-      const value = typeof cell.v === "number" ? cell.v : Number(cell.v ?? 0);
+
       cell.t = "n";
+      let numFmt = "#,##0.000";
+      if (c === 6) numFmt = "0.0";
+      if (c === 11 || c === 12 || c === 13) numFmt = "0.00";
       cell.s = {
-        ...numericStyle,
+        ...textStyle,
+        numFmt,
         font: {
-          color: { rgb: value >= 0 ? COLORS.positive : COLORS.negative },
-          bold: true,
+          color: {
+            rgb:
+              c === 11 || c === 12
+                ? Number(cell.v) >= 0
+                  ? COLORS.positive
+                  : COLORS.negative
+                : COLORS.ink,
+          },
           sz: 10,
+          bold: c === 11 || c === 12,
         },
-        numFmt: "0.00%",
       };
       return;
     }
+
+    if (c === 0) {
+      cell.t = "n";
+      cell.s = {
+        ...textStyle,
+        numFmt: "#,##0",
+        alignment: { horizontal: "center", vertical: "center" },
+      };
+    }
   });
-  XLSX.utils.book_append_sheet(workbook, transactionSheet, "Transactions");
+
+  XLSX.utils.book_append_sheet(workbook, tableSheet, "Scanner");
 
   const output = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
   return new Uint8Array(output);
 }
 
-export async function exportRealizedTransactionsReport(input: RealizedTransactionsReportInput): Promise<void> {
+export async function exportEagleEyeScannerReport(input: EagleEyeScannerReportInput): Promise<void> {
   const workbook = await buildWorkbook(input);
-  const filename = `realized_transactions_${todayISO()}.xlsx`;
+  const filename = `eagle_eye_scanner_${todayISO()}.xlsx`;
 
   if (Platform.OS === "web") {
     const blobBytes = Uint8Array.from(workbook);

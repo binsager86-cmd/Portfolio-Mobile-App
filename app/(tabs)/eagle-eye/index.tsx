@@ -37,6 +37,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -128,6 +129,7 @@ function getUpdatedAgo(ts: number): string {
 export default function EagleEyeScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const isFocused = useIsFocused();
 
   const [minConfidence, setMinConfidence] = useState(0);
@@ -139,7 +141,9 @@ export default function EagleEyeScannerScreen() {
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const isTableView = Platform.OS === "web";
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb = isWeb && viewportWidth >= 1120;
+  const isTableView = isDesktopWeb;
 
   const [hasFocusedOnce, setHasFocusedOnce] = useState(isFocused);
   useEffect(() => {
@@ -1156,7 +1160,7 @@ export default function EagleEyeScannerScreen() {
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          stickyHeaderIndices={listData.length > 0 ? [0] : undefined}
+          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
           ListEmptyComponent={renderEmpty}
           ListHeaderComponent={
             <>
@@ -1251,7 +1255,7 @@ export default function EagleEyeScannerScreen() {
                   </View>
 
                   <View style={styles.filterBarWrap}>
-                    {Platform.OS === "web" ? (
+                    {isDesktopWeb ? (
                       <View style={styles.filterBarContentWeb}>{renderFilterChips()}</View>
                     ) : (
                       <ScrollView

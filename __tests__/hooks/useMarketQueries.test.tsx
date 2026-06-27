@@ -65,7 +65,7 @@ describe("useMarketRefresh", () => {
     const { result } = renderHook(() => useMarketRefresh(), { wrapper });
 
     await act(async () => {
-      const out = await result.current();
+      const out = await result.current.mutateAsync();
       expect(out).toEqual(fresh);
     });
 

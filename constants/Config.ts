@@ -106,16 +106,31 @@ const isLocalDev =
   typeof window !== "undefined" &&
   (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
 
+const webHostFallbackApi =
+  Platform.OS === "web" && typeof window !== "undefined"
+    ? `http://${window.location.hostname}:8004`
+    : LOCAL_WEB_API;
+
+const envWebApiLooksLoopback =
+  !!ENV_API_URL_WEB &&
+  (ENV_API_URL_WEB.includes("127.0.0.1") || ENV_API_URL_WEB.includes("localhost"));
+
+const shouldUseWebHostFallback =
+  Platform.OS === "web" &&
+  typeof window !== "undefined" &&
+  !isLocalDev &&
+  envWebApiLooksLoopback;
+
 export const API_BASE_URL: string =
   // Explicit override always wins (EAS build, CI, Vercel, etc.)
   (ENV_API_URL != null && ENV_API_URL !== "")
     ? ENV_API_URL
     : Platform.OS === "web"
       ? (ENV_API_URL_WEB && ENV_API_URL_WEB !== "")
-        ? ENV_API_URL_WEB
+        ? (shouldUseWebHostFallback ? webHostFallbackApi : ENV_API_URL_WEB)
         : isLocalDev
           ? LOCAL_WEB_API      // Dev web: localhost backend
-          : ""                 // Production web: relative paths (same domain)
+          : webHostFallbackApi // Dev/LAN web: same host, backend on :8004
       : Platform.OS === "android"
         ? resolveAndroidApiUrl()
         : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")

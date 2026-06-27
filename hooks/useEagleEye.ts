@@ -121,6 +121,11 @@ export interface ScannerResponse {
   status: string;
   count: number;
   stocks: RatedStock[];
+  progress_phase?: string | null;
+  progress_message?: string | null;
+  progress_current?: number | null;
+  progress_total?: number | null;
+  progress_percent?: number | null;
 }
 
 export interface FullStockAnalysis {
