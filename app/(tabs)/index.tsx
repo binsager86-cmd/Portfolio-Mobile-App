@@ -461,12 +461,18 @@ function OverviewScreen() {
         )
       : 0;
 
-    const realizedPnl = realizedData?.total_realized_kwd ?? (data.by_portfolio
-      ? Object.values(data.by_portfolio).reduce(
-          (a: number, p) => a + (p.realized_pnl_kwd ?? 0),
-          0
-        )
-      : 0);
+    const trades = realizedData?.details ?? [];
+    const tradeNet = (t: typeof trades[number]) =>
+      (t.net_pnl_kwd ?? (t.realized_pnl_kwd + (t.dividends_allocated_kwd ?? 0)));
+
+    const realizedPnl = trades.length
+      ? trades.reduce((sum, t) => sum + tradeNet(t), 0)
+      : (data.by_portfolio
+          ? Object.values(data.by_portfolio).reduce(
+              (a: number, p) => a + (p.realized_pnl_kwd ?? 0),
+              0
+            )
+          : 0);
     const totalDividends = data.total_dividends ?? 0;
     const totalProfit = realizedPnl + unrealizedPnl + totalDividends;
 
@@ -482,9 +488,6 @@ function OverviewScreen() {
     // received on that position is positive — so a stock sold at a loss
     // can still count as a winning trade if dividends more than offset
     // the price loss.
-    const trades = realizedData?.details ?? [];
-    const tradeNet = (t: typeof trades[number]) =>
-      (t.net_pnl_kwd ?? (t.realized_pnl_kwd + (t.dividends_allocated_kwd ?? 0)));
     const profitableTrades = trades.filter((t) => tradeNet(t) > 0);
     const losingTrades = trades.filter((t) => tradeNet(t) < 0);
     const totalTrades = trades.length;
