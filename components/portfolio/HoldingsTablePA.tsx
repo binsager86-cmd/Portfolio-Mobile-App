@@ -59,7 +59,20 @@ export const TABLE_COLUMNS: ColDef[] = [
   { key: "pe_ratio",                        label: "holdings.peRatio",      fmt: "money",           width: 80,  align: "right" },
 ];
 
+export const SUMMARY_COLUMNS: ColDef[] = [
+  { key: "company",         label: "holdings.company",      fmt: "text_bold",       width: 190, align: "left" },
+  { key: "shares_qty",      label: "holdings.quantity",     fmt: "quantity",        width: 100, align: "right", summable: true },
+  { key: "avg_cost",        label: "holdings.avgCostShare", fmt: "price",           width: 110, align: "right" },
+  { key: "market_price",    label: "holdings.mktPrice",     fmt: "price",           width: 110, align: "right" },
+  { key: "market_value",    label: "holdings.mktValue",     fmt: "money",           width: 120, align: "right", summable: true },
+  { key: "unrealized_pnl",  label: "holdings.unrealPL",     fmt: "money_colored",   width: 130, align: "right", summable: true },
+  { key: "cash_dividends",  label: "holdings.cashDiv",      fmt: "money",           width: 105, align: "right", summable: true },
+  { key: "current_pnl",     label: "holdings.totalPL",      fmt: "money_colored",   width: 125, align: "right", summable: true },
+  { key: "current_pnl_pct", label: "holdings.pctChange",    fmt: "percent_colored", width: 95,  align: "right" },
+];
+
 export const TOTAL_TABLE_WIDTH = TABLE_COLUMNS.reduce((sum, c) => sum + c.width, 0);
+export const SUMMARY_TABLE_WIDTH = SUMMARY_COLUMNS.reduce((sum, c) => sum + c.width, 0);
 
 // ── Cell formatter ──────────────────────────────────────────────────
 

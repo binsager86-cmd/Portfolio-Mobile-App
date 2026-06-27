@@ -52,6 +52,8 @@ import type { SortDir } from "@/components/portfolio/HoldingsTablePA";
 import {
     HeaderCell,
     HoldingRow,
+  SUMMARY_COLUMNS,
+  SUMMARY_TABLE_WIDTH,
     TABLE_COLUMNS,
     TOTAL_TABLE_WIDTH,
     TotalCell,
@@ -79,6 +81,7 @@ function PortfolioAnalysisScreen() {
   // Holdings sort
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [viewMode, setViewMode] = useState<"summary" | "detailed">("summary");
 
   const portfolioParam = selectedPortfolio === "All" ? undefined : selectedPortfolio;
 
@@ -127,9 +130,11 @@ function PortfolioAnalysisScreen() {
     [holdingsResp?.holdings, sortCol, sortDir],
   );
 
-  const firstColumn = TABLE_COLUMNS[0];
-  const trailingColumns = TABLE_COLUMNS.slice(1);
-  const trailingTableWidth = Math.max(0, TOTAL_TABLE_WIDTH - firstColumn.width);
+  const activeColumns = viewMode === "summary" ? SUMMARY_COLUMNS : TABLE_COLUMNS;
+  const activeTableWidth = viewMode === "summary" ? SUMMARY_TABLE_WIDTH : TOTAL_TABLE_WIDTH;
+  const firstColumn = activeColumns[0];
+  const trailingColumns = activeColumns.slice(1);
+  const trailingTableWidth = Math.max(0, activeTableWidth - firstColumn.width);
 
   // Keep module-level refs in sync so getCellValue can compute allocation
   // Set module-level context for getCellValue allocation calculations
@@ -285,6 +290,87 @@ function PortfolioAnalysisScreen() {
             <Text style={{ color: "#34d399", fontSize: 13, fontWeight: "700" }}>{t('portfolioAnalysis.exportExcel')}</Text>
           </Pressable>
         </View>
+        <View style={{ paddingHorizontal: spacing.pagePx, marginBottom: 8 }}>
+          <View
+            style={[
+              s.viewToggleRow,
+              {
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                backgroundColor: colors.bgCard,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <FontAwesome
+                name={viewMode === "summary" ? "list" : "table"}
+                size={13}
+                color={colors.accentPrimary}
+              />
+              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+                {viewMode === "summary"
+                  ? `${t("holdings.summary", "Summary")} (9)`
+                  : `${t("holdings.detailed", "Detailed")} (18)`}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("holdings.summary", "Summary")}
+                onPress={() => setViewMode("summary")}
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: viewMode === "summary" ? colors.accentPrimary : colors.borderColor,
+                  backgroundColor: viewMode === "summary" ? colors.accentPrimary + "22" : "transparent",
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text
+                  style={{
+                    color: viewMode === "summary" ? colors.accentPrimary : colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {t("holdings.summary", "Summary")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("holdings.detailed", "Detailed")}
+                onPress={() => setViewMode("detailed")}
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: viewMode === "detailed" ? colors.accentPrimary : colors.borderColor,
+                  backgroundColor: viewMode === "detailed" ? colors.accentPrimary + "22" : "transparent",
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text
+                  style={{
+                    color: viewMode === "detailed" ? colors.accentPrimary : colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {t("holdings.detailed", "Detailed")}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
         <View
           style={[htStyles.tableOuter, { borderColor: colors.borderColor, backgroundColor: colors.bgCard, marginHorizontal: spacing.pagePx, marginBottom: 24 }]}
         >
@@ -392,6 +478,7 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, marginBottom: 10 },
   filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  viewToggleRow: { flexDirection: "row" },
   detailTable: { borderWidth: 1, borderRadius: 8, overflow: "hidden" as const },
   detailRow: { flexDirection: "row", paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   detailCell: { flex: 1, fontSize: 13 },
