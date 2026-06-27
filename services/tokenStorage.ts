@@ -17,9 +17,24 @@ import { Platform } from "react-native";
 const CLOCK_SKEW_MS = 60_000; // 60s buffer for network/device clock drift
 
 // SSR guards — sessionStorage/localStorage may not exist during
-// Expo Router's Node.js server-side render pass.
-const hasSessionStorage = typeof sessionStorage !== "undefined";
-const hasLocalStorage = typeof localStorage !== "undefined";
+// Expo Router's Node.js server-side render pass. Resolve availability
+// at call-time (not module load) so hydration/runtime transitions cannot
+// lock the module into a false-negative storage state.
+function canUseSessionStorage(): boolean {
+  try {
+    return typeof sessionStorage !== "undefined";
+  } catch {
+    return false;
+  }
+}
+
+function canUseLocalStorage(): boolean {
+  try {
+    return typeof localStorage !== "undefined";
+  } catch {
+    return false;
+  }
+}
 
 // ── In-memory token cache ───────────────────────────────────────────
 // Reading from expo-secure-store on Android is a JNI call into the
@@ -54,8 +69,8 @@ export const setTokens = async (
   const expiresAt = expiresIn ? String(Date.now() + expiresIn * 1000) : null;
   primeCache(access, refresh, expiresAt);
   if (Platform.OS === "web") {
-    if (hasSessionStorage) sessionStorage.setItem("access_token", access);
-    if (hasLocalStorage) {
+    if (canUseSessionStorage()) sessionStorage.setItem("access_token", access);
+    if (canUseLocalStorage()) {
       localStorage.setItem("refresh_token", refresh);
       if (expiresAt) localStorage.setItem("token_expires_at", expiresAt);
     }
@@ -69,13 +84,13 @@ export const setTokens = async (
 export const getTokens = async () => {
   if (Platform.OS === "web") {
     return {
-      access: hasSessionStorage
+      access: canUseSessionStorage()
         ? sessionStorage.getItem("access_token")
         : null,
-      refresh: hasLocalStorage
+      refresh: canUseLocalStorage()
         ? localStorage.getItem("refresh_token")
         : null,
-      expiresAt: hasLocalStorage
+      expiresAt: canUseLocalStorage()
         ? localStorage.getItem("token_expires_at")
         : null,
     };
@@ -103,8 +118,8 @@ export const getTokens = async () => {
 export const clearTokens = async (): Promise<void> => {
   primeCache(null, null, null);
   if (Platform.OS === "web") {
-    if (hasSessionStorage) sessionStorage.removeItem("access_token");
-    if (hasLocalStorage) {
+    if (canUseSessionStorage()) sessionStorage.removeItem("access_token");
+    if (canUseLocalStorage()) {
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("token_expires_at");
     }
@@ -117,7 +132,7 @@ export const clearTokens = async (): Promise<void> => {
 
 export const getStoredAccessToken = async (): Promise<string | null> => {
   if (Platform.OS === "web") {
-    return hasSessionStorage
+    return canUseSessionStorage()
       ? sessionStorage.getItem("access_token")
       : null;
   }
@@ -198,7 +213,7 @@ export async function getToken(): Promise<string | null> {
 export async function setToken(token: string): Promise<void> {
   cachedAccessToken = token;
   if (Platform.OS === "web") {
-    if (hasSessionStorage) sessionStorage.setItem("access_token", token);
+    if (canUseSessionStorage()) sessionStorage.setItem("access_token", token);
   } else {
     await SecureStore.setItemAsync("access_token", token);
   }
@@ -207,7 +222,7 @@ export async function setToken(token: string): Promise<void> {
 export async function removeToken(): Promise<void> {
   cachedAccessToken = null;
   if (Platform.OS === "web") {
-    if (hasSessionStorage) sessionStorage.removeItem("access_token");
+    if (canUseSessionStorage()) sessionStorage.removeItem("access_token");
   } else {
     await SecureStore.deleteItemAsync("access_token");
   }
@@ -215,7 +230,7 @@ export async function removeToken(): Promise<void> {
 
 export async function getRefreshToken(): Promise<string | null> {
   if (Platform.OS === "web") {
-    return hasLocalStorage ? localStorage.getItem("refresh_token") : null;
+    return canUseLocalStorage() ? localStorage.getItem("refresh_token") : null;
   }
   if (cachedRefreshToken !== undefined) return cachedRefreshToken;
   const value = await SecureStore.getItemAsync("refresh_token");
@@ -226,7 +241,7 @@ export async function getRefreshToken(): Promise<string | null> {
 export async function setRefreshToken(token: string): Promise<void> {
   cachedRefreshToken = token;
   if (Platform.OS === "web") {
-    if (hasLocalStorage) localStorage.setItem("refresh_token", token);
+    if (canUseLocalStorage()) localStorage.setItem("refresh_token", token);
   } else {
     await SecureStore.setItemAsync("refresh_token", token);
   }
@@ -236,7 +251,7 @@ export async function removeRefreshToken(): Promise<void> {
   cachedRefreshToken = null;
   cachedExpiresAt = null;
   if (Platform.OS === "web") {
-    if (hasLocalStorage) {
+    if (canUseLocalStorage()) {
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("token_expires_at");
     }
