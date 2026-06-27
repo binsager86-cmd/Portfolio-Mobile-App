@@ -387,6 +387,33 @@ export function TradingSummaryCards({
             </Pressable>
           );
         })}
+
+        {showRealizedTab && onRecalculate ? (
+          <Pressable
+            testID="recalculate-realized-transactions"
+            onPress={handleRecalculate}
+            style={[
+              styles.topRecalculateButton,
+              {
+                backgroundColor: colors.accentSecondary + "18",
+                borderColor: colors.accentSecondary + "55",
+                opacity: isRecalculating ? 0.6 : 1,
+              },
+            ]}
+            disabled={isRecalculating}
+          >
+            {isRecalculating ? (
+              <ActivityIndicator size="small" color={colors.accentSecondary} />
+            ) : (
+              <FontAwesome name="refresh" size={14} color={colors.accentSecondary} />
+            )}
+            <Text style={[styles.exportButtonText, { color: colors.accentSecondary }]}>
+              {isRecalculating
+                ? t("trading.recalculating", "Recalculating...")
+                : t("trading.recalculate", "Recalculate")}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
@@ -452,33 +479,6 @@ export function TradingSummaryCards({
                   </Text>
                 </View>
                 <View style={styles.headerActions}>
-                  {onRecalculate ? (
-                    <Pressable
-                      testID="recalculate-realized-transactions"
-                      onPress={handleRecalculate}
-                      style={[
-                        styles.exportButton,
-                        {
-                          backgroundColor: colors.accentSecondary + "18",
-                          borderColor: colors.accentSecondary + "55",
-                          opacity: isRecalculating ? 0.6 : 1,
-                        },
-                      ]}
-                      disabled={isRecalculating}
-                    >
-                      {isRecalculating ? (
-                        <ActivityIndicator size="small" color={colors.accentSecondary} />
-                      ) : (
-                        <FontAwesome name="refresh" size={14} color={colors.accentSecondary} />
-                      )}
-                      <Text style={[styles.exportButtonText, { color: colors.accentSecondary }]}>
-                        {isRecalculating
-                          ? t("trading.recalculating", "Recalculating...")
-                          : t("trading.recalculateWAC", "Recalculate")}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-
                   <Pressable
                     testID="export-realized-transactions"
                     onPress={handleExportRealized}
@@ -715,6 +715,16 @@ const styles = StyleSheet.create({
   tabButtonText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  topRecalculateButton: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   periodText: { fontSize: 12, fontWeight: "600" },
   periodCcy: { fontSize: 10, fontWeight: "500", marginLeft: 4 },
