@@ -31,9 +31,13 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 interface YearlyData {
   year: string;
+  hasSnapshot: boolean;
   portfolioValue: number;       // year-end snapshot value
+  growth: number;               // delta vs prior year-end value
+  netDeposits: number;          // yearly change in accumulated invested cash
   dividends: number;            // total cash dividends (KWD) that year
-  appreciation: number;         // value change − net deposits
+  appreciation: number;         // growth − net deposits
+  appreciationExIncome: number; // appreciation excluding dividends + realized
   realizedPnl: number;          // total realized P&L (KWD) that year
 }
 
@@ -167,16 +171,30 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
           ? prevYearEndAccumulatedCash
           : yearStart.accumulated_cash;
         const netDepositsThisYear = yearEnd.accumulated_cash - depositBaseline;
-        const appreciation = (snapshotYearEndValue - startValue) - netDepositsThisYear;
+        const growth = portfolioValue - startValue;
+        // Keep decomposition additive with the displayed growth total,
+        // including current-year live-value override when present.
+        const appreciation = growth - netDepositsThisYear;
 
         // Realized P&L
         const realizedPnl = realByYear.get(year) ?? 0;
+        const appreciationExIncome = appreciation - dividends - realizedPnl;
 
         hasPrevSnapshotYear = true;
         prevYearEndValue = portfolioValue;
         prevYearEndAccumulatedCash = yearEnd.accumulated_cash;
 
-        return { year, portfolioValue, dividends, appreciation, realizedPnl };
+        return {
+          year,
+          hasSnapshot: true,
+          portfolioValue,
+          growth,
+          netDeposits: netDepositsThisYear,
+          dividends,
+          appreciation,
+          appreciationExIncome,
+          realizedPnl,
+        };
       }
 
       // Year has no snapshots — appreciation is indeterminate; do NOT use cost basis
@@ -186,7 +204,17 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
       const dividends = divByYear.get(year) ?? 0;
       const realizedPnl = realByYear.get(year) ?? 0;
 
-      return { year, portfolioValue: 0, dividends, appreciation: 0, realizedPnl };
+      return {
+        year,
+        hasSnapshot: false,
+        portfolioValue: 0,
+        growth: 0,
+        netDeposits: 0,
+        dividends,
+        appreciation: 0,
+        appreciationExIncome: 0,
+        realizedPnl,
+      };
     });
   }, [snapshotData, allDivData, realizedData, allTxnData, livePortfolioValue, liveAsOfDate]);
 
@@ -223,18 +251,20 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
   // not find() which returns the FIRST year less-than (could be 2020 when
   // the first filtered year is 2023, skipping 2021/2022 in between).
   const growthChartData: ChartDataPoint[] = useMemo(
-    () => filteredData.map((d, i) => {
-      let prevValue: number;
-      if (i === 0) {
-        // Find the last year in the full dataset that is strictly before d.year
-        const prevEntry = yearlyData.filter((y) => y.year < d.year).pop();
-        prevValue = prevEntry?.portfolioValue ?? 0;
-      } else {
-        prevValue = filteredData[i - 1].portfolioValue;
-      }
-      return { label: d.year, value: d.portfolioValue - prevValue };
-    }),
-    [filteredData, yearlyData],
+    () => filteredData.map((d) => ({ label: d.year, value: d.growth })),
+    [filteredData],
+  );
+
+  const growthBreakdownRows = useMemo(
+    () => filteredData.filter((d) => d.hasSnapshot).map((d) => ({
+      year: d.year,
+      totalGrowth: d.growth,
+      deposits: d.netDeposits,
+      appreciationCore: d.appreciationExIncome,
+      dividends: d.dividends,
+      realized: d.realizedPnl,
+    })),
+    [filteredData],
   );
 
   const dividendBarData = useMemo(
@@ -391,6 +421,44 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
         </View>
       )}
 
+      <View style={[s.breakdownContainer, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
+        <Text style={[s.breakdownTitle, { color: colors.textSecondary }]}>
+          {t("historical.growthBreakdownTitle", "Yearly Growth Breakdown")}
+        </Text>
+        <Text style={[s.breakdownSubtitle, { color: colors.textMuted }]}>
+          {t("historical.growthBreakdownHint", "Total Growth = Deposits + Appreciation + Dividends + Realized P/L")}
+        </Text>
+
+        <View style={[s.breakdownHeaderRow, { borderBottomColor: colors.borderColor }]}> 
+          <Text style={[s.colYear, { color: colors.textSecondary }]}>{t("historical.colYear", "Year")}</Text>
+          <Text style={[s.colVal, { color: colors.textSecondary }]}>{t("historical.colTotalGrowth", "Total")}</Text>
+          <Text style={[s.colVal, { color: colors.textSecondary }]}>{t("historical.colDeposits", "Deposits")}</Text>
+          <Text style={[s.colVal, { color: colors.textSecondary }]}>{t("historical.colAppreciation", "Apprec.")}</Text>
+          <Text style={[s.colVal, { color: colors.textSecondary }]}>{t("historical.colDividends", "Div.")}</Text>
+          <Text style={[s.colVal, { color: colors.textSecondary }]}>{t("historical.colRealized", "Realized")}</Text>
+        </View>
+
+        {growthBreakdownRows.map((row, idx) => (
+          <View
+            key={row.year}
+            style={[
+              s.breakdownDataRow,
+              {
+                borderBottomColor: colors.borderColor,
+                borderBottomWidth: idx < growthBreakdownRows.length - 1 ? StyleSheet.hairlineWidth : 0,
+              },
+            ]}
+          >
+            <Text style={[s.colYear, { color: colors.textPrimary, fontWeight: "600" }]}>{row.year}</Text>
+            <Text style={[s.colVal, { color: row.totalGrowth >= 0 ? colors.success : colors.danger }]}>{formatSignedCurrency(row.totalGrowth)}</Text>
+            <Text style={[s.colVal, { color: row.deposits >= 0 ? colors.success : colors.danger }]}>{formatSignedCurrency(row.deposits)}</Text>
+            <Text style={[s.colVal, { color: row.appreciationCore >= 0 ? colors.success : colors.danger }]}>{formatSignedCurrency(row.appreciationCore)}</Text>
+            <Text style={[s.colVal, { color: row.dividends >= 0 ? colors.success : colors.danger }]}>{formatSignedCurrency(row.dividends)}</Text>
+            <Text style={[s.colVal, { color: row.realized >= 0 ? colors.success : colors.danger }]}>{formatSignedCurrency(row.realized)}</Text>
+          </View>
+        ))}
+      </View>
+
       {/* ── Chart: Dividends by Year (bar chart) ── */}
       <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
         {t("historical.dividendsByYear")}
@@ -478,6 +546,43 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
+  },
+  breakdownContainer: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 16,
+  },
+  breakdownTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  breakdownSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  breakdownHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    paddingBottom: 6,
+  },
+  breakdownDataRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  colYear: {
+    width: 56,
+    fontSize: 12,
+  },
+  colVal: {
+    flex: 1,
+    fontSize: 11,
+    textAlign: "right",
   },
   emptyContainer: {
     padding: 40,
