@@ -209,4 +209,41 @@ describe("buildYearlyHistoricalData", () => {
     expect(y2026?.portfolioValue).toBe(0);
     expect(y2026?.growth).toBe(0);
   });
+
+  it("uses net_pnl_kwd (or realized+dividends fallback) for yearly realized totals", () => {
+    const data = buildYearlyHistoricalData({
+      snapshots: [
+        makeSnapshot({
+          id: 1,
+          snapshot_date: "2025-12-31",
+          portfolio_value: 250,
+          accumulated_cash: 140,
+          created_at: 10,
+        }),
+      ],
+      dividends: [],
+      realizedDetails: [
+        // Explicit net P/L should be used directly.
+        makeRealized({
+          id: 1,
+          txn_date: "2026-01-15",
+          realized_pnl_kwd: 10,
+          dividends_allocated_kwd: 5,
+          net_pnl_kwd: 18,
+        }),
+        // Missing net P/L should fall back to realized + dividends.
+        makeRealized({
+          id: 2,
+          txn_date: "2026-03-10",
+          realized_pnl_kwd: 7,
+          dividends_allocated_kwd: 3,
+          net_pnl_kwd: undefined,
+        }),
+      ],
+    });
+
+    const y2026 = data.find((row) => row.year === "2026");
+    expect(y2026).toBeDefined();
+    expect(y2026?.realizedPnl).toBe(28);
+  });
 });

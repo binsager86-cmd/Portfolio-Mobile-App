@@ -99,7 +99,10 @@ export function buildYearlyHistoricalData(args: {
   const realizedByYear = new Map<string, number>();
   for (const row of args.realizedDetails) {
     const year = row.txn_date.slice(0, 4);
-    realizedByYear.set(year, round3((realizedByYear.get(year) ?? 0) + safeNum(row.realized_pnl_kwd)));
+    const netPnlKwd =
+      safeNum(row.net_pnl_kwd) ||
+      (safeNum(row.realized_pnl_kwd) + safeNum(row.dividends_allocated_kwd));
+    realizedByYear.set(year, round3((realizedByYear.get(year) ?? 0) + netPnlKwd));
   }
 
   const allYears = new Set<string>([
