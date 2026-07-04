@@ -524,6 +524,14 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     return peValues.reduce((sum, v) => sum + v, 0) / peValues.length;
   }, [peerData]);
 
+  // Auto-seed peer multiple from sector average (without overriding user edits).
+  useEffect(() => {
+    if (model !== "multiples") return;
+    if (sectorAvgPE == null) return;
+    if (pm.trim() !== "") return;
+    setPm(sectorAvgPE.toFixed(2));
+  }, [model, pm, sectorAvgPE, setPm]);
+
   // Summary-level Margin of Safety
   const [summaryMos, setSummaryMos] = useState("15");
   const mosInitialized = useRef(false);
@@ -1159,16 +1167,42 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
 
               {/* ── Valuation: EPS × Avg P/E ────────────────── */}
               {(() => {
-                const epsVal = defaults?.eps;
+                const epsVal = mv.trim() !== "" ? parseFloat(mv) : defaults?.eps;
                 const priceVal = defaults?.current_price;
-                const multiplesValuation = epsVal != null && sectorAvgPE != null ? epsVal * sectorAvgPE : null;
+                const peerMultipleVal = pm.trim() !== "" ? parseFloat(pm) : sectorAvgPE;
+                const hasValidEps = epsVal != null && Number.isFinite(epsVal);
+                const hasValidPeer = peerMultipleVal != null && Number.isFinite(peerMultipleVal);
+                const multiplesValuation = hasValidEps && hasValidPeer ? (epsVal * peerMultipleVal) : null;
                 return (
                   <View style={{ marginTop: 4 }}>
+                    <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+                      <LabeledInput
+                        label="EPS (TTM)"
+                        value={mv}
+                        onChangeText={setMv}
+                        colors={colors}
+                        keyboardType="numeric"
+                        flex={1}
+                        placeholder={defaults?.eps != null ? defaults.eps.toFixed(3) : "0.000"}
+                        helperText="Editable TTM EPS. Auto-filled from retrieved income statements (latest 4 quarters), with fallback to valuation defaults."
+                      />
+                      <LabeledInput
+                        label="PEER P/E"
+                        value={pm}
+                        onChangeText={setPm}
+                        colors={colors}
+                        keyboardType="numeric"
+                        flex={1}
+                        placeholder={sectorAvgPE != null ? sectorAvgPE.toFixed(2) : "0.00"}
+                        helperText="Editable peer multiple. Auto-seeded from sector average P/E when peers are available."
+                      />
+                    </View>
+
                     <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
                         <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 4 }}>COMPANY EPS</Text>
                         <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
-                          {epsVal != null ? fmt(epsVal) : "—"}
+                          {hasValidEps ? fmt(epsVal) : "—"}
                         </Text>
                       </View>
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
@@ -1180,7 +1214,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
                         <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 4 }}>AVG P/E</Text>
                         <Text style={{ color: colors.accentPrimary, fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
-                          {sectorAvgPE != null ? sectorAvgPE.toFixed(2) : "—"}
+                          {hasValidPeer ? (peerMultipleVal as number).toFixed(2) : "—"}
                         </Text>
                       </View>
                     </View>
@@ -1191,7 +1225,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                           EPS × Avg P/E = Multiples Valuation
                         </Text>
                         <Text style={{ color: "#f59e0b", fontSize: 11, marginBottom: 6 }}>
-                          {fmt(epsVal ?? 0)} × {(sectorAvgPE ?? 0).toFixed(2)} =
+                          {fmt(epsVal ?? 0)} × {(peerMultipleVal ?? 0).toFixed(2)} =
                         </Text>
                         <Text style={{ color: "#f59e0b", fontSize: 28, fontWeight: "900", fontVariant: ["tabular-nums"] }}>
                           {fmt(multiplesValuation)}
@@ -1220,7 +1254,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                     )}
                     {multiplesValuation == null && (
                       <Text style={{ color: colors.textMuted, fontSize: 12, fontStyle: "italic", textAlign: "center", marginBottom: 8 }}>
-                        {epsVal == null ? "EPS not available — compute metrics first." : "Add peer companies to calculate the average P/E."}
+                        {!hasValidEps ? "EPS not available — upload statements or enter EPS manually." : "Add peer companies or enter Peer P/E manually."}
                       </Text>
                     )}
                   </View>
@@ -1229,12 +1263,21 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
 
               {valError && <Text style={{ color: colors.danger, fontSize: 11, marginTop: 4 }}>{valError}</Text>}
               <ActionButton label={multMut.isPending ? "Saving..." : "Save Multiples Valuation"} onPress={() => {
-                const epsVal = defaults?.eps;
-                if (epsVal != null && sectorAvgPE != null) {
-                  multMut.mutate({ metric_value: epsVal, peer_multiple: sectorAvgPE, multiple_type: "P/E" });
+                const epsVal = mv.trim() !== "" ? parseFloat(mv) : defaults?.eps;
+                const peerMultipleVal = pm.trim() !== "" ? parseFloat(pm) : sectorAvgPE;
+                if (epsVal != null && Number.isFinite(epsVal) && peerMultipleVal != null && Number.isFinite(peerMultipleVal)) {
+                  multMut.mutate({ metric_value: epsVal, peer_multiple: peerMultipleVal, multiple_type: multipleType || "P/E" });
                 }
               }}
-                colors={colors} disabled={defaults?.eps == null || sectorAvgPE == null || !!valError} loading={multMut.isPending} icon="save" />
+                colors={colors}
+                disabled={
+                  !!valError ||
+                  !(mv.trim() !== "" ? Number.isFinite(parseFloat(mv)) : defaults?.eps != null) ||
+                  !(pm.trim() !== "" ? Number.isFinite(parseFloat(pm)) : sectorAvgPE != null)
+                }
+                loading={multMut.isPending}
+                icon="save"
+              />
             </>
           )}
         </Card>

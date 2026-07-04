@@ -19,6 +19,78 @@ import {
 /** Strip commas so users can type "1,234,567" and parseFloat works. */
 const stripCommas = (s: string) => s.replace(/,/g, "");
 
+const EPS_LINE_ITEM_CODES = new Set([
+  "EPS_DILUTED",
+  "EPS_BASIC",
+  "DILUTED_EARNINGS_PER_SHARE",
+  "BASIC_EARNINGS_PER_SHARE",
+  "EARNINGS_PER_SHARE_DILUTED",
+  "EARNINGS_PER_SHARE_BASIC",
+  "EARNINGS_PER_SHARE",
+]);
+
+function isSubunitEpsCode(code: string): boolean {
+  const low = code.toLowerCase();
+  return low.includes("fils") || low.includes("cents") || low.includes("halala");
+}
+
+function pickStatementEpsValue(statement: { line_items?: Array<{ line_item_code: string; amount: number | null }> }): number | null {
+  let bestDiluted: number | null = null;
+  let bestBasic: number | null = null;
+  for (const li of statement.line_items ?? []) {
+    if (li.amount == null) continue;
+    const code = String(li.line_item_code || "");
+    const up = code.toUpperCase();
+    const isEps = EPS_LINE_ITEM_CODES.has(up) || up.includes("EARNINGS_PER_SHARE") || up.includes("EPS_");
+    if (!isEps) continue;
+    let val = Number(li.amount);
+    if (!Number.isFinite(val)) continue;
+    if (isSubunitEpsCode(code)) val = val / 1000;
+    if (up.includes("DILUT")) {
+      bestDiluted = val;
+    } else if (bestBasic == null) {
+      bestBasic = val;
+    }
+  }
+  return bestDiluted ?? bestBasic;
+}
+
+function deriveTtmEpsFromStatements(statements: Array<{
+  statement_type: string;
+  fiscal_year: number;
+  fiscal_quarter: number | null;
+  line_items?: Array<{ line_item_code: string; amount: number | null }>;
+}>): number | null {
+  const quarterly = statements
+    .filter((s) => s.statement_type === "income" && s.fiscal_quarter != null)
+    .map((s) => ({
+      fiscal_year: s.fiscal_year,
+      fiscal_quarter: s.fiscal_quarter as number,
+      eps: pickStatementEpsValue(s),
+    }))
+    .filter((s) => s.eps != null)
+    .sort((a, b) => {
+      if (b.fiscal_year !== a.fiscal_year) return b.fiscal_year - a.fiscal_year;
+      return b.fiscal_quarter - a.fiscal_quarter;
+    });
+
+  if (quarterly.length >= 4) {
+    const ttm = quarterly.slice(0, 4).reduce((sum, q) => sum + (q.eps ?? 0), 0);
+    return Number.isFinite(ttm) ? Number(ttm.toFixed(4)) : null;
+  }
+
+  const annual = statements
+    .filter((s) => s.statement_type === "income" && s.fiscal_quarter == null)
+    .sort((a, b) => b.fiscal_year - a.fiscal_year);
+  if (annual.length > 0) {
+    const annualEps = pickStatementEpsValue(annual[0]);
+    if (annualEps != null && Number.isFinite(annualEps)) {
+      return Number(annualEps.toFixed(4));
+    }
+  }
+  return null;
+}
+
 export type ValuationModel = "graham" | "dcf" | "ddm" | "multiples";
 
 export function useValuationCalculations(stockId: number) {
@@ -88,13 +160,31 @@ export function useValuationCalculations(stockId: number) {
 
   // ── Last calculation result ─────────────────────────────────────
   const [lastResult, setLastResult] = useState<ValuationRunResult | null>(null);
+  const epsEdited = useRef(false);
+  const mvEdited = useRef(false);
+
+  const onSetEps = (value: string) => {
+    epsEdited.current = true;
+    setEps(value);
+  };
+  const onSetMv = (value: string) => {
+    mvEdited.current = true;
+    setMv(value);
+  };
+
+  const statementTtmEps = useMemo(() => {
+    const stmts = stmtQ.data?.statements ?? [];
+    if (!stmts.length) return null;
+    return deriveTtmEpsFromStatements(stmts);
+  }, [stmtQ.data]);
 
   // ── Auto-populate from defaults when they load ──────────────────
   useEffect(() => {
     if (!defaults.data || populated.current) return;
     populated.current = true;
     const d = defaults.data;
-    if (d.eps != null) setEps(d.eps.toFixed(3));
+    const effectiveEps = statementTtmEps ?? d.eps;
+    if (effectiveEps != null) setEps(effectiveEps.toFixed(3));
     // Graham-specific defaults
     if (d.graham_growth_cagr != null) setGrahamGrowth(String(d.graham_growth_cagr));
     if (d.bond_yield != null) setCorpYield(String(d.bond_yield));
@@ -109,12 +199,20 @@ export function useValuationCalculations(stockId: number) {
     if (d.total_cash != null) setCash(String(d.total_cash));
     if (d.total_debt != null) setDebt(String(d.total_debt));
     // EPS as default metric value for multiples
-    if (d.eps != null) setMv(d.eps.toFixed(3));
+    if (effectiveEps != null) setMv(effectiveEps.toFixed(3));
     // WACC risk-free rate
     if (d.wacc_risk_free_rate != null) setWaccRf((d.wacc_risk_free_rate * 100).toFixed(2));
     // WACC tax rate
     if (d.wacc_tax_rate != null) setWaccTax((d.wacc_tax_rate * 100).toFixed(2));
-  }, [defaults.data]);
+  }, [defaults.data, statementTtmEps]);
+
+  // If statement-based TTM EPS arrives after defaults, update untouched inputs.
+  useEffect(() => {
+    if (statementTtmEps == null) return;
+    const value = statementTtmEps.toFixed(3);
+    if (!epsEdited.current) setEps(value);
+    if (!mvEdited.current) setMv(value);
+  }, [statementTtmEps]);
 
   // ── Fallback: pull shares from uploaded statements if still "1" ──
   useEffect(() => {
@@ -279,14 +377,14 @@ export function useValuationCalculations(stockId: number) {
 
   return {
     model, setModel,
-    eps, setEps, currentPrice, setCurrentPrice,
+    eps, setEps: onSetEps, currentPrice, setCurrentPrice,
     grahamGrowth, setGrahamGrowth, corpYield, setCorpYield, marginOfSafety, setMarginOfSafety,
     fcf, setFcf,
     g1, setG1, g2, setG2, dr, setDr, tg, setTg,
     s1, setS1, s2, setS2,
     shares, setShares, cash, setCash, debt, setDebt,
     div, setDiv, divGr, setDivGr, rr, setRr,
-    mv, setMv, pm, setPm, multipleType, setMultipleType,
+    mv, setMv: onSetMv, pm, setPm, multipleType, setMultipleType,
     useWacc, setUseWacc,
     waccRf, setWaccRf, waccTax, setWaccTax, waccComputed,
     grahamMut, dcfMut, ddmMut, multMut,

@@ -821,6 +821,7 @@ export interface PeerMultiple {
 
 export interface ValuationDefaults {
   eps: number | null;
+  eps_source?: string | null;
   book_value_per_share: number | null;
   dividends_per_share: number | null;
   fcf: number | null;

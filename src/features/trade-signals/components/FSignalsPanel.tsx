@@ -41,6 +41,8 @@ import {
 const QUARTERS: readonly Quarter[] = ["q1", "q2", "q3", "q4"] as const;
 const Q_LABEL: Record<Quarter, string> = { q1: "Q1", q2: "Q2", q3: "Q3", q4: "Q4" };
 type SignalTabKey = "pe" | "dividendYield" | "whaleTracker" | "quarterMovement";
+const US_SUFFIXES = new Set(["US", "USA", "NYSE", "NASDAQ", "AMEX"]);
+const KW_SUFFIXES = new Set(["KW", "KSE", "BK"]);
 
 const fmtPe = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? "-" : v.toFixed(2);
@@ -269,20 +271,20 @@ function AddStockModal({
   }, [stockListQ.data, pickerSearch]);
 
   const createMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (entry: StockListEntry) =>
       createAnalysisStock({
-        symbol: selectedEntry!.symbol.trim().toUpperCase(),
-        company_name: selectedEntry!.name.trim(),
+        symbol: entry.symbol.trim().toUpperCase(),
+        company_name: entry.name.trim(),
         exchange: market === "kuwait" ? "KSE" : "US",
         currency: market === "kuwait" ? "KWD" : "USD",
       }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
+    onSuccess: async (res, entry) => {
+      await queryClient.invalidateQueries({ queryKey: ["analysis-stocks"] });
       onCreated({
         id: res.id,
         user_id: 0,
-        symbol: selectedEntry!.symbol.trim().toUpperCase(),
-        company_name: selectedEntry!.name.trim(),
+        symbol: entry.symbol.trim().toUpperCase(),
+        company_name: entry.name.trim(),
         exchange: market === "kuwait" ? "KSE" : "US",
         currency: market === "kuwait" ? "KWD" : "USD",
         sector: null,
@@ -301,6 +303,10 @@ function AddStockModal({
   });
 
   const canSubmit = !!selectedEntry && !createMut.isPending;
+  const handleSubmit = () => {
+    if (!selectedEntry || createMut.isPending) return;
+    createMut.mutate(selectedEntry);
+  };
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -425,7 +431,7 @@ function AddStockModal({
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => canSubmit && createMut.mutate()}
+              onPress={handleSubmit}
               style={[
                 styles.modalBtn,
                 { backgroundColor: canSubmit ? colors.accentPrimary : colors.textMuted + "55" },
@@ -469,16 +475,16 @@ function StockPicker({
   const [scanError, setScanError] = useState("");
 
   const marketLabel = (symbol: string) => (symbol.toUpperCase().endsWith(".KW") ? "KSE" : "US");
+  const trimmedScanInput = scanInput.trim();
+  const canRunScan = trimmedScanInput.length > 0 && !scanLoading;
 
   const handleScanTicker = async () => {
-    const ticker = scanInput.trim().toUpperCase();
+    const ticker = trimmedScanInput.toUpperCase();
     if (!ticker) return;
 
     // Infer market from ticker suffix (e.g. KFH.KW → KSE, AAPL.US → USA)
     const dotIdx = ticker.lastIndexOf(".");
     const suffix = dotIdx !== -1 ? ticker.slice(dotIdx + 1) : "";
-    const US_SUFFIXES = new Set(["US", "USA", "NYSE", "NASDAQ", "AMEX"]);
-    const KW_SUFFIXES = new Set(["KW", "KSE", "BK"]);
     let inferredExchange: string;
     let inferredCurrency: string;
     if (US_SUFFIXES.has(suffix)) {
@@ -555,63 +561,78 @@ function StockPicker({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.listWrap}>
-      {topContent}
-      
-      {/* Quick Scan Section */}
-      <View style={[styles.quickScanBox, { backgroundColor: colors.accentPrimary + "10", borderColor: colors.accentPrimary + "40" }]}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
-          {t("tradeSignals.quickScan", "Quick Scan")}
-        </Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>
-          {t("tradeSignals.scanHint", "Kuwait tickers (bare or .KW), US stocks use .US suffix")}
-        </Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <View style={[styles.scanInputBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, flex: 1 }]}>
-            <FontAwesome name="search" size={12} color={colors.textMuted} />
-            <TextInput
-              value={scanInput}
-              onChangeText={setScanInput}
-              placeholder={t("tradeSignals.tickerPlaceholder", "NBK, KFH.KW, AAPL.US")}
-              placeholderTextColor={colors.textMuted}
-              onSubmitEditing={handleScanTicker}
-              autoCapitalize="characters"
-              editable={!scanLoading}
-              style={[styles.scanInput, { color: colors.textPrimary }]}
-            />
-            {scanInput ? (
-              <Pressable onPress={() => setScanInput("")} disabled={scanLoading} hitSlop={8}>
-                <FontAwesome name="times-circle" size={12} color={colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={handleScanTicker}
-            disabled={!scanInput.trim() || scanLoading}
-            style={[
-              styles.scanBtn,
-              {
-                backgroundColor:
-                  scanInput.trim() && !scanLoading
+        {topContent ? <View style={styles.topContentWrap}>{topContent}</View> : null}
+
+        {/* Quick Scan Section */}
+        <View
+          style={[
+            styles.quickScanBox,
+            {
+              backgroundColor: colors.accentPrimary + "10",
+              borderColor: colors.accentPrimary + "40",
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+            {t("tradeSignals.quickScan", "Quick Scan")}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>
+            {t("tradeSignals.scanHint", "Kuwait tickers (bare or .KW), US stocks use .US suffix")}
+          </Text>
+
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <View
+              style={[
+                styles.scanInputBox,
+                { backgroundColor: colors.bgInput, borderColor: colors.borderColor, flex: 1 },
+              ]}
+            >
+              <FontAwesome name="search" size={12} color={colors.textMuted} />
+              <TextInput
+                value={scanInput}
+                onChangeText={setScanInput}
+                placeholder={t("tradeSignals.tickerPlaceholder", "NBK, KFH.KW, AAPL.US")}
+                placeholderTextColor={colors.textMuted}
+                onSubmitEditing={handleScanTicker}
+                autoCapitalize="characters"
+                editable={!scanLoading}
+                style={[styles.scanInput, { color: colors.textPrimary }]}
+              />
+              {scanInput ? (
+                <Pressable onPress={() => setScanInput("")} disabled={scanLoading} hitSlop={8}>
+                  <FontAwesome name="times-circle" size={12} color={colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Pressable
+              onPress={handleScanTicker}
+              disabled={!canRunScan}
+              style={[
+                styles.scanBtn,
+                {
+                  backgroundColor: canRunScan
                     ? colors.accentPrimary
                     : colors.textMuted + "40",
-              },
-            ]}
-          >
-            {scanLoading ? (
-              <ActivityIndicator color="#fff" size={14} />
-            ) : (
-              <FontAwesome name="arrow-right" size={12} color="#fff" />
-            )}
-          </Pressable>
+                },
+              ]}
+            >
+              {scanLoading ? (
+                <ActivityIndicator color="#fff" size={14} />
+              ) : (
+                <FontAwesome name="arrow-right" size={12} color="#fff" />
+              )}
+            </Pressable>
+          </View>
+
+          {scanError ? (
+            <Text style={{ color: "#e74c3c", fontSize: 11, marginTop: 8 }}>
+              {"\u26A0"} {scanError}
+            </Text>
+          ) : null}
         </View>
-        {scanError && (
-          <Text style={{ color: "#e74c3c", fontSize: 11, marginTop: 8 }}>
-            ⚠ {scanError}
-          </Text>
-        )}
-      </View>
 
       <View style={styles.dividerBox}>
         <View style={{ flex: 1, height: 1, backgroundColor: colors.borderColor }} />
@@ -665,32 +686,41 @@ function StockPicker({
         </View>
       )}
 
-      {!loading &&
-        stocks.map((s) => (
-          <Pressable
-            key={s.id}
-            onPress={() => onSelect(s)}
-            style={[styles.stockRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
-          >
-            <View style={[styles.symbolBadge, { backgroundColor: colors.accentPrimary + "15" }]}>
-              <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: 13 }}>
-                {s.symbol.slice(0, 4)}
-              </Text>
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 15 }}>
-                {s.symbol}
-              </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
-                {s.company_name}
-              </Text>
-              <View style={[styles.stockMetaPill, { backgroundColor: colors.bgInput }]}>
-                <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "700" }}>{marketLabel(s.symbol)}</Text>
+      {!loading && stocks.length > 0 && (
+        <FlatList
+          data={stocks}
+          keyExtractor={(item) => String(item.id)}
+          scrollEnabled={false}
+          removeClippedSubviews={true}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => onSelect(item)}
+              style={[styles.stockRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+            >
+              <View style={[styles.symbolBadge, { backgroundColor: colors.accentPrimary + "15" }]}>
+                <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: 13 }}>
+                  {item.symbol.slice(0, 4)}
+                </Text>
               </View>
-            </View>
-            <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-          </Pressable>
-        ))}
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 15 }}>
+                  {item.symbol}
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                  {item.company_name}
+                </Text>
+                <View style={[styles.stockMetaPill, { backgroundColor: colors.bgInput }]}>
+                  <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "700" }}>{marketLabel(item.symbol)}</Text>
+                </View>
+              </View>
+              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
+            </Pressable>
+          )}
+        />
+      )}
       </View>
     </ScrollView>
   );
@@ -979,6 +1009,7 @@ function ErrorBox({
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 80 },
   listWrap: { width: "100%", maxWidth: 1120, alignSelf: "center" },
+  topContentWrap: { marginBottom: 8 },
   signalTabsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
