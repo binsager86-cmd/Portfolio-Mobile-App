@@ -197,7 +197,7 @@ describe("buildYearlyHistoricalData", () => {
         makeDividend({ txn_date: "2026-03-01", cash_dividend_kwd: 25 }),
       ],
       realizedDetails: [
-        makeRealized({ txn_date: "2026-04-01", realized_pnl_kwd: 10 }),
+        makeRealized({ txn_date: "2026-04-01", realized_pnl_kwd: 10, dividends_allocated_kwd: 15, net_pnl_kwd: 25 }),
       ],
     });
 
@@ -205,8 +205,21 @@ describe("buildYearlyHistoricalData", () => {
     expect(y2026).toBeDefined();
     expect(y2026?.hasSnapshot).toBe(false);
     expect(y2026?.dividends).toBe(25);
-    expect(y2026?.realizedPnl).toBe(10);
+    expect(y2026?.realizedPnl).toBe(25);
     expect(y2026?.portfolioValue).toBe(0);
     expect(y2026?.growth).toBe(0);
+  });
+
+  it("falls back to realized P&L plus allocated dividends when net is absent", () => {
+    const data = buildYearlyHistoricalData({
+      snapshots: [],
+      dividends: [],
+      realizedDetails: [
+        makeRealized({ txn_date: "2026-04-01", realized_pnl_kwd: 10, dividends_allocated_kwd: 15, net_pnl_kwd: undefined as any }),
+      ],
+    });
+
+    expect(data).toHaveLength(1);
+    expect(data[0].realizedPnl).toBe(25);
   });
 });

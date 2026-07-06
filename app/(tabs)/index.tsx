@@ -475,12 +475,17 @@ function OverviewScreen() {
         )
       : 0;
 
-    const realizedPnl = realizedData?.total_realized_kwd ?? (data.by_portfolio
-      ? Object.values(data.by_portfolio).reduce(
-          (a: number, p) => a + (p.realized_pnl_kwd ?? 0),
-          0
-        )
-      : 0);
+    const realizedPnl = realizedData?.details?.length
+      ? realizedData.details.reduce((sum, trade) => {
+          const net = trade.net_pnl_kwd ?? (trade.realized_pnl_kwd + (trade.dividends_allocated_kwd ?? 0));
+          return sum + net;
+        }, 0)
+      : realizedData?.total_realized_kwd ?? (data.by_portfolio
+          ? Object.values(data.by_portfolio).reduce(
+              (a: number, p) => a + (p.realized_pnl_kwd ?? 0),
+              0
+            )
+          : 0);
     const totalDividends = data.total_dividends ?? 0;
     const totalProfit = realizedPnl + unrealizedPnl + totalDividends;
 

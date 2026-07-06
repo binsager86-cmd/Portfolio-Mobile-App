@@ -34,13 +34,19 @@ export function RealizedTradesSection({
       if (!map[d.symbol]) {
         map[d.symbol] = { symbol: d.symbol, trades: 0, profit: 0, loss: 0, net: 0 };
       }
+      const net = d.net_pnl_kwd ?? (d.realized_pnl_kwd + (d.dividends_allocated_kwd ?? 0));
       map[d.symbol].trades++;
-      if (d.realized_pnl_kwd >= 0) map[d.symbol].profit += d.realized_pnl_kwd;
-      else map[d.symbol].loss += d.realized_pnl_kwd;
-      map[d.symbol].net += d.realized_pnl_kwd;
+      if (net >= 0) map[d.symbol].profit += net;
+      else map[d.symbol].loss += net;
+      map[d.symbol].net += net;
     }
     return Object.values(map).sort((a, b) => b.net - a.net);
   }, [data?.details]);
+
+  const totalRealized = useMemo(
+    () => data.details.reduce((sum, trade) => sum + (trade.net_pnl_kwd ?? (trade.realized_pnl_kwd + (trade.dividends_allocated_kwd ?? 0))), 0),
+    [data.details],
+  );
 
   const { profitCount, lossCount } = useMemo(() => {
     const details = data?.details;
@@ -105,9 +111,9 @@ export function RealizedTradesSection({
             />
             <MetricCard
               label={t("realizedTrades.totalRealized")}
-              value={formatSignedCurrency(data.total_realized_kwd)}
+              value={formatSignedCurrency(totalRealized)}
               subline={t("realizedTrades.netPL") + " (KWD)"}
-              trend={data.total_realized_kwd >= 0 ? "up" : "down"}
+              trend={totalRealized >= 0 ? "up" : "down"}
               width={isPhone ? "48%" : "24%"}
             />
             <MetricCard
