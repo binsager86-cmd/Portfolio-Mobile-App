@@ -3,12 +3,13 @@
  * pre-flight validation, auto-population from defaults, and last result tracking.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useStatements, useValuationDefaults } from "@/hooks/queries";
+import { useStatements, useStockList, useValuationDefaults } from "@/hooks/queries";
 import { showErrorAlert } from "@/lib/errorHandling";
 import {
+  fetchStockPrice,
     runDCFValuation,
     runDDMValuation,
     runGrahamValuation,
@@ -55,23 +56,87 @@ function pickStatementEpsValue(statement: { line_items?: Array<{ line_item_code:
   return bestDiluted ?? bestBasic;
 }
 
+function normalizeQuarter(raw: unknown): number | null {
+  if (raw == null) return null;
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return null;
+  const qi = Math.trunc(q);
+  return qi >= 1 && qi <= 4 ? qi : null;
+}
+
+function isQuarterlySource(sourceFile: string | null | undefined): boolean {
+  return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
+}
+
+function isAnnualIncomeStatement(statement: { fiscal_quarter: number | null; source_file?: string | null }): boolean {
+  const quarter = normalizeQuarter(statement.fiscal_quarter);
+  if (quarter === 4) return true;
+  if (quarter != null) return false;
+  if (isQuarterlySource(statement.source_file)) return false;
+  return true;
+}
+
+function normalizePriceTo3Dp(value: number): string {
+  return value.toFixed(3);
+}
+
 function deriveTtmEpsFromStatements(statements: Array<{
   statement_type: string;
   fiscal_year: number;
   fiscal_quarter: number | null;
+  period_end_date: string;
+  source_file?: string | null;
   line_items?: Array<{ line_item_code: string; amount: number | null }>;
 }>): number | null {
-  const quarterly = statements
-    .filter((s) => s.statement_type === "income" && s.fiscal_quarter != null)
+  const income = statements
+    .filter((s) => s.statement_type === "income")
+    .map((s) => ({
+      ...s,
+      fiscal_quarter: normalizeQuarter(s.fiscal_quarter),
+    }))
+    .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
+
+  const annualHistory = income.filter((s) => isAnnualIncomeStatement(s));
+  const quarterlyHistory = income.filter((s) => !isAnnualIncomeStatement(s));
+  const latestQuarter = quarterlyHistory[quarterlyHistory.length - 1] ?? null;
+
+  // Keep valuation EPS aligned with Statements tab TTM construction:
+  // TTM = prior fiscal-year annual + latest quarter - prior-year same quarter.
+  if (latestQuarter && latestQuarter.fiscal_quarter != null && latestQuarter.fiscal_quarter !== 4) {
+    const priorAnnual = annualHistory.find((s) => s.fiscal_year === latestQuarter.fiscal_year - 1);
+    const priorSameQuarter = quarterlyHistory.find(
+      (s) => s.fiscal_year === latestQuarter.fiscal_year - 1 && s.fiscal_quarter === latestQuarter.fiscal_quarter,
+    );
+    if (priorAnnual && priorSameQuarter) {
+      const annualEps = pickStatementEpsValue(priorAnnual);
+      const latestQuarterEps = pickStatementEpsValue(latestQuarter);
+      const priorSameQuarterEps = pickStatementEpsValue(priorSameQuarter);
+      if (
+        annualEps != null
+        && latestQuarterEps != null
+        && priorSameQuarterEps != null
+        && Number.isFinite(annualEps)
+        && Number.isFinite(latestQuarterEps)
+        && Number.isFinite(priorSameQuarterEps)
+      ) {
+        const ttm = annualEps + latestQuarterEps - priorSameQuarterEps;
+        return Number(ttm.toFixed(4));
+      }
+    }
+  }
+
+  const quarterly = quarterlyHistory
     .map((s) => ({
       fiscal_year: s.fiscal_year,
       fiscal_quarter: s.fiscal_quarter as number,
+      period_end_date: s.period_end_date,
       eps: pickStatementEpsValue(s),
     }))
     .filter((s) => s.eps != null)
     .sort((a, b) => {
       if (b.fiscal_year !== a.fiscal_year) return b.fiscal_year - a.fiscal_year;
-      return b.fiscal_quarter - a.fiscal_quarter;
+      if (b.fiscal_quarter !== a.fiscal_quarter) return b.fiscal_quarter - a.fiscal_quarter;
+      return b.period_end_date.localeCompare(a.period_end_date);
     });
 
   if (quarterly.length >= 4) {
@@ -79,21 +144,20 @@ function deriveTtmEpsFromStatements(statements: Array<{
     return Number.isFinite(ttm) ? Number(ttm.toFixed(4)) : null;
   }
 
-  const annual = statements
-    .filter((s) => s.statement_type === "income" && s.fiscal_quarter == null)
-    .sort((a, b) => b.fiscal_year - a.fiscal_year);
-  if (annual.length > 0) {
-    const annualEps = pickStatementEpsValue(annual[0]);
+  if (annualHistory.length > 0) {
+    const latestAnnual = annualHistory[annualHistory.length - 1];
+    const annualEps = pickStatementEpsValue(latestAnnual);
     if (annualEps != null && Number.isFinite(annualEps)) {
       return Number(annualEps.toFixed(4));
     }
   }
+
   return null;
 }
 
 export type ValuationModel = "graham" | "dcf" | "ddm" | "multiples";
 
-export function useValuationCalculations(stockId: number) {
+export function useValuationCalculations(stockId: number, stockSymbol?: string) {
   const queryClient = useQueryClient();
   const [model, setModel] = useState<ValuationModel>("graham");
 
@@ -105,7 +169,7 @@ export function useValuationCalculations(stockId: number) {
   // ── Form state ──────────────────────────────────────────────────
   const [eps, setEps] = useState("");
   const [grahamGrowth, setGrahamGrowth] = useState("");
-  const [corpYield, setCorpYield] = useState("4.4");
+  const [corpYield, setCorpYield] = useState("4");
   const [marginOfSafety, setMarginOfSafety] = useState("25");
   const [currentPrice, setCurrentPrice] = useState("");
   // Per-model MoS (editable in result cards, persisted in state)
@@ -132,6 +196,21 @@ export function useValuationCalculations(stockId: number) {
   const [useWacc, setUseWacc] = useState(false);
   const [waccRf, setWaccRf] = useState(""); // risk-free rate override (in %)
   const [waccTax, setWaccTax] = useState(""); // tax rate override (in %)
+
+  const stockListMarket = defaults.data?.exchange === "KSE" ? "kuwait" : "us";
+  const stockListQ = useStockList(stockListMarket, !!stockSymbol);
+  const matchedStockEntry = useMemo(() => {
+    if (!stockSymbol) return null;
+    return stockListQ.data?.stocks.find(
+      (entry) => entry.symbol.trim().toUpperCase() === stockSymbol.trim().toUpperCase(),
+    ) ?? null;
+  }, [stockListQ.data?.stocks, stockSymbol]);
+  const livePriceQ = useQuery({
+    queryKey: ["analysis", "valuation-live-price", stockId, matchedStockEntry?.yf_ticker, defaults.data?.currency],
+    queryFn: () => fetchStockPrice(matchedStockEntry!.yf_ticker, defaults.data?.currency || "KWD"),
+    enabled: !!matchedStockEntry?.yf_ticker,
+    staleTime: 60_000,
+  });
 
   // ── Derived WACC (recalculated when user edits Rf or Tax Rate) ──
   // CFA WACC: WACC = (E/V) × Ke + (D/V) × Kd × (1 − T)
@@ -162,6 +241,7 @@ export function useValuationCalculations(stockId: number) {
   const [lastResult, setLastResult] = useState<ValuationRunResult | null>(null);
   const epsEdited = useRef(false);
   const mvEdited = useRef(false);
+  const currentPriceEdited = useRef(false);
 
   const onSetEps = (value: string) => {
     epsEdited.current = true;
@@ -170,6 +250,10 @@ export function useValuationCalculations(stockId: number) {
   const onSetMv = (value: string) => {
     mvEdited.current = true;
     setMv(value);
+  };
+  const onSetCurrentPrice = (value: string) => {
+    currentPriceEdited.current = true;
+    setCurrentPrice(value);
   };
 
   const statementTtmEps = useMemo(() => {
@@ -187,8 +271,11 @@ export function useValuationCalculations(stockId: number) {
     if (effectiveEps != null) setEps(effectiveEps.toFixed(3));
     // Graham-specific defaults
     if (d.graham_growth_cagr != null) setGrahamGrowth(String(d.graham_growth_cagr));
-    if (d.bond_yield != null) setCorpYield(String(d.bond_yield));
-    if (d.current_price != null) setCurrentPrice(String(d.current_price));
+    // Product requirement: default bond yield should start at 4.
+    setCorpYield("4");
+    if (d.current_price != null && !currentPriceEdited.current) {
+      setCurrentPrice(normalizePriceTo3Dp(d.current_price));
+    }
     if (d.fcf != null) setFcf(String(d.fcf));
     if (d.shares_outstanding != null && d.shares_outstanding > 0) {
       setShares(d.shares_outstanding.toLocaleString("en-US", { maximumFractionDigits: 0 }));
@@ -213,6 +300,15 @@ export function useValuationCalculations(stockId: number) {
     if (!epsEdited.current) setEps(value);
     if (!mvEdited.current) setMv(value);
   }, [statementTtmEps]);
+
+  // Prefer live market price over defaults when available.
+  useEffect(() => {
+    const livePrice = livePriceQ.data?.price;
+    if (livePrice == null || !Number.isFinite(livePrice) || livePrice <= 0) return;
+    if (!currentPriceEdited.current) {
+      setCurrentPrice(normalizePriceTo3Dp(livePrice));
+    }
+  }, [livePriceQ.data?.price]);
 
   // ── Fallback: pull shares from uploaded statements if still "1" ──
   useEffect(() => {
@@ -283,7 +379,7 @@ export function useValuationCalculations(stockId: number) {
       return runGrahamValuation(stockId, {
         eps: parseFloat(eps),
         growth_rate: parseFloat(grahamGrowth) || 0,
-        corporate_yield: parseFloat(corpYield) || 4.4,
+        corporate_yield: parseFloat(corpYield) || 4,
         margin_of_safety: parseFloat(marginOfSafety) || 25,
         current_price: !isNaN(cp) && cp > 0 ? cp : null,
       });
@@ -377,7 +473,7 @@ export function useValuationCalculations(stockId: number) {
 
   return {
     model, setModel,
-    eps, setEps: onSetEps, currentPrice, setCurrentPrice,
+    eps, setEps: onSetEps, currentPrice, setCurrentPrice: onSetCurrentPrice,
     grahamGrowth, setGrahamGrowth, corpYield, setCorpYield, marginOfSafety, setMarginOfSafety,
     fcf, setFcf,
     g1, setG1, g2, setG2, dr, setDr, tg, setTg,

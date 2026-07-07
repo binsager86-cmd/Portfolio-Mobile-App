@@ -125,7 +125,8 @@ export function useValuationDefaults(stockId: number) {
     queryKey: analysisKeys.valuationDefaults(stockId),
     queryFn: () => getValuationDefaults(stockId),
     enabled: hasValidStockId(stockId),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
