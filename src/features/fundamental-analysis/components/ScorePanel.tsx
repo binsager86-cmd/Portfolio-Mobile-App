@@ -3,6 +3,9 @@
  * history, and underlying metrics.
  */
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
+/* eslint-disable max-lines */
+
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";

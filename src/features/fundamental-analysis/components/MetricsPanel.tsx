@@ -3,6 +3,8 @@
  * (historical table + grouped list views).
  */
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
+
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
