@@ -1769,7 +1769,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
     return next;
   }, [allMetrics]);
   const categories = Object.keys(grouped);
-  const historicalCategories = useMemo(() => buildFeatureHistoricalMetrics(allMetrics), [allMetrics]);
+  const historicalCategories = useMemo(() => buildFeatureHistoricalMetrics(allMetrics, statements), [allMetrics, statements]);
   const metricYearLabels = useMemo(() => {
     const years = [...new Set(allMetrics.map((m) => m.fiscal_year))].sort((a, b) => a - b);
     return buildFeatureMetricYearLabels(years, statements);
@@ -2180,60 +2180,6 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
       )}
     </ScrollView>
   );
-}
-
-/* ═══════════════════════════════════════════════════════════════════ */
-/*  HELPERS                                                           */
-/* ═══════════════════════════════════════════════════════════════════ */
-
-function buildHistoricalMetrics(allMetrics: StockMetric[]) {
-  const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
-  for (const m of allMetrics) {
-    const cat = m.metric_type;
-    if (!catMap[cat]) catMap[cat] = { nameSet: new Set(), yearData: {} };
-    catMap[cat].nameSet.add(m.metric_name);
-    if (!catMap[cat].yearData[m.fiscal_year]) catMap[cat].yearData[m.fiscal_year] = {};
-    catMap[cat].yearData[m.fiscal_year][m.metric_name] = m.metric_value;
-  }
-  const result: Record<string, { metricNames: string[]; yearData: Record<number, Record<string, number>>; years: number[] }> = {};
-  const catOrder = ["profitability", "liquidity", "leverage", "efficiency", "valuation", "cashflow", "growth"];
-  for (const cat of catOrder) {
-    if (!catMap[cat]) continue;
-    result[cat] = { metricNames: Array.from(catMap[cat].nameSet), yearData: catMap[cat].yearData, years: Object.keys(catMap[cat].yearData).map(Number).sort() };
-  }
-  for (const cat of Object.keys(catMap)) {
-    if (result[cat]) continue;
-    result[cat] = { metricNames: Array.from(catMap[cat].nameSet), yearData: catMap[cat].yearData, years: Object.keys(catMap[cat].yearData).map(Number).sort() };
-  }
-  return result;
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
-
-function isPerShareMetricName(name: string): boolean {
-  const lc = name.toLowerCase();
-  return lc.includes("eps")
-    || lc.includes("earnings per share")
-    || lc.includes("book value per share")
-    || lc.includes("book value/share")
-    || lc.includes("bvps");
-}
-
-function formatMetricValue(name: string, value: number): string {
-  const lc = name.toLowerCase().trim();
-  const hasRatioWord = /(^|\s)ratio(\s|$)/.test(lc);
-  const isPct = ["margin", "roe", "roa", "roic", "growth", "payout", "retention", "cagr"].some((p) => lc.includes(p))
-    || lc.includes("dupont") || lc.includes("sustainable");
-  if (isPct)
-    return (value * 100).toFixed(1) + "%";
-  if (lc.includes("days") || lc.includes("cycle")) return value.toFixed(0) + " days";
-  const isMult = ["turnover", "coverage", "multiplier"].some((p) => lc.includes(p))
-    || (hasRatioWord && !["payout", "retention"].some((p) => lc.includes(p)));
-  if (isMult) return value.toFixed(2) + "x";
-  if (isPerShareMetricName(name) || lc.includes("book value")) return value.toFixed(3);
-  return formatNumber(value);
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */

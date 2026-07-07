@@ -11,11 +11,11 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";
 import type { ThemePalette } from "@/constants/theme";
-import { analysisKeys, useScoreHistory, useStatements, useStockScore, useValuations } from "@/hooks/queries";
+import { analysisKeys, useScoreCategoryPreferences, useScoreHistory, useStatements, useStockScore, useUpdateScoreCategoryPreferences, useValuations } from "@/hooks/queries";
 import { generateStockSummary, type AISummary } from "@/lib/aiSummaryGenerator";
 import type { TableData } from "@/lib/exportAnalysis";
 import { showErrorAlert } from "@/lib/errorHandling";
-import { calculateMetrics, type CategoryBreakdown } from "@/services/api";
+import { calculateMetrics, type CategoryBreakdown, type MetricCategoryScoreKey, type ScoreCategoryPreferences, type ScoreCategoryWeights } from "@/services/api";
 import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { st } from "../styles";
 import { METRIC_CATEGORY_SCORE_ORDER, METRIC_CATEGORY_SCORE_WEIGHTS, SCORE_WEIGHTS, type PanelWithSymbolProps } from "../types";
@@ -38,6 +38,7 @@ interface ScoreCategoryRow {
   iconColor: string;
   breakdown?: CategoryBreakdown;
   penaltyPct?: number | null;
+  included?: boolean;
 }
 
 export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol, colors, isDesktop }: PanelWithSymbolProps) {
@@ -46,10 +47,20 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
   const historyQ = useScoreHistory(stockId);
   const valuationsQ = useValuations(stockId);
   const stmtQ = useStatements(stockId);
+  const categoryPrefsQ = useScoreCategoryPreferences(stockId);
+  const updateCategoryPrefs = useUpdateScoreCategoryPreferences(stockId);
   const preferences = useUserPrefsStore((s) => s.preferences);
   const isBeginner = preferences.expertiseLevel === "normal";
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Local mirror of category preferences for instant UI feedback.
+  const [localPrefs, setLocalPrefs] = useState<ScoreCategoryPreferences | null>(null);
+  React.useEffect(() => {
+    if (categoryPrefsQ.data?.preferences) {
+      setLocalPrefs(categoryPrefsQ.data.preferences);
+    }
+  }, [categoryPrefsQ.data?.preferences]);
 
   // Recalculate metrics for every period in the uploaded statements,
   // then refetch the score / history so any new statement is reflected.
@@ -104,15 +115,52 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
     [score],
   );
 
+  // Pro-rata weights driven by local checkbox state.
+  const effectivePrefs = useMemo<ScoreCategoryPreferences>(() => {
+    if (localPrefs) return localPrefs;
+    if (score?.metric_category_preferences) return score.metric_category_preferences;
+    return Object.fromEntries(METRIC_CATEGORY_SCORE_ORDER.map((k) => [k, true])) as ScoreCategoryPreferences;
+  }, [localPrefs, score?.metric_category_preferences]);
+
+  const proRataWeights = useMemo<ScoreCategoryWeights>(() => {
+    const includedTotal = METRIC_CATEGORY_SCORE_ORDER.reduce(
+      (sum, key) => sum + (effectivePrefs[key] ? METRIC_CATEGORY_SCORE_WEIGHTS[key].value : 0),
+      0,
+    );
+    if (includedTotal <= 0) {
+      return Object.fromEntries(
+        METRIC_CATEGORY_SCORE_ORDER.map((k) => [k, METRIC_CATEGORY_SCORE_WEIGHTS[k].value]),
+      ) as ScoreCategoryWeights;
+    }
+    return Object.fromEntries(
+      METRIC_CATEGORY_SCORE_ORDER.map((k) => [
+        k,
+        effectivePrefs[k] ? METRIC_CATEGORY_SCORE_WEIGHTS[k].value / includedTotal : 0,
+      ]),
+    ) as ScoreCategoryWeights;
+  }, [effectivePrefs]);
+
+  const previewOverallScore = useMemo(() => {
+    if (!hasMetricCategoryScores || !score?.metric_category_scores) return null;
+    let total = 0;
+    for (const key of METRIC_CATEGORY_SCORE_ORDER) {
+      total += (score.metric_category_scores[key] ?? 0) * proRataWeights[key];
+    }
+    return total;
+  }, [hasMetricCategoryScores, score?.metric_category_scores, proRataWeights]);
+
+  const displayOverallScore = previewOverallScore ?? score?.overall_score ?? 0;
+
   const scoreCategoryRows = useMemo<ScoreCategoryRow[]>(() => {
     if (hasMetricCategoryScores && score?.metric_category_scores) {
       return METRIC_CATEGORY_SCORE_ORDER.map((key) => ({
         key,
         label: METRIC_CATEGORY_SCORE_WEIGHTS[key].label,
-        weight: METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel,
+        weight: `${(proRataWeights[key] * 100).toFixed(0)}%`,
         value: score.metric_category_scores?.[key] ?? null,
         iconColor: METRIC_CATEGORY_SCORE_WEIGHTS[key].iconColor,
         breakdown: score.metric_category_breakdown?.[key],
+        included: effectivePrefs[key] ?? true,
       }));
     }
 
@@ -123,21 +171,25 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
       { key: "valuation", label: "Valuation", weight: SCORE_WEIGHTS.VALUATION.label, value: score?.valuation_score, iconColor: SCORE_WEIGHTS.VALUATION.iconColor, breakdown: score?.score_breakdown?.valuation },
       { key: "risk", label: "Risk", weight: SCORE_WEIGHTS.RISK.label, value: score?.risk_score, iconColor: SCORE_WEIGHTS.RISK.iconColor, breakdown: score?.score_breakdown?.risk, penaltyPct: score?.risk_penalty_pct },
     ];
-  }, [hasMetricCategoryScores, score]);
+  }, [hasMetricCategoryScores, score, proRataWeights, effectivePrefs]);
 
   const scoreSummaryText = useMemo(() => {
     if (!hasMetricCategoryScores) {
       return `CFA-Based Composite Score\nFundamentals ${SCORE_WEIGHTS.FUNDAMENTAL.label} · Quality ${SCORE_WEIGHTS.QUALITY.label} · Growth ${SCORE_WEIGHTS.GROWTH.label} · Valuation ${SCORE_WEIGHTS.VALUATION.label}\nRisk penalty up to ${SCORE_WEIGHTS.RISK.label}`;
     }
 
-    const firstLine = METRIC_CATEGORY_SCORE_ORDER.slice(0, 4)
-      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel}`)
+    const active = METRIC_CATEGORY_SCORE_ORDER.filter((key) => effectivePrefs[key]);
+    if (active.length === 0) {
+      return "Metrics-Aligned Composite Score\nNo categories selected. Enable at least one category to compute a score.";
+    }
+    const firstLine = active.slice(0, 4)
+      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${(proRataWeights[key] * 100).toFixed(0)}%`)
       .join(" · ");
-    const secondLine = METRIC_CATEGORY_SCORE_ORDER.slice(4)
-      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${METRIC_CATEGORY_SCORE_WEIGHTS[key].weightLabel}`)
+    const secondLine = active.slice(4)
+      .map((key) => `${METRIC_CATEGORY_SCORE_WEIGHTS[key].label} ${(proRataWeights[key] * 100).toFixed(0)}%`)
       .join(" · ");
-    return `Metrics-Aligned Composite Score\n${firstLine}\n${secondLine}`;
-  }, [hasMetricCategoryScores]);
+    return `Metrics-Aligned Composite Score\n${firstLine}${secondLine ? `\n${secondLine}` : ""}`;
+  }, [hasMetricCategoryScores, effectivePrefs, proRataWeights]);
 
   // Average IV across latest per-model valuations (same logic as Valuation Summary)
   const avgIV = useMemo(() => {
@@ -197,7 +249,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
         title: "Score Summary",
         headers: ["Component", "Weight", "Score"],
         rows: [
-          ["Overall", "100%", score.overall_score.toFixed(0)],
+          ["Overall", "100%", displayOverallScore.toFixed(0)],
           ...scoreCategoryRows.map((row) => [row.label, row.weight, row.value?.toFixed(0) ?? "–"]),
         ],
       });
@@ -233,6 +285,23 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
     }
     return tables;
   }, [hasMetricCategoryScores, score, scoreCategoryRows, scoreHistory]);
+
+  // Toggle a category on/off and persist the preference.
+  const handleToggleCategory = useCallback((key: MetricCategoryScoreKey) => {
+    setLocalPrefs((prev) => {
+      const next = { ...(prev ?? (score?.metric_category_preferences as ScoreCategoryPreferences | undefined) ?? Object.fromEntries(METRIC_CATEGORY_SCORE_ORDER.map((k) => [k, true])) as ScoreCategoryPreferences) };
+      next[key] = !next[key];
+      // Prevent disabling every category.
+      if (!Object.values(next).some(Boolean)) {
+        next[key] = true;
+        return next;
+      }
+      updateCategoryPrefs.mutate(
+        METRIC_CATEGORY_SCORE_ORDER.map((k) => ({ category_key: k, included: next[k] })),
+      );
+      return next;
+    });
+  }, [score?.metric_category_preferences, updateCategoryPrefs]);
 
   return (
     <ScrollView
@@ -330,19 +399,28 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
           {/* Overall Score */}
           <FadeIn>
             <Card colors={colors} style={{ alignItems: "center", paddingVertical: 28, marginBottom: 16 }}>
-              <View style={[st.scoreRing, { borderColor: scoreColor(score.overall_score ?? 0, colors) }]}>
-                <View style={[st.scoreRingInner, { backgroundColor: scoreColor(score.overall_score ?? 0, colors) + "10" }]}>
-                  <Text style={[st.scoreNum, { color: scoreColor(score.overall_score ?? 0, colors) }]}>
-                    {(score.overall_score ?? 0).toFixed(0)}
+              <View style={[st.scoreRing, { borderColor: scoreColor(displayOverallScore, colors) }]}>
+                <View style={[st.scoreRingInner, { backgroundColor: scoreColor(displayOverallScore, colors) + "10" }]}>
+                  <Text style={[st.scoreNum, { color: scoreColor(displayOverallScore, colors) }]}>
+                    {displayOverallScore.toFixed(0)}
                   </Text>
                 </View>
               </View>
 
+              {previewOverallScore != null && score?.overall_score != null && Math.abs(previewOverallScore - score.overall_score) > 0.05 && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, backgroundColor: colors.accentPrimary + "14", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <FontAwesome name="refresh" size={10} color={colors.accentPrimary} style={{ marginRight: 6 }} />
+                  <Text style={{ color: colors.accentPrimary, fontSize: 11, fontWeight: "700" }}>
+                    Preview: weights changed
+                  </Text>
+                </View>
+              )}
+
               {isBeginner ? (
                 <>
                   {/* Beginner: simple 3-word label */}
-                  <Text style={{ color: scoreColor(score.overall_score ?? 0, colors), fontSize: 22, fontWeight: "800", marginTop: 14 }}>
-                    {beginnerScoreLabel(score.overall_score ?? 0)}
+                  <Text style={{ color: scoreColor(displayOverallScore, colors), fontSize: 22, fontWeight: "800", marginTop: 14 }}>
+                    {beginnerScoreLabel(displayOverallScore)}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 6, textAlign: "center", lineHeight: 18 }}>
                     Overall health of this stock
@@ -351,7 +429,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
               ) : (
                 <>
                   <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "800", marginTop: 14 }}>
-                    {scoreLabel(score.overall_score ?? 0)}
+                    {scoreLabel(displayOverallScore)}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 6, textAlign: "center", lineHeight: 18 }}>
                     {scoreSummaryText}
@@ -435,7 +513,7 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
                 Interpretation Scale
               </Text>
               {INTERPRETATION_SCALE.map((tier) => {
-                const isActive = score.overall_score! >= tier.min && score.overall_score! <= tier.max;
+                const isActive = displayOverallScore >= tier.min && displayOverallScore <= tier.max;
                 return (
                   <View
                     key={tier.min}
@@ -481,6 +559,8 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
                   iconColor={row.iconColor}
                   breakdown={row.breakdown}
                   penaltyPct={row.penaltyPct}
+                  included={row.included}
+                  onToggle={hasMetricCategoryScores ? () => handleToggleCategory(row.key as MetricCategoryScoreKey) : undefined}
                 />
               ))}
             </Card>
@@ -574,24 +654,46 @@ interface ScoreBarPremiumProps {
   iconColor: string;
   breakdown?: CategoryBreakdown;
   penaltyPct?: number | null;
+  included?: boolean;
+  onToggle?: () => void;
 }
 
 const ScoreBarPremium = React.memo(function ScoreBarPremium({
-  label, weight, value, colors, iconColor, breakdown, penaltyPct,
+  label, weight, value, colors, iconColor, breakdown, penaltyPct, included, onToggle,
 }: ScoreBarPremiumProps) {
   const [expanded, setExpanded] = useState(false);
   const v = value ?? 0;
   const barColor = scoreColor(v, colors);
   const isRiskPenalty = penaltyPct != null;
+  const isExcluded = included === false;
   return (
     <View style={{ marginBottom: 14 }} accessibilityRole="summary">
       <Pressable onPress={() => breakdown && setExpanded((p) => !p)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
         <View style={[st.rowBetween, { marginBottom: 6 }]}>
           <View style={st.rowCenter}>
+            {onToggle && (
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onToggle();
+                }}
+                hitSlop={8}
+                style={{ marginRight: 8, padding: 2 }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !isExcluded }}
+                accessibilityLabel={`${isExcluded ? "Include" : "Exclude"} ${label} from score`}
+              >
+                <FontAwesome
+                  name={isExcluded ? "square-o" : "check-square-o"}
+                  size={18}
+                  color={isExcluded ? colors.textMuted : colors.accentPrimary}
+                />
+              </Pressable>
+            )}
             <View style={[st.sectionIcon, { backgroundColor: iconColor + "18", width: 22, height: 22 }]}>
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: iconColor }} />
             </View>
-            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "500", marginLeft: 8 }}>{label}</Text>
+            <Text style={{ color: isExcluded ? colors.textMuted : colors.textSecondary, fontSize: 14, fontWeight: "500", marginLeft: 8 }}>{label}</Text>
             <Text style={{ color: colors.textMuted, fontSize: 12, marginLeft: 4 }}>({weight})</Text>
             {breakdown && (
               <FontAwesome
@@ -604,10 +706,10 @@ const ScoreBarPremium = React.memo(function ScoreBarPremium({
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text
-              style={{ color: barColor, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] }}
+              style={{ color: isExcluded ? colors.textMuted : barColor, fontSize: 15, fontWeight: "800", fontVariant: ["tabular-nums"] }}
               accessibilityLabel={`${label} score: ${v.toFixed(0)} out of 100`}
             >
-              {v.toFixed(0)}
+              {isExcluded ? "—" : v.toFixed(0)}
             </Text>
             {isRiskPenalty && (
               <Text style={{ color: colors.danger, fontSize: 11, fontWeight: "700", marginTop: 1 }}>
@@ -618,7 +720,7 @@ const ScoreBarPremium = React.memo(function ScoreBarPremium({
         </View>
         <View style={[st.scoreBarTrack, { backgroundColor: colors.borderColor + "50" }]}>
           <View
-            style={[st.scoreBarFill, { width: `${Math.min(v, 100)}%`, backgroundColor: barColor }]}
+            style={[st.scoreBarFill, { width: `${isExcluded ? 0 : Math.min(v, 100)}%`, backgroundColor: isExcluded ? colors.textMuted : barColor }]}
             accessibilityLabel={`${label} progress bar`}
             accessibilityValue={{ min: 0, max: 100, now: Math.round(v) }}
           />

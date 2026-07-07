@@ -10,14 +10,63 @@ import { SCORE_THRESHOLDS } from "./types";
 const DEBT_EQUITY_METRIC_NAME = "Debt / Equity";
 
 /** Group metrics by category with yearly history. */
-export function buildHistoricalMetrics(allMetrics: StockMetric[]) {
+export function buildHistoricalMetrics(allMetrics: StockMetric[], statements: FinancialStatement[] = []) {
+  const monthFromDate = (dateStr: string): number | null => {
+    const month = Number(dateStr?.slice(5, 7));
+    return Number.isFinite(month) ? month : null;
+  };
+
+  const inferredQuarter = (m: StockMetric): number | null => {
+    if (m.fiscal_quarter != null && m.fiscal_quarter >= 1 && m.fiscal_quarter <= 4) {
+      return m.fiscal_quarter;
+    }
+    const month = monthFromDate(m.period_end_date);
+    if (month === 3) return 1;
+    if (month === 6) return 2;
+    if (month === 9) return 3;
+    if (month === 12) return 4;
+    return null;
+  };
+
+  const isAnnualMetric = (m: StockMetric): boolean => {
+    const q = inferredQuarter(m);
+    if (q === 4) return true;
+    if (q != null) return false;
+    return monthFromDate(m.period_end_date) === 12;
+  };
+
+  const shouldReplaceMetric = (current: StockMetric, next: StockMetric): boolean => {
+    const currAnnual = isAnnualMetric(current);
+    const nextAnnual = isAnnualMetric(next);
+
+    // For FY display, always keep annual over quarterly rows.
+    if (nextAnnual && !currAnnual) return true;
+    if (!nextAnnual && currAnnual) return false;
+
+    // Otherwise keep the latest period snapshot.
+    if (next.period_end_date > current.period_end_date) return true;
+    if (next.period_end_date < current.period_end_date) return false;
+
+    // Final tie-breaker: latest created row.
+    return (next.created_at ?? 0) > (current.created_at ?? 0);
+  };
+
   const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
+  const chosenMap: Record<string, Record<number, Record<string, StockMetric>>> = {};
+
   for (const m of allMetrics) {
     const cat = m.metric_type;
     if (!catMap[cat]) catMap[cat] = { nameSet: new Set(), yearData: {} };
+    if (!chosenMap[cat]) chosenMap[cat] = {};
     catMap[cat].nameSet.add(m.metric_name);
     if (!catMap[cat].yearData[m.fiscal_year]) catMap[cat].yearData[m.fiscal_year] = {};
-    catMap[cat].yearData[m.fiscal_year][m.metric_name] = m.metric_value;
+    if (!chosenMap[cat][m.fiscal_year]) chosenMap[cat][m.fiscal_year] = {};
+
+    const current = chosenMap[cat][m.fiscal_year][m.metric_name];
+    if (!current || shouldReplaceMetric(current, m)) {
+      chosenMap[cat][m.fiscal_year][m.metric_name] = m;
+      catMap[cat].yearData[m.fiscal_year][m.metric_name] = m.metric_value;
+    }
   }
   const result: Record<string, { metricNames: string[]; yearData: Record<number, Record<string, number>>; years: number[] }> = {};
   const catOrder = ["profitability", "liquidity", "leverage", "efficiency", "valuation", "cashflow", "growth"];
@@ -25,6 +74,73 @@ export function buildHistoricalMetrics(allMetrics: StockMetric[]) {
     if (!catMap[cat]) continue;
     result[cat] = { metricNames: Array.from(catMap[cat].nameSet), yearData: catMap[cat].yearData, years: Object.keys(catMap[cat].yearData).map(Number).sort() };
   }
+
+  // Align TTM values with Statements tab for additive cash-flow metrics:
+  // TTM = prior fiscal-year annual + current-year latest quarter - prior-year same quarter.
+  if (statements.length > 0 && result.cashflow) {
+    const annualByYear = new Set<number>();
+    const latestQuarterByYear = new Map<number, number>();
+
+    for (const statement of statements) {
+      const year = Number(statement.fiscal_year);
+      if (!Number.isFinite(year)) continue;
+      const quarter = normalizeQuarter(statement.fiscal_quarter) ?? inferQuarterFromDate(String(statement.period_end_date ?? ""));
+
+      if (isAnnualStatementForLabels(statement)) {
+        annualByYear.add(year);
+      }
+
+      if (quarter != null && quarter >= 1 && quarter <= 3) {
+        const current = latestQuarterByYear.get(year);
+        if (current == null || quarter > current) {
+          latestQuarterByYear.set(year, quarter);
+        }
+      }
+    }
+
+    const metricValueForYearQuarter = (
+      metricType: string,
+      metricName: string,
+      fiscalYear: number,
+      fiscalQuarter: number,
+    ): number | null => {
+      let best: StockMetric | null = null;
+      for (const m of allMetrics) {
+        if (m.metric_type !== metricType || m.metric_name !== metricName || m.fiscal_year !== fiscalYear) continue;
+        const q = normalizeQuarter(m.fiscal_quarter) ?? inferQuarterFromDate(String(m.period_end_date ?? ""));
+        if (q !== fiscalQuarter) continue;
+        if (!best || m.period_end_date > best.period_end_date || ((m.period_end_date === best.period_end_date) && ((m.created_at ?? 0) > (best.created_at ?? 0)))) {
+          best = m;
+        }
+      }
+      return best?.metric_value ?? null;
+    };
+
+    const additiveCashflowMetrics = [
+      "Cash from Operations",
+      "Cash from Investing",
+      "Cash from Financing",
+      "Free Cash Flow",
+    ] as const;
+
+    for (const [year, quarter] of latestQuarterByYear.entries()) {
+      // Only synthesize TTM when there is no annual statement for that fiscal year.
+      if (annualByYear.has(year)) continue;
+      const priorYear = year - 1;
+      const cashflowYearData = result.cashflow.yearData;
+
+      for (const metricName of additiveCashflowMetrics) {
+        const priorAnnual = cashflowYearData[priorYear]?.[metricName] ?? null;
+        const currentQuarter = metricValueForYearQuarter("cashflow", metricName, year, quarter);
+        const priorSameQuarter = metricValueForYearQuarter("cashflow", metricName, priorYear, quarter);
+
+        if (priorAnnual == null || currentQuarter == null || priorSameQuarter == null) continue;
+        if (!cashflowYearData[year]) cashflowYearData[year] = {};
+        cashflowYearData[year][metricName] = priorAnnual + currentQuarter - priorSameQuarter;
+      }
+    }
+  }
+
   return result;
 }
 
@@ -564,6 +680,159 @@ export function enrichMetricsWithFallbacks(
           metric_value: nopat / investedCapital, created_at: 0,
         });
         existingProfitability.add(`${fiscalYear}::ROIC`);
+      }
+    }
+  }
+
+  // ── Synthetic TTM cash-flow metrics (align Metrics tab with Statements tab) ──
+  // For years that have no annual statement but do have a latest quarter,
+  // compute TTM as: prior annual + latest quarter - prior-year same quarter.
+  // This prevents TTM labels from showing raw quarter values.
+  const annualByYear = new Set<number>();
+  const quartersByTypeYear = new Map<string, FinancialStatement[]>();
+
+  for (const statement of statements) {
+    const year = Number(statement.fiscal_year);
+    if (!Number.isFinite(year)) continue;
+    const statementType = String(statement.statement_type ?? "").toLowerCase();
+    if (!statementType) continue;
+
+    if (isAnnualStatementForLabels(statement)) {
+      annualByYear.add(year);
+      continue;
+    }
+
+    const key = `${statementType}::${year}`;
+    const arr = quartersByTypeYear.get(key) ?? [];
+    arr.push(statement);
+    quartersByTypeYear.set(key, arr);
+  }
+
+  const firstStockId = normalized[0]?.stock_id ?? 0;
+  const yearsInMetrics = [...new Set(normalized.map((m) => m.fiscal_year))];
+
+  const getQuarter = (statement: FinancialStatement): number | null => {
+    const q = normalizeQuarter(statement.fiscal_quarter);
+    if (q != null) return q;
+    if (isQuarterlySource(statement.source_file)) {
+      return inferQuarterFromDate(String(statement.period_end_date ?? ""));
+    }
+    return null;
+  };
+
+  const pickLatestQuarter = (statementType: string, fiscalYear: number): FinancialStatement | null => {
+    const arr = (quartersByTypeYear.get(`${statementType}::${fiscalYear}`) ?? [])
+      .filter((statement) => {
+        const q = getQuarter(statement);
+        return q != null && q >= 1 && q <= 3;
+      })
+      .sort((a, b) => String(a.period_end_date).localeCompare(String(b.period_end_date)));
+    return arr.length ? arr[arr.length - 1] : null;
+  };
+
+  const pickAnnual = (statementType: string, fiscalYear: number): FinancialStatement | null => {
+    const arr = statements
+      .filter((statement) => Number(statement.fiscal_year) === fiscalYear)
+      .filter((statement) => String(statement.statement_type ?? "").toLowerCase() === statementType)
+      .filter((statement) => isAnnualStatementForLabels(statement))
+      .sort((a, b) => String(a.period_end_date).localeCompare(String(b.period_end_date)));
+    return arr.length ? arr[arr.length - 1] : null;
+  };
+
+  const pickSameQuarter = (statementType: string, fiscalYear: number, quarter: number): FinancialStatement | null => {
+    const arr = (quartersByTypeYear.get(`${statementType}::${fiscalYear}`) ?? [])
+      .filter((statement) => getQuarter(statement) === quarter)
+      .sort((a, b) => String(a.period_end_date).localeCompare(String(b.period_end_date)));
+    return arr.length ? arr[arr.length - 1] : null;
+  };
+
+  const buildTtmLineMap = (statementType: string, fiscalYear: number): Map<string, number> | null => {
+    const latestQuarter = pickLatestQuarter(statementType, fiscalYear);
+    if (!latestQuarter) return null;
+    const latestQuarterNum = getQuarter(latestQuarter);
+    if (latestQuarterNum == null) return null;
+
+    const priorAnnual = pickAnnual(statementType, fiscalYear - 1);
+    if (!priorAnnual) return null;
+
+    const priorSameQuarter = pickSameQuarter(statementType, fiscalYear - 1, latestQuarterNum);
+    if (!priorSameQuarter) return null;
+
+    const annualMap = new Map<string, number>();
+    const priorQuarterMap = new Map<string, number>();
+    const latestMap = new Map<string, number>();
+
+    for (const li of priorAnnual.line_items ?? []) {
+      annualMap.set(String(li.line_item_code ?? "").toUpperCase(), li.amount ?? 0);
+    }
+    for (const li of priorSameQuarter.line_items ?? []) {
+      priorQuarterMap.set(String(li.line_item_code ?? "").toUpperCase(), li.amount ?? 0);
+    }
+    for (const li of latestQuarter.line_items ?? []) {
+      latestMap.set(String(li.line_item_code ?? "").toUpperCase(), li.amount ?? 0);
+    }
+
+    const ttm = new Map<string, number>();
+    for (const [code, latestAmount] of latestMap.entries()) {
+      const annualAmount = annualMap.get(code) ?? 0;
+      const priorAmount = priorQuarterMap.get(code) ?? 0;
+      ttm.set(code, annualAmount + latestAmount - priorAmount);
+    }
+    return ttm;
+  };
+
+  const aliasPick = (map: Map<string, number> | null, ...codes: string[]): number | null => {
+    if (!map) return null;
+    for (const code of codes) {
+      const val = map.get(code.toUpperCase());
+      if (val != null) return val;
+    }
+    return null;
+  };
+
+  for (const fiscalYear of yearsInMetrics) {
+    if (annualByYear.has(fiscalYear)) continue;
+
+    const ttmCashflow = buildTtmLineMap("cashflow", fiscalYear);
+    if (!ttmCashflow) continue;
+
+    const latestQuarter = pickLatestQuarter("cashflow", fiscalYear);
+    if (!latestQuarter) continue;
+
+    const cfo = aliasPick(ttmCashflow, "CASH_FROM_OPERATIONS", "OPERATING_CASH_FLOW");
+    const cfi = aliasPick(ttmCashflow, "CASH_FROM_INVESTING", "INVESTING_CASH_FLOW");
+    const cff = aliasPick(ttmCashflow, "CASH_FROM_FINANCING", "FINANCING_CASH_FLOW");
+    let fcf = aliasPick(ttmCashflow, "FREE_CASH_FLOW", "UNLEVERED_FREE_CASH_FLOW", "LEVERED_FREE_CASH_FLOW");
+    if (fcf == null && cfo != null) {
+      const capex = aliasPick(ttmCashflow, "CAPITAL_EXPENDITURES", "CAPEX");
+      if (capex != null) fcf = cfo - Math.abs(capex);
+    }
+
+    const pushSynthetic = (metricName: string, metricValue: number | null) => {
+      if (metricValue == null) return;
+      computed.push({
+        id: syntheticId--,
+        stock_id: firstStockId,
+        fiscal_year: fiscalYear,
+        fiscal_quarter: 4,
+        period_end_date: latestQuarter.period_end_date,
+        metric_type: "cashflow",
+        metric_name: metricName,
+        metric_value: metricValue,
+        created_at: Number.MAX_SAFE_INTEGER,
+      });
+    };
+
+    pushSynthetic("Cash from Operations", cfo);
+    pushSynthetic("Cash from Investing", cfi);
+    pushSynthetic("Cash from Financing", cff);
+    pushSynthetic("Free Cash Flow", fcf);
+
+    if (cfo != null) {
+      const ttmIncome = buildTtmLineMap("income", fiscalYear);
+      const netIncome = aliasPick(ttmIncome, "NET_INCOME", "NET_INCOME_TO_COMMON");
+      if (netIncome != null && netIncome !== 0) {
+        pushSynthetic("CFO / Net Income", cfo / netIncome);
       }
     }
   }

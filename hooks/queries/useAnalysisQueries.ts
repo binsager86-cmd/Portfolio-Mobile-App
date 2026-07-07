@@ -3,18 +3,21 @@
  * growth, scores, and valuations.
  */
 
+import type { ScoreCategoryPreferenceItem } from "@/services/api";
 import {
     getAnalysisStocks,
     getGrowthAnalysis,
     getPeerMultiples,
+    getScoreCategoryPreferences,
     getScoreHistory,
     getStatements,
     getStockMetrics,
     getStockScore,
     getValuationDefaults,
     getValuations,
+    updateScoreCategoryPreferences,
 } from "@/services/api";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const STOCK_LIST_STALE_TIME = 30 * 1000;
 const TAB_DATA_STALE_TIME = 2 * 60 * 1000;
@@ -34,6 +37,8 @@ export const analysisKeys = {
   score: (stockId: number) => ["analysis-score", stockId] as const,
   scoreHistory: (stockId: number) =>
     ["analysis-score-history", stockId] as const,
+  scoreCategoryPreferences: (stockId: number) =>
+    ["analysis-score-category-preferences", stockId] as const,
   valuations: (stockId: number) =>
     ["analysis-valuations", stockId] as const,
   valuationDefaults: (stockId: number) =>
@@ -131,5 +136,28 @@ export function usePeerMultiples(stockId: number, enabled = false) {
     queryFn: () => getPeerMultiples(stockId),
     staleTime: 10 * 60 * 1000,
     enabled: enabled && hasValidStockId(stockId),
+  });
+}
+
+/** Score category inclusion preferences with pro-rata weights. */
+export function useScoreCategoryPreferences(stockId: number) {
+  return useQuery({
+    queryKey: analysisKeys.scoreCategoryPreferences(stockId),
+    queryFn: () => getScoreCategoryPreferences(stockId),
+    enabled: hasValidStockId(stockId),
+    staleTime: TAB_DATA_STALE_TIME,
+  });
+}
+
+/** Mutation to update score category inclusion preferences. */
+export function useUpdateScoreCategoryPreferences(stockId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (preferences: ScoreCategoryPreferenceItem[]) =>
+      updateScoreCategoryPreferences(stockId, preferences),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: analysisKeys.scoreCategoryPreferences(stockId) });
+      queryClient.invalidateQueries({ queryKey: analysisKeys.score(stockId) });
+    },
   });
 }

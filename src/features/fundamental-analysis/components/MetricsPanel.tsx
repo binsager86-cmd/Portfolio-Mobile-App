@@ -106,7 +106,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   }, [allMetrics]);
 
   const categories = Object.keys(grouped);
-  const historicalCategories = useMemo(() => buildHistoricalMetrics(allMetrics), [allMetrics]);
+  const historicalCategories = useMemo(() => buildHistoricalMetrics(allMetrics, statements), [allMetrics, statements]);
   const metricYearLabels = useMemo(() => {
     const years = [...new Set(allMetrics.map((m) => m.fiscal_year))].sort((a, b) => a - b);
     return buildMetricYearLabels(years, statements);
