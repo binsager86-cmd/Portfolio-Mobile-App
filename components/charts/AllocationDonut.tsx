@@ -275,7 +275,11 @@ export const AllocationDonut = React.memo(function AllocationDonut({
                     fill={`url(#sliceGrad${i})`}
                     stroke={isDark ? "#0F0F0F" : "#F7F8FC"}
                     strokeWidth={1.5}
-                    onPress={() => setActiveSlice(activeSlice === i ? null : i)}
+                    onPress={
+                      Platform.OS === "web"
+                        ? undefined
+                        : () => setActiveSlice(activeSlice === i ? null : i)
+                    }
                   />
                 ))}
 

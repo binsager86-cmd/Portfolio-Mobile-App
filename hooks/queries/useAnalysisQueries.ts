@@ -155,9 +155,56 @@ export function useUpdateScoreCategoryPreferences(stockId: number) {
   return useMutation({
     mutationFn: (preferences: ScoreCategoryPreferenceItem[]) =>
       updateScoreCategoryPreferences(stockId, preferences),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: analysisKeys.scoreCategoryPreferences(stockId) });
-      queryClient.invalidateQueries({ queryKey: analysisKeys.score(stockId) });
+    onMutate: async (preferences) => {
+      await queryClient.cancelQueries({ queryKey: analysisKeys.scoreCategoryPreferences(stockId) });
+      await queryClient.cancelQueries({ queryKey: analysisKeys.score(stockId) });
+
+      const previousPrefs = queryClient.getQueryData<{
+        preferences: Record<string, boolean>;
+        pro_rata_weights: Record<string, number>;
+      }>(analysisKeys.scoreCategoryPreferences(stockId));
+      const previousScore = queryClient.getQueryData<Record<string, unknown>>(analysisKeys.score(stockId));
+
+      const optimisticPrefs = preferences.reduce<Record<string, boolean>>((acc, item) => {
+        acc[item.category_key] = item.included;
+        return acc;
+      }, {});
+
+      queryClient.setQueryData(analysisKeys.scoreCategoryPreferences(stockId), {
+        preferences: optimisticPrefs,
+        pro_rata_weights: previousPrefs?.pro_rata_weights ?? {},
+      });
+
+      queryClient.setQueryData(analysisKeys.score(stockId), (old: Record<string, unknown> | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          metric_category_preferences: optimisticPrefs,
+        };
+      });
+
+      return { previousPrefs, previousScore };
+    },
+    onError: (_err, _preferences, context) => {
+      if (context?.previousPrefs) {
+        queryClient.setQueryData(analysisKeys.scoreCategoryPreferences(stockId), context.previousPrefs);
+      }
+      if (context?.previousScore) {
+        queryClient.setQueryData(analysisKeys.score(stockId), context.previousScore);
+      }
+    },
+    onSuccess: (data) => {
+      // Write through server-confirmed preferences directly to avoid UI bounce
+      // caused by immediate invalidation/refetch returning stale backend state.
+      queryClient.setQueryData(analysisKeys.scoreCategoryPreferences(stockId), data);
+      queryClient.setQueryData(analysisKeys.score(stockId), (old: Record<string, unknown> | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          metric_category_preferences: data.preferences,
+          metric_category_weights: data.pro_rata_weights,
+        };
+      });
     },
   });
 }
