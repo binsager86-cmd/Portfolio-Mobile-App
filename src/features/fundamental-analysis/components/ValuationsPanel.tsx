@@ -448,7 +448,9 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     div, setDiv, divGr, setDivGr, rr, setRr,
     mv, setMv, pm, setPm, multipleType, setMultipleType: _setMultipleType,
     useWacc, setUseWacc,
-    waccRf, setWaccRf, waccTax, setWaccTax, waccComputed,
+    waccRf, setWaccRf, waccTax, setWaccTax, waccKd, setWaccKd, waccComputed,
+    derivedCostOfDebt,
+    derivedEffectiveTaxRate,
     grahamMut, dcfMut, ddmMut, multMut,
     valError, lastResult,
     defaults, defaultsLoading,
@@ -908,7 +910,30 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                     {defaults.wacc_beta != null && <KVRow label="Beta (β)" value={defaults.wacc_beta.toFixed(2)} colors={colors} />}
                     {defaults.wacc_equity_risk_premium != null && <KVRow label="Equity Risk Premium" value={(defaults.wacc_equity_risk_premium * 100).toFixed(2) + "%"} colors={colors} />}
                     <KVRow label="Cost of Equity (Ke)" value={waccComputed ? (waccComputed.ke * 100).toFixed(2) + "%" : defaults.wacc_cost_of_equity != null ? (defaults.wacc_cost_of_equity * 100).toFixed(2) + "%" : "—"} colors={colors} />
-                    {defaults.wacc_cost_of_debt != null && <KVRow label="Cost of Debt (Kd)" value={(defaults.wacc_cost_of_debt * 100).toFixed(2) + "%"} colors={colors} />}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 2 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>Cost of Debt (Kd)</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <TextInput
+                          value={waccKd}
+                          onChangeText={setWaccKd}
+                          keyboardType="numeric"
+                          placeholder={derivedCostOfDebt ? (derivedCostOfDebt.kd * 100).toFixed(2) : "0"}
+                          placeholderTextColor={colors.textMuted}
+                          style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"], borderBottomWidth: 1, borderBottomColor: "#6366f1", paddingVertical: 2, paddingHorizontal: 4, minWidth: 50, textAlign: "right" }}
+                        />
+                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
+                      </View>
+                    </View>
+                    {derivedCostOfDebt && (
+                      <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }}>
+                        Derived Kd = Interest Expense / Avg Interest-Bearing Debt = {derivedCostOfDebt.interestExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })} / {derivedCostOfDebt.averageDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </Text>
+                    )}
+                    {!derivedCostOfDebt && !waccKd && (
+                      <Text style={{ color: colors.warning, fontSize: 10, marginTop: 2 }}>
+                        Interest expense/debt data missing — enter Cost of Debt manually to enable WACC.
+                      </Text>
+                    )}
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 2 }}>
                       <Text style={{ color: colors.textMuted, fontSize: 12 }}>Tax Rate (T)</Text>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -923,20 +948,33 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
-                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && (
-                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>No tax data found — enter tax rate manually</Text>
+                    {waccComputed?.taxMissing && (
+                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>Tax rate missing — using 0% may overstate after-tax debt cost accuracy.</Text>
+                    )}
+                    {waccComputed?.taxDerivedFromStatements && derivedEffectiveTaxRate != null && (
+                      <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }}>
+                        Tax rate derived from statements: {(derivedEffectiveTaxRate * 100).toFixed(2)}%
+                      </Text>
                     )}
                     {defaults.wacc_weight_equity != null && <KVRow label="Equity Weight (E/V)" value={(defaults.wacc_weight_equity * 100).toFixed(2) + "%"} colors={colors} />}
                     {defaults.wacc_weight_debt != null && <KVRow label="Debt Weight (D/V)" value={(defaults.wacc_weight_debt * 100).toFixed(2) + "%"} colors={colors} />}
+                    {waccComputed && <KVRow label="Equity Contribution (E/V × Ke)" value={(waccComputed.equityContribution * 100).toFixed(2) + "%"} colors={colors} />}
+                    {waccComputed && <KVRow label="Debt Contribution (D/V × Kd × (1−T))" value={(waccComputed.debtContribution * 100).toFixed(2) + "%"} colors={colors} />}
                     <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
                     <KVRow label="WACC" value={waccComputed ? (waccComputed.wacc * 100).toFixed(2) + "%" : (defaults.wacc * 100).toFixed(2) + "%"} colors={colors} bold />
+                    {waccComputed?.marketEquity != null && (
+                      <KVRow label="Market Equity (Price × Shares)" value={waccComputed.marketEquity.toLocaleString(undefined, { maximumFractionDigits: 0 })} colors={colors} />
+                    )}
+                    {waccComputed?.interestBearingDebt != null && (
+                      <KVRow label="Interest-Bearing Debt" value={waccComputed.interestBearingDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} colors={colors} />
+                    )}
                   </View>
                 </View>
               )}
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <LabeledInput label="DISCOUNT RATE %" value={useWacc && waccComputed ? (waccComputed.wacc * 100).toFixed(2) : dr} onChangeText={setDr} colors={colors} keyboardType="numeric" flex={1}
-                  helperText={useWacc ? "Using calculated WACC as discount rate." : "Your required rate of return (%). Enter 10 for 10%. Used to discount future cash flows to present value. Reflects the risk of the investment — higher discount rate = more conservative valuation. Often based on WACC."}
+                  helperText={useWacc ? "Using calculated WACC as discount rate for FCFF (Unlevered FCF). For FCFE/Levered FCF models, discount using Cost of Equity." : "Your required rate of return (%). Enter 10 for 10%. Used to discount future cash flows to present value. Reflects the risk of the investment — higher discount rate = more conservative valuation. Often based on WACC."}
                   editable={!useWacc || !waccComputed} />
                 <LabeledInput label="PERPETUAL GROWTH %" value={tg} onChangeText={setTg} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The perpetual growth rate (%) assumed forever after Stage 2. Enter 2.5 for 2.5%. Used to calculate terminal value via the Gordon Growth Model. Must be less than Discount Rate. Typically 2–3%. Small changes here have large impact." />

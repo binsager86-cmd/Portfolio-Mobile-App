@@ -80,6 +80,71 @@ function normalizePriceTo3Dp(value: number): string {
   return value.toFixed(3);
 }
 
+function sumLineItems(
+  statement: { line_items?: Array<{ line_item_code: string; amount: number | null }> },
+  codes: string[],
+): number | null {
+  const codeSet = new Set(codes.map((c) => c.toUpperCase()));
+  let total = 0;
+  let found = false;
+  for (const li of statement.line_items ?? []) {
+    if (li.amount == null) continue;
+    if (!codeSet.has(String(li.line_item_code || "").toUpperCase())) continue;
+    total += li.amount;
+    found = true;
+  }
+  return found ? total : null;
+}
+
+function extractLineItem(
+  statement: { line_items?: Array<{ line_item_code: string; amount: number | null }> },
+  codes: string[],
+): number | null {
+  const codeSet = new Set(codes.map((c) => c.toUpperCase()));
+  for (const li of statement.line_items ?? []) {
+    if (li.amount == null) continue;
+    if (codeSet.has(String(li.line_item_code || "").toUpperCase())) return li.amount;
+  }
+  return null;
+}
+
+const INTEREST_BEARING_DEBT_CODES = [
+  "CURRENT_BANK_BORROWINGS", "BANK_BORROWINGS_CURRENT", "BANK_BORROWING_CURRENT",
+  "CURRENT_BORROWINGS", "CURRENT_PORTION_OF_BANK_BORROWINGS", "CURRENTPORTDEBT",
+  "SHORT_TERM_BORROWINGS", "SHORT_TERM_LOANS", "SHORT_TERM_LOAN",
+  "BANK_OVERDRAFT", "BANK_OVERDRAFTS", "OVERDRAFT", "OVERDRAFTS",
+  "LONG_TERM_BANK_BORROWINGS", "BANK_BORROWINGS_NON_CURRENT", "BANK_BORROWING_NON_CURRENT",
+  "NON_CURRENT_BANK_BORROWINGS", "NON_CURRENT_BORROWINGS", "DEBTNC",
+  "LONG_TERM_BORROWINGS", "LONG_TERM_LOANS", "LONG_TERM_LOAN", "TERM_LOAN", "TERM_LOANS",
+  "NON_CURRENT_MURABAHA_PAYABLE", "MURABAHA_PAYABLE",
+  "SHORT_TERM_DEBT", "CURRENT_PORTION_OF_LONG_TERM_DEBT", "NOTES_PAYABLE",
+  "LONG_TERM_DEBT", "BONDS_PAYABLE",
+] as const;
+
+const INTEREST_EXPENSE_CODES = [
+  "INTEREST_EXPENSE",
+  "FINANCE_COSTS",
+  "FINANCE_COST",
+  "FINANCE_EXPENSE",
+  "INTEREST_AND_FINANCE_COSTS",
+] as const;
+
+const EFFECTIVE_TAX_RATE_CODES = [
+  "EFFECTIVE_TAX_RATE",
+] as const;
+
+const INCOME_TAX_EXPENSE_CODES = [
+  "INCOME_TAX_EXPENSE",
+  "PROVISION_FOR_INCOME_TAXES",
+  "TAX_EXPENSE",
+] as const;
+
+const PRETAX_INCOME_CODES = [
+  "PRETAX_INCOME",
+  "INCOME_BEFORE_TAX",
+  "PROFIT_BEFORE_TAX",
+] as const;
+
 function deriveTtmEpsFromStatements(statements: Array<{
   statement_type: string;
   fiscal_year: number;
@@ -196,9 +261,11 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
   const [useWacc, setUseWacc] = useState(false);
   const [waccRf, setWaccRf] = useState(""); // risk-free rate override (in %)
   const [waccTax, setWaccTax] = useState(""); // tax rate override (in %)
+  const [waccKd, setWaccKd] = useState(""); // cost of debt override (in %)
 
   const stockListMarket = defaults.data?.exchange === "KSE" ? "kuwait" : "us";
   const stockListQ = useStockList(stockListMarket, !!stockSymbol);
+  const livePriceCurrency = defaults.data?.exchange === "KSE" ? "KWD" : "USD";
   const matchedStockEntry = useMemo(() => {
     if (!stockSymbol) return null;
     return stockListQ.data?.stocks.find(
@@ -206,36 +273,152 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     ) ?? null;
   }, [stockListQ.data?.stocks, stockSymbol]);
   const livePriceQ = useQuery({
-    queryKey: ["analysis", "valuation-live-price", stockId, matchedStockEntry?.yf_ticker, defaults.data?.currency],
-    queryFn: () => fetchStockPrice(matchedStockEntry!.yf_ticker, defaults.data?.currency || "KWD"),
+    queryKey: ["analysis", "valuation-live-price", stockId, matchedStockEntry?.yf_ticker, livePriceCurrency],
+    queryFn: () => fetchStockPrice(matchedStockEntry!.yf_ticker, livePriceCurrency),
     enabled: !!matchedStockEntry?.yf_ticker,
     staleTime: 60_000,
   });
 
-  // ── Derived WACC (recalculated when user edits Rf or Tax Rate) ──
+  const annualIncomeStatements = useMemo(() => {
+    const stmts = (stmtQ.data?.statements ?? [])
+      .filter((s) => s.statement_type === "income" && s.fiscal_quarter == null)
+      .sort((a, b) => b.fiscal_year - a.fiscal_year || b.period_end_date.localeCompare(a.period_end_date));
+    return stmts;
+  }, [stmtQ.data]);
+
+  const annualBalanceStatements = useMemo(() => {
+    const stmts = (stmtQ.data?.statements ?? [])
+      .filter((s) => s.statement_type === "balance" && s.fiscal_quarter == null)
+      .sort((a, b) => b.fiscal_year - a.fiscal_year || b.period_end_date.localeCompare(a.period_end_date));
+    return stmts;
+  }, [stmtQ.data]);
+
+  const derivedCostOfDebt = useMemo(() => {
+    const closingBalance = annualBalanceStatements[0];
+    const openingBalance = annualBalanceStatements[1];
+    const incomeLatest = annualIncomeStatements[0];
+    if (!closingBalance || !openingBalance || !incomeLatest) return null;
+
+    const closingDebt = sumLineItems(closingBalance, [...INTEREST_BEARING_DEBT_CODES]);
+    const openingDebt = sumLineItems(openingBalance, [...INTEREST_BEARING_DEBT_CODES]);
+    const interestExpenseRaw = extractLineItem(incomeLatest, [...INTEREST_EXPENSE_CODES]);
+    if (
+      closingDebt == null
+      || openingDebt == null
+      || interestExpenseRaw == null
+      || !Number.isFinite(closingDebt)
+      || !Number.isFinite(openingDebt)
+      || !Number.isFinite(interestExpenseRaw)
+    ) {
+      return null;
+    }
+
+    const averageDebt = (closingDebt + openingDebt) / 2;
+    if (!Number.isFinite(averageDebt) || averageDebt <= 0) return null;
+
+    const interestExpense = Math.abs(interestExpenseRaw);
+    const kd = interestExpense / averageDebt;
+    if (!Number.isFinite(kd) || kd <= 0) return null;
+
+    return {
+      kd,
+      averageDebt,
+      openingDebt,
+      closingDebt,
+      interestExpense,
+    };
+  }, [annualBalanceStatements, annualIncomeStatements]);
+
+  const derivedEffectiveTaxRate = useMemo(() => {
+    const incomeLatest = annualIncomeStatements[0];
+    if (!incomeLatest) return null;
+
+    const explicitTaxRate = extractLineItem(incomeLatest, [...EFFECTIVE_TAX_RATE_CODES]);
+    if (explicitTaxRate != null && Number.isFinite(explicitTaxRate)) {
+      // Handle both decimal form (0.2) and percentage form (20)
+      const normalized = explicitTaxRate > 1 ? explicitTaxRate / 100 : explicitTaxRate;
+      if (normalized >= 0 && normalized <= 1) return normalized;
+    }
+
+    const incomeTaxExpense = extractLineItem(incomeLatest, [...INCOME_TAX_EXPENSE_CODES]);
+    const pretaxIncome = extractLineItem(incomeLatest, [...PRETAX_INCOME_CODES]);
+    if (
+      incomeTaxExpense != null
+      && pretaxIncome != null
+      && Number.isFinite(incomeTaxExpense)
+      && Number.isFinite(pretaxIncome)
+      && pretaxIncome !== 0
+    ) {
+      const ratio = incomeTaxExpense / pretaxIncome;
+      // Clamp to a sensible effective-tax interval for valuation use.
+      return Math.min(Math.max(ratio, 0), 1);
+    }
+
+    return null;
+  }, [annualIncomeStatements]);
+
+  // ── Derived WACC (recalculated when user edits Rf/Tax/Kd) ──
   // CFA WACC: WACC = (E/V) × Ke + (D/V) × Kd × (1 − T)
-  // where Ke = Rf + β × ERP  (CAPM)
+  // where Ke = Rf + β × ERP (CAPM)
   const waccComputed = useMemo(() => {
     const d = defaults.data;
-    if (!d || d.wacc == null) return null;
+    if (!d) return null;
     const rfOverride = parseFloat(waccRf);
     const rf = !isNaN(rfOverride) ? rfOverride / 100 : d.wacc_risk_free_rate;
     if (rf == null || d.wacc_beta == null || d.wacc_equity_risk_premium == null) return null;
+
+    const kdOverride = parseFloat(waccKd);
+    const kd = !isNaN(kdOverride)
+      ? kdOverride / 100
+      : (derivedCostOfDebt?.kd ?? d.wacc_cost_of_debt ?? null);
+    if (kd == null || !Number.isFinite(kd) || kd <= 0) return null;
+
+    const parsedShares = parseFloat(stripCommas(shares));
+    const parsedCurrentPrice = parseFloat(currentPrice);
+    const marketEquity = Number.isFinite(parsedShares) && parsedShares > 0 && Number.isFinite(parsedCurrentPrice) && parsedCurrentPrice > 0
+      ? parsedCurrentPrice * parsedShares
+      : null;
+    const interestBearingDebt = derivedCostOfDebt?.closingDebt ?? parseFloat(stripCommas(debt));
+
     // CAPM: Cost of Equity
     const ke = rf + d.wacc_beta * d.wacc_equity_risk_premium;
-    // Normalize weights to ensure E/V + D/V = 1
-    const rawWeq = d.wacc_weight_equity ?? 1;
-    const rawWdt = d.wacc_weight_debt ?? 0;
+
+    // Prefer market-value capital structure when available.
+    const rawWeq = marketEquity != null && Number.isFinite(interestBearingDebt) && interestBearingDebt > 0
+      ? marketEquity
+      : (d.wacc_weight_equity ?? 1);
+    const rawWdt = marketEquity != null && Number.isFinite(interestBearingDebt) && interestBearingDebt > 0
+      ? interestBearingDebt
+      : (d.wacc_weight_debt ?? 0);
     const wSum = rawWeq + rawWdt;
     const weq = wSum > 0 ? rawWeq / wSum : 1;
     const wdt = wSum > 0 ? rawWdt / wSum : 0;
-    const kd = d.wacc_cost_of_debt ?? 0;
-    // Tax rate: user override > backend value > 0
+
+    // Tax rate: user override > backend value > derived from statements > 0
     const taxOverride = parseFloat(waccTax);
-    const tax = !isNaN(taxOverride) ? taxOverride / 100 : (d.wacc_tax_rate ?? 0);
-    const wacc = (weq * ke) + (wdt * kd * (1 - tax));
-    return { rf, ke, wacc, weq, wdt, tax };
-  }, [defaults.data, waccRf, waccTax]);
+    const tax = !isNaN(taxOverride)
+      ? taxOverride / 100
+      : (d.wacc_tax_rate ?? derivedEffectiveTaxRate ?? 0);
+    const equityContribution = weq * ke;
+    const debtContribution = wdt * kd * (1 - tax);
+    const wacc = equityContribution + debtContribution;
+
+    return {
+      rf,
+      ke,
+      kd,
+      tax,
+      weq,
+      wdt,
+      equityContribution,
+      debtContribution,
+      wacc,
+      marketEquity,
+      interestBearingDebt: Number.isFinite(interestBearingDebt) ? interestBearingDebt : null,
+      taxMissing: d.wacc_tax_rate == null && derivedEffectiveTaxRate == null && isNaN(taxOverride),
+      taxDerivedFromStatements: d.wacc_tax_rate == null && derivedEffectiveTaxRate != null && isNaN(taxOverride),
+    };
+  }, [currentPrice, debt, defaults.data, derivedCostOfDebt, derivedEffectiveTaxRate, shares, waccKd, waccRf, waccTax]);
 
   // ── Last calculation result ─────────────────────────────────────
   const [lastResult, setLastResult] = useState<ValuationRunResult | null>(null);
@@ -291,6 +474,8 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     if (d.wacc_risk_free_rate != null) setWaccRf((d.wacc_risk_free_rate * 100).toFixed(2));
     // WACC tax rate
     if (d.wacc_tax_rate != null) setWaccTax((d.wacc_tax_rate * 100).toFixed(2));
+    // WACC cost of debt
+    if (d.wacc_cost_of_debt != null) setWaccKd((d.wacc_cost_of_debt * 100).toFixed(2));
   }, [defaults.data, statementTtmEps]);
 
   // If statement-based TTM EPS arrives after defaults, update untouched inputs.
@@ -405,10 +590,10 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
         payload.wacc_beta = d.wacc_beta ?? undefined;
         payload.wacc_equity_risk_premium = d.wacc_equity_risk_premium ?? undefined;
         payload.wacc_cost_of_equity = waccComputed.ke;
-        payload.wacc_cost_of_debt = d.wacc_cost_of_debt ?? undefined;
-        payload.wacc_tax_rate = d.wacc_tax_rate ?? undefined;
-        payload.wacc_weight_equity = d.wacc_weight_equity ?? undefined;
-        payload.wacc_weight_debt = d.wacc_weight_debt ?? undefined;
+        payload.wacc_cost_of_debt = waccComputed.kd;
+        payload.wacc_tax_rate = waccComputed.tax;
+        payload.wacc_weight_equity = waccComputed.weq;
+        payload.wacc_weight_debt = waccComputed.wdt;
       }
       return runDCFValuation(stockId, payload);
     },
@@ -452,6 +637,24 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
       if (shares && !isNaN(sharesN) && sharesN <= 0) return "Shares outstanding must be positive.";
       if (dr && tg && !isNaN(drN) && !isNaN(tgN) && tgN >= drN)
         return "Perpetual Growth must be less than Discount Rate for DCF convergence.";
+
+      if (useWacc) {
+        const manualKd = parseFloat(waccKd);
+        const hasKd = (!isNaN(manualKd) && manualKd > 0)
+          || (waccComputed?.kd != null && Number.isFinite(waccComputed.kd) && waccComputed.kd > 0);
+        if (!hasKd) {
+          return "Cost of Debt is required to compute WACC. Provide a manual Kd or ensure interest expense and interest-bearing debt are available.";
+        }
+        if (!waccComputed) {
+          return "WACC cannot be computed. Check Rf, Beta, Equity Risk Premium, Cost of Debt, and capital structure inputs.";
+        }
+
+        const tgDecimal = parseFloat(tg) / 100;
+        // Guard terminal value instability when g is too close to or above WACC.
+        if (Number.isFinite(tgDecimal) && tgDecimal >= (waccComputed.wacc - 0.0025)) {
+          return "Perpetual Growth Rate must be lower than WACC; values that are equal or too close make terminal value unreliable.";
+        }
+      }
     }
     if (model === "ddm") {
       const rrN = parseFloat(rr), grN = parseFloat(divGr);
@@ -482,7 +685,9 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     div, setDiv, divGr, setDivGr, rr, setRr,
     mv, setMv: onSetMv, pm, setPm, multipleType, setMultipleType,
     useWacc, setUseWacc,
-    waccRf, setWaccRf, waccTax, setWaccTax, waccComputed,
+    waccRf, setWaccRf, waccTax, setWaccTax, waccKd, setWaccKd, waccComputed,
+    derivedCostOfDebt,
+    derivedEffectiveTaxRate,
     grahamMut, dcfMut, ddmMut, multMut,
     valError, lastResult,
     mosGraham, setMosGraham, mosDcf, setMosDcf, mosDdm, setMosDdm, mosMult, setMosMult,
