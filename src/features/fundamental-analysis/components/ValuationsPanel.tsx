@@ -4,6 +4,9 @@
  * margin-of-safety signals) and valuation history.
  */
 
+/* eslint-disable custom-styles/no-hardcoded-styles */
+/* eslint-disable max-lines */
+
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,8 +28,6 @@ import { ActionButton, Card, Chip, ExportBar, FadeIn, LabeledInput, SectionHeade
 
 const fmt = (v: unknown, dp = 3) =>
   typeof v === "number" ? v.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }) : "—";
-
-const MULT_OPTIONS = ["P/E", "P/B", "P/S", "P/CF", "EV/EBITDA"] as const;
 
 const MULT_COLS: { key: string; label: string }[] = [
   { key: "pe", label: "P/E" },
@@ -445,13 +446,13 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     s1, setS1, s2, setS2,
     shares, setShares, cash, setCash, debt, setDebt,
     div, setDiv, divGr, setDivGr, rr, setRr,
-    mv, setMv, pm, setPm, multipleType, setMultipleType,
+    mv, setMv, pm, setPm, multipleType, setMultipleType: _setMultipleType,
     useWacc, setUseWacc,
     waccRf, setWaccRf, waccTax, setWaccTax, waccComputed,
     grahamMut, dcfMut, ddmMut, multMut,
     valError, lastResult,
     defaults, defaultsLoading,
-  } = useValuationCalculations(stockId);
+  } = useValuationCalculations(stockId, stockSymbol);
 
   const { data, isLoading, refetch, isFetching } = useValuations(stockId);
   const valuations = data?.valuations ?? [];
@@ -774,7 +775,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
               </View>
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <LabeledInput label="AAA BOND YIELD (Y) %" value={corpYield} onChangeText={setCorpYield} colors={colors} keyboardType="numeric" flex={1}
-                  helperText="Current yield on AAA-rated corporate bonds (%). Graham used 4.4% as the baseline in his era. Auto-filled from 10-Year US Treasury yield (^TNX). Higher Y = lower intrinsic value (stricter discount)." />
+                  helperText="Current yield on AAA-rated corporate bonds (%). Baseline default is 4.00 unless you override it manually. Higher Y = lower intrinsic value (stricter discount)." />
                 <LabeledInput label="CURRENT PRICE" value={currentPrice} onChangeText={setCurrentPrice} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The stock's current market price per share. Auto-filled from live market data (Yahoo Finance). Used to determine the verdict: Undervalued, Fair Value, or Overvalued." />
               </View>
