@@ -109,6 +109,8 @@ export interface RatedStock {
   entry_primary?: number | null;
   stop_loss?: number | null;
   tp1?: number | null;
+  average_volume?: number | null;
+  latest_volume?: number | null;
   last_price?: number | null;
   book_value_per_share?: number | null;
   pe_ratio?: number | null;

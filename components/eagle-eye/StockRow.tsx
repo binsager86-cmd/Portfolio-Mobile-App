@@ -26,6 +26,8 @@ export const STOCK_TABLE_COL_WIDTHS = {
   ticker: 92,
   stage: 108,
   volume: 106,
+  avgVolume: 112,
+  latestVolume: 112,
   current: 92,
   entry: 92,
   tp1: 92,
@@ -49,6 +51,15 @@ interface StockRowSkeletonProps {
 
 function fmt(n: number | null | undefined, dec = 3): string {
   return n != null ? n.toFixed(dec) : "—";
+}
+
+function fmtCompactVolume(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "N/A";
+  const v = Math.abs(n);
+  if (v >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (v >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${Math.round(n)}`;
 }
 
 export function computeRR(item: RatedStock): number | null {
@@ -140,6 +151,28 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         <View style={styles.tableCellVolume}>
           <Text style={[styles.tableVolumeText, { color: volumeCell.color }]} numberOfLines={1}>
             {volumeCell.label}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellAvgVolume}>
+          <Text
+            style={[
+              styles.tableNumText,
+              { color: item.average_volume != null ? colors.textPrimary : colors.textMuted },
+            ]}
+          >
+            {fmtCompactVolume(item.average_volume)}
+          </Text>
+        </View>
+
+        <View style={styles.tableCellLatestVolume}>
+          <Text
+            style={[
+              styles.tableNumText,
+              { color: item.latest_volume != null ? colors.textPrimary : colors.textMuted },
+            ]}
+          >
+            {fmtCompactVolume(item.latest_volume)}
           </Text>
         </View>
 
@@ -371,6 +404,12 @@ export function StockRowSkeleton({ variant = "default" }: StockRowSkeletonProps 
         <View style={styles.tableCellCurrent}>
           <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
         </View>
+        <View style={styles.tableCellAvgVolume}>
+          <View style={[styles.skelRect, sh, { width: 76, height: 12 }]} />
+        </View>
+        <View style={styles.tableCellLatestVolume}>
+          <View style={[styles.skelRect, sh, { width: 76, height: 12 }]} />
+        </View>
         <View style={styles.tableCellEntry}>
           <View style={[styles.skelRect, sh, { width: 68, height: 12 }]} />
         </View>
@@ -464,6 +503,16 @@ const styles = StyleSheet.create({
   },
   tableCellCurrent: {
     width: STOCK_TABLE_COL_WIDTHS.current,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellAvgVolume: {
+    width: STOCK_TABLE_COL_WIDTHS.avgVolume,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellLatestVolume: {
+    width: STOCK_TABLE_COL_WIDTHS.latestVolume,
     alignItems: "flex-end",
     paddingRight: 6,
   },

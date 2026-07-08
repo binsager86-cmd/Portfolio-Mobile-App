@@ -90,6 +90,8 @@ type SortField =
   | "ticker"
   | "stage"
   | "volume"
+  | "avgvol"
+  | "latvol"
   | "conf"
   | "rr"
   | "price"
@@ -108,6 +110,8 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   ticker: "Ticker",
   stage: "Stage",
   volume: "Volume",
+  avgvol: "Avg Volume",
+  latvol: "Latest Volume",
   conf: "Confidence",
   rr: "Risk/Reward",
   price: "Current Price",
@@ -341,6 +345,10 @@ export default function EagleEyeScannerScreen() {
         diff = stageWeight(b.stage) - stageWeight(a.stage);
       } else if (sortBy === "volume") {
         diff = relVolume(b) - relVolume(a);
+      } else if (sortBy === "avgvol") {
+        diff = numberOrNegInf(b.average_volume) - numberOrNegInf(a.average_volume);
+      } else if (sortBy === "latvol") {
+        diff = numberOrNegInf(b.latest_volume) - numberOrNegInf(a.latest_volume);
       } else if (sortBy === "conf") {
         diff = b.confidence - a.confidence;
       } else if (sortBy === "rr") {
@@ -551,6 +559,40 @@ export default function EagleEyeScannerScreen() {
                 ]}
               >
                 {`Volume${sortArrow("volume")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("avgvol")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.avgVolume }]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "avgvol" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Avg Vol${sortArrow("avgvol")}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleSort("latvol")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.latestVolume }]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  {
+                    color: sortBy === "latvol" ? colors.accentPrimary : colors.textMuted,
+                    textAlign: "right",
+                  },
+                ]}
+              >
+                {`Latest Vol${sortArrow("latvol")}`}
               </Text>
             </Pressable>
             <Pressable
