@@ -170,14 +170,23 @@ export function mapAuthError(
   if (err instanceof Error) {
     const name = String((err as { name?: string }).name || "").toLowerCase();
     const msg = String(err.message || "").toLowerCase();
+    if (msg.includes("network request failed")) {
+      return {
+        code: "auth/network-error",
+        message: "Cannot reach the server. Please check your internet connection.",
+        severity: "error",
+        originalError: err,
+      };
+    }
     if (
       name.includes("abort") ||
       msg.includes("aborted") ||
-      msg.includes("timeout")
+      msg.includes("timeout") ||
+      msg.includes("timed out")
     ) {
       return {
         code: "auth/timeout",
-        message: "Login request timed out. Please check that the backend is running and try again.",
+        message: "Request timed out. Please check your connection and try again.",
         severity: "warning",
         originalError: err,
       };

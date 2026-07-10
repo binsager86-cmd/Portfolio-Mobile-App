@@ -30,6 +30,7 @@ import {
   useStatements,
   useStockMetrics,
   useValuations,
+  useStockListSearch,
 } from "@/hooks/queries";
 import { useStockList } from "@/hooks/queries";
 
@@ -868,19 +869,33 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
   // Stock picker state (Add mode only)
   const [market, setMarket] = useState<"kuwait" | "us">("kuwait");
   const [pickerSearch, setPickerSearch] = useState("");
+  const debouncedPickerSearch = useDebouncedValue(pickerSearch, 350);
   const [selectedEntry, setSelectedEntry] = useState<StockListEntry | null>(null);
 
   // Fetch cached stock list
   const stockListQ = useStockList(market, !isEdit);
+  const serverSearchQ = useStockListSearch(market, debouncedPickerSearch, !isEdit);
 
   const filteredStocks = useMemo(() => {
     const all = stockListQ.data?.stocks ?? [];
-    if (!pickerSearch.trim()) return all.slice(0, 50); // show first 50 by default
-    const q = pickerSearch.toLowerCase();
-    return all.filter(
+    const serverResults = serverSearchQ.data?.stocks ?? [];
+
+    if (!pickerSearch.trim()) return all.slice(0, 200);
+    const q = pickerSearch.trim().toLowerCase();
+    const localFiltered = all.filter(
       (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [stockListQ.data, pickerSearch]);
+    );
+
+    const seen = new Set(localFiltered.map((s) => s.symbol.toUpperCase()));
+    const merged = [...localFiltered];
+    for (const s of serverResults) {
+      if (!seen.has(s.symbol.toUpperCase())) {
+        seen.add(s.symbol.toUpperCase());
+        merged.push(s);
+      }
+    }
+    return merged.slice(0, 200);
+  }, [stockListQ.data, serverSearchQ.data, pickerSearch]);
 
   const handlePickStock = (entry: StockListEntry) => {
     setSelectedEntry(entry);
@@ -980,7 +995,7 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
                 </View>
 
                 {/* Results */}
-                {stockListQ.isLoading ? (
+                {stockListQ.isLoading || (pickerSearch.trim().length >= 2 && serverSearchQ.isLoading) ? (
                   <View style={{ paddingVertical: 20, alignItems: "center" }}>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>Loading stock list...</Text>
                   </View>
@@ -1027,7 +1042,9 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
                 {/* Count badge */}
                 {stockListQ.data && (
                   <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 6, textAlign: "right" }}>
-                    {stockListQ.data.count} stocks in {market === "kuwait" ? "KSE" : "US"} list
+                    {market === "us"
+                      ? `${stockListQ.data.count} base US tickers (search adds live results)`
+                      : `${stockListQ.data.count} stocks in KSE list`}
                   </Text>
                 )}
               </View>

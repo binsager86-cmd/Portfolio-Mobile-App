@@ -357,7 +357,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (__DEV__) console.info("[AuthStore] ✅ Session persisted, user is now authenticated");
       return true;
     } catch (err: unknown) {
-      if (__DEV__) console.error("[AuthStore] ❌ googleSignIn error:", err);
+      if (__DEV__) console.warn("[AuthStore] ⚠ googleSignIn error:", err);
       const mapped = mapAuthError(err, "google");
       logAuthError(mapped, "googleSignIn");
       set({ isLoading: false, error: mapped.message, lastAuthError: mapped });

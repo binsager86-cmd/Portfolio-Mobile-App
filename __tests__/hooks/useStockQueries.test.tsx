@@ -44,9 +44,9 @@ describe("stockKeys", () => {
   it("produces stable keys", () => {
     expect(stockKeys.list("USA", "AAPL")).toEqual(["stocks", "USA", "AAPL"]);
     expect(stockKeys.allForMerge()).toEqual(["all-stocks-for-merge"]);
-    expect(stockKeys.stockList("us")).toEqual(["stock-list", "us"]);
+    expect(stockKeys.stockList("us")).toEqual(["stock-list-v2", "us"]);
     expect(stockKeys.stockListSearch("us", "ap")).toEqual([
-      "stock-list-search",
+      "stock-list-search-v2",
       "us",
       "ap",
     ]);

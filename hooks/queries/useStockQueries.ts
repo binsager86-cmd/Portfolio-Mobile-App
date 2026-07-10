@@ -24,9 +24,9 @@ export const stockKeys = {
     ["stocks", portfolio, search] as const,
   /** Separate key when querying all stocks for merge modal. */
   allForMerge: () => ["all-stocks-for-merge"] as const,
-  stockList: (market: string) => ["stock-list", market] as const,
+  stockList: (market: string) => ["stock-list-v2", market] as const,
   stockListSearch: (market: string, search: string) =>
-    ["stock-list-search", market, search] as const,
+    ["stock-list-search-v2", market, search] as const,
   securities: (search?: string) => ["securities", search] as const,
 } as const;
 
