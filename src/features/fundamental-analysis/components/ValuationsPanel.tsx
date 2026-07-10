@@ -447,7 +447,8 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     div, setDiv, divGr, setDivGr, rr, setRr,
     mv, setMv, pm, setPm, multipleType, setMultipleType,
     useWacc, setUseWacc,
-    waccRf, setWaccRf, waccTax, setWaccTax, waccComputed,
+    waccRf, setWaccRf, waccKd, setWaccKd, waccTax, setWaccTax, waccComputed,
+    statementWaccInputs,
     grahamMut, dcfMut, ddmMut, multMut,
     valError, lastResult,
     defaults, defaultsLoading,
@@ -550,6 +551,26 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   }, [stockId]);
 
   const info = MODEL_INFO[model];
+
+  const waccRfSource = useMemo(() => {
+    if (waccRf.trim().length > 0) return "Manual";
+    if (defaults?.wacc_risk_free_rate != null) return "Backend";
+    return "Missing";
+  }, [defaults?.wacc_risk_free_rate, waccRf]);
+
+  const waccKdSource = useMemo(() => {
+    if (waccKd.trim().length > 0) return "Manual";
+    if (defaults?.wacc_cost_of_debt != null) return "Backend";
+    if (statementWaccInputs.costOfDebt != null) return "Statements";
+    return "Missing";
+  }, [defaults?.wacc_cost_of_debt, statementWaccInputs.costOfDebt, waccKd]);
+
+  const waccTaxSource = useMemo(() => {
+    if (waccTax.trim().length > 0) return "Manual";
+    if (defaults?.wacc_tax_rate != null) return "Backend";
+    if (statementWaccInputs.taxRate != null) return "Statements";
+    return "Missing";
+  }, [defaults?.wacc_tax_rate, statementWaccInputs.taxRate, waccTax]);
 
   // Collect most-recent result per model from history for the combined summary
   const latestByModel = useMemo(() => {
@@ -896,10 +917,36 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccRfSource}</Text>
                     {defaults.wacc_beta != null && <KVRow label="Beta (β)" value={defaults.wacc_beta.toFixed(2)} colors={colors} />}
                     {defaults.wacc_equity_risk_premium != null && <KVRow label="Equity Risk Premium" value={(defaults.wacc_equity_risk_premium * 100).toFixed(2) + "%"} colors={colors} />}
                     <KVRow label="Cost of Equity (Ke)" value={waccComputed ? (waccComputed.ke * 100).toFixed(2) + "%" : defaults.wacc_cost_of_equity != null ? (defaults.wacc_cost_of_equity * 100).toFixed(2) + "%" : "—"} colors={colors} />
-                    {defaults.wacc_cost_of_debt != null && <KVRow label="Cost of Debt (Kd)" value={(defaults.wacc_cost_of_debt * 100).toFixed(2) + "%"} colors={colors} />}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 2 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>Cost of Debt (Kd)</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <TextInput
+                          value={waccKd}
+                          onChangeText={setWaccKd}
+                          keyboardType="numeric"
+                          placeholder={
+                            defaults.wacc_cost_of_debt != null
+                              ? (defaults.wacc_cost_of_debt * 100).toFixed(2)
+                              : statementWaccInputs.costOfDebt != null
+                                ? (statementWaccInputs.costOfDebt * 100).toFixed(2)
+                                : "0"
+                          }
+                          placeholderTextColor={colors.textMuted}
+                          style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"], borderBottomWidth: 1, borderBottomColor: "#6366f1", paddingVertical: 2, paddingHorizontal: 4, minWidth: 50, textAlign: "right" }}
+                        />
+                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccKdSource}</Text>
+                    {(!waccKd || waccKd === "0") && defaults.wacc_cost_of_debt == null && statementWaccInputs.costOfDebt == null && (
+                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>
+                        Interest expense/debt data missing - enter Cost of Debt manually to enable full WACC.
+                      </Text>
+                    )}
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 2 }}>
                       <Text style={{ color: colors.textMuted, fontSize: 12 }}>Tax Rate (T)</Text>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -914,8 +961,9 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
-                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && (
-                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>No tax data found — enter tax rate manually</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccTaxSource}</Text>
+                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && statementWaccInputs.taxRate == null && (
+                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>No tax data found - enter tax rate manually</Text>
                     )}
                     {defaults.wacc_weight_equity != null && <KVRow label="Equity Weight (E/V)" value={(defaults.wacc_weight_equity * 100).toFixed(2) + "%"} colors={colors} />}
                     {defaults.wacc_weight_debt != null && <KVRow label="Debt Weight (D/V)" value={(defaults.wacc_weight_debt * 100).toFixed(2) + "%"} colors={colors} />}
