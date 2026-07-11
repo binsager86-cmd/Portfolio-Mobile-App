@@ -30,6 +30,40 @@ type ComparisonSelection = {
   rows: FinancialStatement[];
   ttmPeriodEndDate: string | null;
 };
+
+type CompPeriod = {
+  label: string;
+  period: string;
+  fiscalYear: number;
+  fiscalQuarter: number | null;
+  items: Record<string, { id: number; amount: number; name: string; isTotal: boolean }>;
+};
+
+function getYoYBaseValue(periods: CompPeriod[], periodView: ComparePeriodView, i: number, code: string): number | undefined {
+  if (i <= 0) return undefined;
+
+  if (periodView !== "quarter") {
+    return periods[i - 1].items[code]?.amount;
+  }
+
+  const current = periods[i];
+  if (current.fiscalQuarter == null) return undefined;
+
+  const targetYear = current.fiscalYear - 1;
+  const match = periods.find(
+    (p) => p.fiscalYear === targetYear && p.fiscalQuarter === current.fiscalQuarter,
+  );
+  return match?.items[code]?.amount;
+}
+
+function getYoYHeaderLabel(periodView: ComparePeriodView): string {
+  return periodView === "quarter" ? "YoY % (same Q LY)" : "YoY %";
+}
+
+function calculateYoYPercent(currentValue: number | null | undefined, previousValue: number | null | undefined): number | null {
+  if (currentValue == null || previousValue == null || previousValue === 0) return null;
+  return ((currentValue - previousValue) / previousValue) * 100;
+}
 type StatementLineItem = FinancialStatement["line_items"][number];
 
 function normalizeQuarter(raw: unknown): number | null {
@@ -219,6 +253,8 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
         return {
         label,
         period: s.period_end_date,
+        fiscalYear: s.fiscal_year,
+        fiscalQuarter: q,
         items: Object.fromEntries(
           (s.line_items ?? []).map((li) => [li.line_item_code, { id: li.id, amount: li.amount, name: li.line_item_name, isTotal: li.is_total }])
         ),
@@ -243,6 +279,10 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       .sort((a, b) => a[1].minOrder - b[1].minOrder)
       .map(([code, v]) => ({ code, name: v.name, isTotal: v.isTotal }));
   }, [comparisonStatements]);
+
+  const handleRecalculate = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const mergeMut = useMutation({
     mutationFn: ({ keepCode, removeCode }: { keepCode: string; removeCode: string }) =>
@@ -288,7 +328,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
     const headers = ["Line Item"];
     for (let i = 0; i < periods.length; i++) {
       headers.push(periods[i].label);
-      if (i > 0) headers.push("YoY %");
+      if (i > 0) headers.push(getYoYHeaderLabel(periodView));
     }
     const rows = displayRows.map((item) => {
       const row: (string | number | null)[] = [item.name];
@@ -296,8 +336,8 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
         const val = periods[i].items[item.code]?.amount;
         row.push(val != null ? formatLineItemValue(item.name, val) : null);
         if (i > 0) {
-          const prevVal = periods[i - 1].items[item.code]?.amount;
-          const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+          const prevVal = getYoYBaseValue(periods, periodView, i, item.code);
+          const yoy = calculateYoYPercent(val, prevVal);
           row.push(yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : null);
         }
       }
@@ -305,7 +345,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
     return [{ title: `${typeName} — Period Comparison`, headers, rows }];
-  }, [periods, displayRows, typeFilter]);
+  }, [periods, displayRows, typeFilter, periodView]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -422,6 +462,27 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
             </Pressable>
 
             <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={handleRecalculate}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh comparison"
+              style={({ pressed }) => [{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                backgroundColor: colors.bgCard,
+                opacity: pressed ? 0.8 : 1,
+                marginRight: 8,
+              }]}
+            >
+              <FontAwesome name="refresh" size={12} color={colors.accentPrimary} />
+              <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700" }}>Refresh</Text>
+            </Pressable>
             <ExportBar
               onExport={async (fmt) => {
                 const { exportExcel, exportCSV, exportPDF } = await import("@/lib/exportAnalysis");
@@ -441,7 +502,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
                 {periods.map((p, i) => (
                   <React.Fragment key={p.period}>
                     <Text style={[st.compCellVal, { color: colors.textPrimary, fontWeight: "800" }]}>{p.label}</Text>
-                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>YoY %</Text>}
+                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>{getYoYHeaderLabel(periodView)}</Text>}
                   </React.Fragment>
                 ))}
               </View>
@@ -452,6 +513,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
                   item={item}
                   rowIdx={rowIdx}
                   periods={periods}
+                  periodView={periodView}
                   colors={colors}
                   mergeMode={mergeMode}
                   mergeSelected={mergeSelection.includes(item.code)}
@@ -466,20 +528,15 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   );
 }
 
-// ── Comparison row (no drag) ────────────────────────────────────────
-type CompPeriod = {
-  label: string;
-  period: string;
-  items: Record<string, { id: number; amount: number; name: string; isTotal: boolean }>;
-};
-
 function CompRow({
   item, rowIdx, periods, colors,
+  periodView,
   mergeMode, mergeSelected, onToggleMerge,
 }: {
   item: { code: string; name: string; isTotal: boolean };
   rowIdx: number;
   periods: CompPeriod[];
+  periodView: ComparePeriodView;
   colors: ThemePalette;
   mergeMode: boolean;
   mergeSelected: boolean;
@@ -529,8 +586,8 @@ function CompRow({
       </Text>
       {periods.map((p, i) => {
         const val = p.items[item.code]?.amount;
-        const prevVal = i > 0 ? periods[i - 1].items[item.code]?.amount : undefined;
-        const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+        const prevVal = getYoYBaseValue(periods, periodView, i, item.code);
+        const yoy = calculateYoYPercent(val, prevVal);
         return (
           <React.Fragment key={p.period}>
             <Text style={[st.compCellVal, {

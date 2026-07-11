@@ -1,11 +1,9 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * ValuationsPanel — Run Graham / DCF / DDM / Multiples valuations
  * with detailed result cards (formula breakdowns, projections,
  * margin-of-safety signals) and valuation history.
  */
-
-/* eslint-disable custom-styles/no-hardcoded-styles */
-/* eslint-disable max-lines */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +26,8 @@ import { ActionButton, Card, Chip, ExportBar, FadeIn, LabeledInput, SectionHeade
 
 const fmt = (v: unknown, dp = 3) =>
   typeof v === "number" ? v.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }) : "—";
+
+const MULT_OPTIONS = ["P/E", "P/B", "P/S", "P/CF", "EV/EBITDA"] as const;
 
 const MULT_COLS: { key: string; label: string }[] = [
   { key: "pe", label: "P/E" },
@@ -446,15 +446,14 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     s1, setS1, s2, setS2,
     shares, setShares, cash, setCash, debt, setDebt,
     div, setDiv, divGr, setDivGr, rr, setRr,
-    mv, setMv, pm, setPm, multipleType, setMultipleType: _setMultipleType,
+    mv, setMv, pm, setPm, multipleType, setMultipleType,
     useWacc, setUseWacc,
-    waccRf, setWaccRf, waccTax, setWaccTax, waccKd, setWaccKd, waccComputed,
-    derivedCostOfDebt,
-    derivedEffectiveTaxRate,
+    waccRf, setWaccRf, waccKd, setWaccKd, waccTax, setWaccTax, waccComputed,
+    statementWaccInputs,
     grahamMut, dcfMut, ddmMut, multMut,
     valError, lastResult,
     defaults, defaultsLoading,
-  } = useValuationCalculations(stockId, stockSymbol);
+  } = useValuationCalculations(stockId);
 
   const { data, isLoading, refetch, isFetching } = useValuations(stockId);
   const valuations = data?.valuations ?? [];
@@ -527,14 +526,6 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
     return peValues.reduce((sum, v) => sum + v, 0) / peValues.length;
   }, [peerData]);
 
-  // Auto-seed peer multiple from sector average (without overriding user edits).
-  useEffect(() => {
-    if (model !== "multiples") return;
-    if (sectorAvgPE == null) return;
-    if (pm.trim() !== "") return;
-    setPm(sectorAvgPE.toFixed(2));
-  }, [model, pm, sectorAvgPE, setPm]);
-
   // Summary-level Margin of Safety
   const [summaryMos, setSummaryMos] = useState("15");
   const mosInitialized = useRef(false);
@@ -561,6 +552,26 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   }, [stockId]);
 
   const info = MODEL_INFO[model];
+
+  const waccRfSource = useMemo(() => {
+    if (waccRf.trim().length > 0) return "Manual";
+    if (defaults?.wacc_risk_free_rate != null) return "Backend";
+    return "Missing";
+  }, [defaults?.wacc_risk_free_rate, waccRf]);
+
+  const waccKdSource = useMemo(() => {
+    if (waccKd.trim().length > 0) return "Manual";
+    if (defaults?.wacc_cost_of_debt != null) return "Backend";
+    if (statementWaccInputs.costOfDebt != null) return "Statements";
+    return "Missing";
+  }, [defaults?.wacc_cost_of_debt, statementWaccInputs.costOfDebt, waccKd]);
+
+  const waccTaxSource = useMemo(() => {
+    if (waccTax.trim().length > 0) return "Manual";
+    if (defaults?.wacc_tax_rate != null) return "Backend";
+    if (statementWaccInputs.taxRate != null) return "Statements";
+    return "Missing";
+  }, [defaults?.wacc_tax_rate, statementWaccInputs.taxRate, waccTax]);
 
   // Collect most-recent result per model from history for the combined summary
   const latestByModel = useMemo(() => {
@@ -777,7 +788,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
               </View>
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <LabeledInput label="AAA BOND YIELD (Y) %" value={corpYield} onChangeText={setCorpYield} colors={colors} keyboardType="numeric" flex={1}
-                  helperText="Current yield on AAA-rated corporate bonds (%). Baseline default is 4.00 unless you override it manually. Higher Y = lower intrinsic value (stricter discount)." />
+                  helperText="Current yield on AAA-rated corporate bonds (%). Graham used 4.4% as the baseline in his era. Auto-filled from 10-Year US Treasury yield (^TNX). Higher Y = lower intrinsic value (stricter discount)." />
                 <LabeledInput label="CURRENT PRICE" value={currentPrice} onChangeText={setCurrentPrice} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The stock's current market price per share. Auto-filled from live market data (Yahoo Finance). Used to determine the verdict: Undervalued, Fair Value, or Overvalued." />
               </View>
@@ -907,6 +918,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccRfSource}</Text>
                     {defaults.wacc_beta != null && <KVRow label="Beta (β)" value={defaults.wacc_beta.toFixed(2)} colors={colors} />}
                     {defaults.wacc_equity_risk_premium != null && <KVRow label="Equity Risk Premium" value={(defaults.wacc_equity_risk_premium * 100).toFixed(2) + "%"} colors={colors} />}
                     <KVRow label="Cost of Equity (Ke)" value={waccComputed ? (waccComputed.ke * 100).toFixed(2) + "%" : defaults.wacc_cost_of_equity != null ? (defaults.wacc_cost_of_equity * 100).toFixed(2) + "%" : "—"} colors={colors} />
@@ -917,21 +929,23 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                           value={waccKd}
                           onChangeText={setWaccKd}
                           keyboardType="numeric"
-                          placeholder={derivedCostOfDebt ? (derivedCostOfDebt.kd * 100).toFixed(2) : "0"}
+                          placeholder={
+                            defaults.wacc_cost_of_debt != null
+                              ? (defaults.wacc_cost_of_debt * 100).toFixed(2)
+                              : statementWaccInputs.costOfDebt != null
+                                ? (statementWaccInputs.costOfDebt * 100).toFixed(2)
+                                : "0"
+                          }
                           placeholderTextColor={colors.textMuted}
                           style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"], borderBottomWidth: 1, borderBottomColor: "#6366f1", paddingVertical: 2, paddingHorizontal: 4, minWidth: 50, textAlign: "right" }}
                         />
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
-                    {derivedCostOfDebt && (
-                      <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }}>
-                        Derived Kd = Interest Expense / Avg Interest-Bearing Debt = {derivedCostOfDebt.interestExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })} / {derivedCostOfDebt.averageDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </Text>
-                    )}
-                    {!derivedCostOfDebt && !waccKd && (
-                      <Text style={{ color: colors.warning, fontSize: 10, marginTop: 2 }}>
-                        Interest expense/debt data missing — enter Cost of Debt manually to enable WACC.
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccKdSource}</Text>
+                    {(!waccKd || waccKd === "0") && defaults.wacc_cost_of_debt == null && statementWaccInputs.costOfDebt == null && (
+                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>
+                        Interest expense/debt data missing - enter Cost of Debt manually to enable full WACC.
                       </Text>
                     )}
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 2 }}>
@@ -948,33 +962,21 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                         <Text style={{ color: colors.textMuted, fontSize: 11 }}>%</Text>
                       </View>
                     </View>
-                    {waccComputed?.taxMissing && (
-                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>Tax rate missing — using 0% may overstate after-tax debt cost accuracy.</Text>
-                    )}
-                    {waccComputed?.taxDerivedFromStatements && derivedEffectiveTaxRate != null && (
-                      <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 2 }}>
-                        Tax rate derived from statements: {(derivedEffectiveTaxRate * 100).toFixed(2)}%
-                      </Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccTaxSource}</Text>
+                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && statementWaccInputs.taxRate == null && (
+                      <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>No tax data found - enter tax rate manually</Text>
                     )}
                     {defaults.wacc_weight_equity != null && <KVRow label="Equity Weight (E/V)" value={(defaults.wacc_weight_equity * 100).toFixed(2) + "%"} colors={colors} />}
                     {defaults.wacc_weight_debt != null && <KVRow label="Debt Weight (D/V)" value={(defaults.wacc_weight_debt * 100).toFixed(2) + "%"} colors={colors} />}
-                    {waccComputed && <KVRow label="Equity Contribution (E/V × Ke)" value={(waccComputed.equityContribution * 100).toFixed(2) + "%"} colors={colors} />}
-                    {waccComputed && <KVRow label="Debt Contribution (D/V × Kd × (1−T))" value={(waccComputed.debtContribution * 100).toFixed(2) + "%"} colors={colors} />}
                     <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 4 }} />
                     <KVRow label="WACC" value={waccComputed ? (waccComputed.wacc * 100).toFixed(2) + "%" : (defaults.wacc * 100).toFixed(2) + "%"} colors={colors} bold />
-                    {waccComputed?.marketEquity != null && (
-                      <KVRow label="Market Equity (Price × Shares)" value={waccComputed.marketEquity.toLocaleString(undefined, { maximumFractionDigits: 0 })} colors={colors} />
-                    )}
-                    {waccComputed?.interestBearingDebt != null && (
-                      <KVRow label="Interest-Bearing Debt" value={waccComputed.interestBearingDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} colors={colors} />
-                    )}
                   </View>
                 </View>
               )}
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <LabeledInput label="DISCOUNT RATE %" value={useWacc && waccComputed ? (waccComputed.wacc * 100).toFixed(2) : dr} onChangeText={setDr} colors={colors} keyboardType="numeric" flex={1}
-                  helperText={useWacc ? "Using calculated WACC as discount rate for FCFF (Unlevered FCF). For FCFE/Levered FCF models, discount using Cost of Equity." : "Your required rate of return (%). Enter 10 for 10%. Used to discount future cash flows to present value. Reflects the risk of the investment — higher discount rate = more conservative valuation. Often based on WACC."}
+                  helperText={useWacc ? "Using calculated WACC as discount rate." : "Your required rate of return (%). Enter 10 for 10%. Used to discount future cash flows to present value. Reflects the risk of the investment — higher discount rate = more conservative valuation. Often based on WACC."}
                   editable={!useWacc || !waccComputed} />
                 <LabeledInput label="PERPETUAL GROWTH %" value={tg} onChangeText={setTg} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The perpetual growth rate (%) assumed forever after Stage 2. Enter 2.5 for 2.5%. Used to calculate terminal value via the Gordon Growth Model. Must be less than Discount Rate. Typically 2–3%. Small changes here have large impact." />
@@ -1206,42 +1208,16 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
 
               {/* ── Valuation: EPS × Avg P/E ────────────────── */}
               {(() => {
-                const epsVal = mv.trim() !== "" ? parseFloat(mv) : defaults?.eps;
+                const epsVal = defaults?.eps;
                 const priceVal = defaults?.current_price;
-                const peerMultipleVal = pm.trim() !== "" ? parseFloat(pm) : sectorAvgPE;
-                const hasValidEps = epsVal != null && Number.isFinite(epsVal);
-                const hasValidPeer = peerMultipleVal != null && Number.isFinite(peerMultipleVal);
-                const multiplesValuation = hasValidEps && hasValidPeer ? (epsVal * peerMultipleVal) : null;
+                const multiplesValuation = epsVal != null && sectorAvgPE != null ? epsVal * sectorAvgPE : null;
                 return (
                   <View style={{ marginTop: 4 }}>
-                    <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-                      <LabeledInput
-                        label="EPS (TTM)"
-                        value={mv}
-                        onChangeText={setMv}
-                        colors={colors}
-                        keyboardType="numeric"
-                        flex={1}
-                        placeholder={defaults?.eps != null ? defaults.eps.toFixed(3) : "0.000"}
-                        helperText="Editable TTM EPS. Auto-filled from retrieved income statements (latest 4 quarters), with fallback to valuation defaults."
-                      />
-                      <LabeledInput
-                        label="PEER P/E"
-                        value={pm}
-                        onChangeText={setPm}
-                        colors={colors}
-                        keyboardType="numeric"
-                        flex={1}
-                        placeholder={sectorAvgPE != null ? sectorAvgPE.toFixed(2) : "0.00"}
-                        helperText="Editable peer multiple. Auto-seeded from sector average P/E when peers are available."
-                      />
-                    </View>
-
                     <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
                         <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 4 }}>COMPANY EPS</Text>
                         <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
-                          {hasValidEps ? fmt(epsVal) : "—"}
+                          {epsVal != null ? fmt(epsVal) : "—"}
                         </Text>
                       </View>
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
@@ -1253,7 +1229,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                       <View style={{ flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 8, padding: 12, alignItems: "center" }}>
                         <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 4 }}>AVG P/E</Text>
                         <Text style={{ color: colors.accentPrimary, fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
-                          {hasValidPeer ? (peerMultipleVal as number).toFixed(2) : "—"}
+                          {sectorAvgPE != null ? sectorAvgPE.toFixed(2) : "—"}
                         </Text>
                       </View>
                     </View>
@@ -1264,7 +1240,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                           EPS × Avg P/E = Multiples Valuation
                         </Text>
                         <Text style={{ color: "#f59e0b", fontSize: 11, marginBottom: 6 }}>
-                          {fmt(epsVal ?? 0)} × {(peerMultipleVal ?? 0).toFixed(2)} =
+                          {fmt(epsVal ?? 0)} × {(sectorAvgPE ?? 0).toFixed(2)} =
                         </Text>
                         <Text style={{ color: "#f59e0b", fontSize: 28, fontWeight: "900", fontVariant: ["tabular-nums"] }}>
                           {fmt(multiplesValuation)}
@@ -1293,7 +1269,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                     )}
                     {multiplesValuation == null && (
                       <Text style={{ color: colors.textMuted, fontSize: 12, fontStyle: "italic", textAlign: "center", marginBottom: 8 }}>
-                        {!hasValidEps ? "EPS not available — upload statements or enter EPS manually." : "Add peer companies or enter Peer P/E manually."}
+                        {epsVal == null ? "EPS not available — compute metrics first." : "Add peer companies to calculate the average P/E."}
                       </Text>
                     )}
                   </View>
@@ -1302,21 +1278,12 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
 
               {valError && <Text style={{ color: colors.danger, fontSize: 11, marginTop: 4 }}>{valError}</Text>}
               <ActionButton label={multMut.isPending ? "Saving..." : "Save Multiples Valuation"} onPress={() => {
-                const epsVal = mv.trim() !== "" ? parseFloat(mv) : defaults?.eps;
-                const peerMultipleVal = pm.trim() !== "" ? parseFloat(pm) : sectorAvgPE;
-                if (epsVal != null && Number.isFinite(epsVal) && peerMultipleVal != null && Number.isFinite(peerMultipleVal)) {
-                  multMut.mutate({ metric_value: epsVal, peer_multiple: peerMultipleVal, multiple_type: multipleType || "P/E" });
+                const epsVal = defaults?.eps;
+                if (epsVal != null && sectorAvgPE != null) {
+                  multMut.mutate({ metric_value: epsVal, peer_multiple: sectorAvgPE, multiple_type: "P/E" });
                 }
               }}
-                colors={colors}
-                disabled={
-                  !!valError ||
-                  !(mv.trim() !== "" ? Number.isFinite(parseFloat(mv)) : defaults?.eps != null) ||
-                  !(pm.trim() !== "" ? Number.isFinite(parseFloat(pm)) : sectorAvgPE != null)
-                }
-                loading={multMut.isPending}
-                icon="save"
-              />
+                colors={colors} disabled={defaults?.eps == null || sectorAvgPE == null || !!valError} loading={multMut.isPending} icon="save" />
             </>
           )}
         </Card>

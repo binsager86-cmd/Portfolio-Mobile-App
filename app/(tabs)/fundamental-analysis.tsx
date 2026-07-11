@@ -5,10 +5,6 @@
  * Premium UI with CFA-grade financial analysis tools.
  */
 
-/* eslint-disable custom-styles/no-hardcoded-styles */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable max-lines */
-
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   View,
@@ -34,6 +30,7 @@ import {
   useStatements,
   useStockMetrics,
   useValuations,
+  useStockListSearch,
 } from "@/hooks/queries";
 import { useStockList } from "@/hooks/queries";
 
@@ -118,6 +115,14 @@ type StatementDisplaySelection = {
   ttmPeriodEndDate: string | null;
 };
 
+type ComparisonPeriod = {
+  label: string;
+  period: string;
+  fiscalYear: number;
+  fiscalQuarter: number | null;
+  items: Record<string, { amount: number; name: string; isTotal: boolean }>;
+};
+
 type StatementLineItem = FinancialStatement["line_items"][number];
 
 function normalizeQuarter(raw: unknown): number | null {
@@ -151,6 +156,36 @@ function isAnnualStatement(statement: FinancialStatement): boolean {
 
 function isQuarterlyStatement(statement: FinancialStatement): boolean {
   return !isAnnualStatement(statement);
+}
+
+function getComparisonYoYBaseValue(
+  periods: ComparisonPeriod[],
+  periodView: ComparePeriodView,
+  index: number,
+  code: string,
+): number | undefined {
+  if (index <= 0) return undefined;
+
+  if (periodView !== "quarter") {
+    return periods[index - 1].items[code]?.amount;
+  }
+
+  const current = periods[index];
+  if (current.fiscalQuarter == null) return undefined;
+
+  const match = periods.find(
+    (p) => p.fiscalYear === current.fiscalYear - 1 && p.fiscalQuarter === current.fiscalQuarter,
+  );
+  return match?.items[code]?.amount;
+}
+
+function getYoYHeaderLabel(periodView: ComparePeriodView): string {
+  return periodView === "quarter" ? "YoY % (same Q LY)" : "YoY %";
+}
+
+function calculateYoYPercent(currentValue: number | null | undefined, previousValue: number | null | undefined): number | null {
+  if (currentValue == null || previousValue == null || previousValue === 0) return null;
+  return ((currentValue - previousValue) / previousValue) * 100;
 }
 
 function sortLineItems(statement: FinancialStatement): StatementLineItem[] {
@@ -872,19 +907,33 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
   // Stock picker state (Add mode only)
   const [market, setMarket] = useState<"kuwait" | "us">("kuwait");
   const [pickerSearch, setPickerSearch] = useState("");
+  const debouncedPickerSearch = useDebouncedValue(pickerSearch, 350);
   const [selectedEntry, setSelectedEntry] = useState<StockListEntry | null>(null);
 
   // Fetch cached stock list
   const stockListQ = useStockList(market, !isEdit);
+  const serverSearchQ = useStockListSearch(market, debouncedPickerSearch, !isEdit);
 
   const filteredStocks = useMemo(() => {
     const all = stockListQ.data?.stocks ?? [];
-    if (!pickerSearch.trim()) return all.slice(0, 50); // show first 50 by default
-    const q = pickerSearch.toLowerCase();
-    return all.filter(
+    const serverResults = serverSearchQ.data?.stocks ?? [];
+
+    if (!pickerSearch.trim()) return all.slice(0, 200);
+    const q = pickerSearch.trim().toLowerCase();
+    const localFiltered = all.filter(
       (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [stockListQ.data, pickerSearch]);
+    );
+
+    const seen = new Set(localFiltered.map((s) => s.symbol.toUpperCase()));
+    const merged = [...localFiltered];
+    for (const s of serverResults) {
+      if (!seen.has(s.symbol.toUpperCase())) {
+        seen.add(s.symbol.toUpperCase());
+        merged.push(s);
+      }
+    }
+    return merged.slice(0, 200);
+  }, [stockListQ.data, serverSearchQ.data, pickerSearch]);
 
   const handlePickStock = (entry: StockListEntry) => {
     setSelectedEntry(entry);
@@ -984,7 +1033,7 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
                 </View>
 
                 {/* Results */}
-                {stockListQ.isLoading ? (
+                {stockListQ.isLoading || (pickerSearch.trim().length >= 2 && serverSearchQ.isLoading) ? (
                   <View style={{ paddingVertical: 20, alignItems: "center" }}>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>Loading stock list...</Text>
                   </View>
@@ -1031,7 +1080,9 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
                 {/* Count badge */}
                 {stockListQ.data && (
                   <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: 6, textAlign: "right" }}>
-                    {stockListQ.data.count} stocks in {market === "kuwait" ? "KSE" : "US"} list
+                    {market === "us"
+                      ? `${stockListQ.data.count} base US tickers (search adds live results)`
+                      : `${stockListQ.data.count} stocks in KSE list`}
                   </Text>
                 )}
               </View>
@@ -1156,6 +1207,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
     if (autoFetch && !fetchingOnline) {
       handleFetchOnline();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFetch]);
   const statements = data?.statements ?? [];
   const latestPreferred = data?.latest_preferred ?? null;
@@ -1539,7 +1591,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
   const comparisonStatements = comparisonSelection.rows;
   const ttmPeriodEndDate = comparisonSelection.ttmPeriodEndDate;
 
-  const periods = useMemo(() =>
+  const periods = useMemo<ComparisonPeriod[]>(() =>
     [...comparisonStatements]
       .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date))
       .map((st) => {
@@ -1556,12 +1608,18 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
         return {
         label,
         period: st.period_end_date,
+        fiscalYear: st.fiscal_year,
+        fiscalQuarter: q,
         items: Object.fromEntries(
           (st.line_items ?? []).map((li) => [li.line_item_code, { amount: li.amount, name: li.line_item_name, isTotal: li.is_total }])
         ),
       };
       }),
   [comparisonStatements, periodView, ttmPeriodEndDate]);
+
+  const handleRecalculate = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const allCodes = useMemo(() => {
     const codes: { code: string; name: string; isTotal: boolean }[] = [];
@@ -1578,7 +1636,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
     const headers = ["Line Item"];
     for (let i = 0; i < periods.length; i++) {
       headers.push(periods[i].label);
-      if (i > 0) headers.push("YoY %");
+      if (i > 0) headers.push(getYoYHeaderLabel(periodView));
     }
     const rows = allCodes.map((item) => {
       const row: (string | number | null)[] = [item.name];
@@ -1586,8 +1644,8 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
         const val = periods[i].items[item.code]?.amount;
         row.push(val != null ? val : null);
         if (i > 0) {
-          const prevVal = periods[i - 1].items[item.code]?.amount;
-          const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+          const prevVal = getComparisonYoYBaseValue(periods, periodView, i, item.code);
+          const yoy = calculateYoYPercent(val, prevVal);
           row.push(yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : null);
         }
       }
@@ -1595,7 +1653,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
     return [{ title: `${typeName} — Period Comparison`, headers, rows }];
-  }, [periods, allCodes, typeFilter]);
+  }, [periods, allCodes, typeFilter, periodView]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -1645,17 +1703,41 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       ) : (
         <ScrollView refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} tintColor={colors.accentPrimary} />}>
           <View style={{ paddingHorizontal: 12, paddingTop: 8, flexDirection: "row", justifyContent: "flex-end" }}>
-            <ExportBar
-              onExport={async (fmt) => {
-                const t = exportTables();
-                if (fmt === "xlsx") await exportExcel(t, stockSymbol, "Comparison");
-                else if (fmt === "csv") await exportCSV(t, stockSymbol, "Comparison");
-                else await exportPDF(t, stockSymbol, "Comparison");
-              }}
-              colors={colors}
-              disabled={periods.length < 2}
-            />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Pressable
+                accessibilityRole="button"
+                  accessibilityLabel="Refresh comparison"
+                onPress={handleRecalculate}
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: colors.borderColor,
+                  backgroundColor: colors.bgCard,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <FontAwesome name="refresh" size={12} color={colors.accentPrimary} />
+                  <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700" }}>Refresh</Text>
+              </Pressable>
+              <ExportBar
+                onExport={async (fmt) => {
+                  const t = exportTables();
+                  if (fmt === "xlsx") await exportExcel(t, stockSymbol, "Comparison");
+                  else if (fmt === "csv") await exportCSV(t, stockSymbol, "Comparison");
+                  else await exportPDF(t, stockSymbol, "Comparison");
+                }}
+                colors={colors}
+                disabled={periods.length < 2}
+              />
+            </View>
           </View>
+                    const yoy = calculateYoYPercent(val, prevVal);
+                                const yoy = calculateYoYPercent(val, prevVal);
           <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 80 }}>
             <View>
               {/* Header row */}
@@ -1664,7 +1746,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
                 {periods.map((p, i) => (
                   <React.Fragment key={p.period}>
                     <Text style={[st.compCellVal, { color: colors.textPrimary, fontWeight: "800" }]}>{p.label}</Text>
-                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>YoY %</Text>}
+                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>{getYoYHeaderLabel(periodView)}</Text>}
                   </React.Fragment>
                 ))}
               </View>
@@ -1686,8 +1768,8 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
                     </Text>
                     {periods.map((p, i) => {
                       const val = p.items[item.code]?.amount;
-                      const prevVal = i > 0 ? periods[i - 1].items[item.code]?.amount : undefined;
-                      const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+                      const prevVal = getComparisonYoYBaseValue(periods, periodView, i, item.code);
+                      const yoy = calculateYoYPercent(val, prevVal);
                       return (
                         <React.Fragment key={p.period}>
                           <Text style={[st.compCellVal, {
@@ -1772,7 +1854,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
     return next;
   }, [allMetrics]);
   const categories = Object.keys(grouped);
-  const historicalCategories = useMemo(() => buildFeatureHistoricalMetrics(allMetrics, statements), [allMetrics, statements]);
+  const historicalCategories = useMemo(() => buildFeatureHistoricalMetrics(allMetrics), [allMetrics]);
   const metricYearLabels = useMemo(() => {
     const years = [...new Set(allMetrics.map((m) => m.fiscal_year))].sort((a, b) => a - b);
     return buildFeatureMetricYearLabels(years, statements);
@@ -1972,7 +2054,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
 /*  VALUATIONS PANEL                                                  */
 /* ═══════════════════════════════════════════════════════════════════ */
 
-function _ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
+function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
   const [model, setModel] = useState<"graham" | "dcf" | "ddm" | "multiples">("graham");
 
@@ -2183,6 +2265,60 @@ function _ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId
       )}
     </ScrollView>
   );
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/*  HELPERS                                                           */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+function buildHistoricalMetrics(allMetrics: StockMetric[]) {
+  const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
+  for (const m of allMetrics) {
+    const cat = m.metric_type;
+    if (!catMap[cat]) catMap[cat] = { nameSet: new Set(), yearData: {} };
+    catMap[cat].nameSet.add(m.metric_name);
+    if (!catMap[cat].yearData[m.fiscal_year]) catMap[cat].yearData[m.fiscal_year] = {};
+    catMap[cat].yearData[m.fiscal_year][m.metric_name] = m.metric_value;
+  }
+  const result: Record<string, { metricNames: string[]; yearData: Record<number, Record<string, number>>; years: number[] }> = {};
+  const catOrder = ["profitability", "liquidity", "leverage", "efficiency", "valuation", "cashflow", "growth"];
+  for (const cat of catOrder) {
+    if (!catMap[cat]) continue;
+    result[cat] = { metricNames: Array.from(catMap[cat].nameSet), yearData: catMap[cat].yearData, years: Object.keys(catMap[cat].yearData).map(Number).sort() };
+  }
+  for (const cat of Object.keys(catMap)) {
+    if (result[cat]) continue;
+    result[cat] = { metricNames: Array.from(catMap[cat].nameSet), yearData: catMap[cat].yearData, years: Object.keys(catMap[cat].yearData).map(Number).sort() };
+  }
+  return result;
+}
+
+function formatNumber(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function isPerShareMetricName(name: string): boolean {
+  const lc = name.toLowerCase();
+  return lc.includes("eps")
+    || lc.includes("earnings per share")
+    || lc.includes("book value per share")
+    || lc.includes("book value/share")
+    || lc.includes("bvps");
+}
+
+function formatMetricValue(name: string, value: number): string {
+  const lc = name.toLowerCase().trim();
+  const hasRatioWord = /(^|\s)ratio(\s|$)/.test(lc);
+  const isPct = ["margin", "roe", "roa", "roic", "growth", "payout", "retention", "cagr"].some((p) => lc.includes(p))
+    || lc.includes("dupont") || lc.includes("sustainable");
+  if (isPct)
+    return (value * 100).toFixed(1) + "%";
+  if (lc.includes("days") || lc.includes("cycle")) return value.toFixed(0) + " days";
+  const isMult = ["turnover", "coverage", "multiplier"].some((p) => lc.includes(p))
+    || (hasRatioWord && !["payout", "retention"].some((p) => lc.includes(p)));
+  if (isMult) return value.toFixed(2) + "x";
+  if (isPerShareMetricName(name) || lc.includes("book value")) return value.toFixed(3);
+  return formatNumber(value);
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
