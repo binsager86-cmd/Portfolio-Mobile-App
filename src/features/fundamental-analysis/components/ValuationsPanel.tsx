@@ -562,16 +562,16 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   const waccKdSource = useMemo(() => {
     if (waccKd.trim().length > 0) return "Manual";
     if (defaults?.wacc_cost_of_debt != null) return "Backend";
-    if (statementWaccInputs.costOfDebt != null) return "Statements";
+    if (statementWaccInputs?.costOfDebt != null) return "Statements";
     return "Missing";
-  }, [defaults?.wacc_cost_of_debt, statementWaccInputs.costOfDebt, waccKd]);
+  }, [defaults?.wacc_cost_of_debt, statementWaccInputs?.costOfDebt, waccKd]);
 
   const waccTaxSource = useMemo(() => {
     if (waccTax.trim().length > 0) return "Manual";
     if (defaults?.wacc_tax_rate != null) return "Backend";
-    if (statementWaccInputs.taxRate != null) return "Statements";
+    if (statementWaccInputs?.taxRate != null) return "Statements";
     return "Missing";
-  }, [defaults?.wacc_tax_rate, statementWaccInputs.taxRate, waccTax]);
+  }, [defaults?.wacc_tax_rate, statementWaccInputs?.taxRate, waccTax]);
 
   // Collect most-recent result per model from history for the combined summary
   const latestByModel = useMemo(() => {
@@ -932,7 +932,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                           placeholder={
                             defaults.wacc_cost_of_debt != null
                               ? (defaults.wacc_cost_of_debt * 100).toFixed(2)
-                              : statementWaccInputs.costOfDebt != null
+                              : statementWaccInputs?.costOfDebt != null
                                 ? (statementWaccInputs.costOfDebt * 100).toFixed(2)
                                 : "0"
                           }
@@ -943,7 +943,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                       </View>
                     </View>
                     <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccKdSource}</Text>
-                    {(!waccKd || waccKd === "0") && defaults.wacc_cost_of_debt == null && statementWaccInputs.costOfDebt == null && (
+                    {(!waccKd || waccKd === "0") && defaults.wacc_cost_of_debt == null && statementWaccInputs?.costOfDebt == null && (
                       <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>
                         Interest expense/debt data missing - enter Cost of Debt manually to enable full WACC.
                       </Text>
@@ -963,7 +963,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                       </View>
                     </View>
                     <Text style={{ color: colors.textMuted, fontSize: 10, marginTop: -1, marginBottom: 1 }}>Source: {waccTaxSource}</Text>
-                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && statementWaccInputs.taxRate == null && (
+                    {(!waccTax || waccTax === "0") && defaults.wacc_tax_rate == null && statementWaccInputs?.taxRate == null && (
                       <Text style={{ color: "#f59e0b", fontSize: 10, fontStyle: "italic", marginTop: 2 }}>No tax data found - enter tax rate manually</Text>
                     )}
                     {defaults.wacc_weight_equity != null && <KVRow label="Equity Weight (E/V)" value={(defaults.wacc_weight_equity * 100).toFixed(2) + "%"} colors={colors} />}
