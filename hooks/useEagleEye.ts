@@ -43,6 +43,10 @@ export interface VolumeContext {
   is_volume_confirmed: boolean;
   volume_character: "ACCUMULATION" | "DISTRIBUTION" | "NEUTRAL";
   volume_trend_5d: "EXPANDING" | "CONTRACTING" | "NEUTRAL";
+  today_volume?: number | string | null;
+  avg_20d_volume?: number | string | null;
+  latest_volume?: number | string | null;
+  average_volume?: number | string | null;
 }
 
 export interface MLBandItem {
@@ -364,6 +368,56 @@ function buildScannerUrl(filters?: ScannerFilters): string {
   return `/api/v1/eagle-eye/scanner${qs ? `?${qs}` : ""}`;
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+      ? Number(value)
+      : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstFinite(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = toFiniteNumber(value);
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+function normalizeScannerStock(stock: RatedStock): RatedStock {
+  const vc = (stock.volume_context ?? {}) as VolumeContext;
+  const averageVolume = firstFinite(
+    stock.average_volume,
+    vc.avg_20d_volume,
+    vc.average_volume,
+    (vc as any).average_volume_20d,
+    (vc as any).volume_avg_20,
+  );
+  const latestVolume = firstFinite(
+    stock.latest_volume,
+    vc.today_volume,
+    vc.latest_volume,
+    (vc as any).last_volume,
+    (vc as any).volume,
+  );
+
+  return {
+    ...stock,
+    confidence: toFiniteNumber(stock.confidence) ?? 0,
+    average_volume: averageVolume,
+    latest_volume: latestVolume,
+    last_price: toFiniteNumber(stock.last_price),
+    entry_primary: toFiniteNumber(stock.entry_primary),
+    stop_loss: toFiniteNumber(stock.stop_loss),
+    tp1: toFiniteNumber(stock.tp1),
+    book_value_per_share: toFiniteNumber(stock.book_value_per_share),
+    pe_ratio: toFiniteNumber(stock.pe_ratio),
+  };
+}
+
 function formatIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
@@ -623,7 +677,11 @@ export function useEagleEyeScanner(_filters?: ScannerFilters, enabled = true) {
     queryKey: eagleEyeKeys.scanner(serverFilters),
     queryFn: async () => {
       const { data } = await api.get<ScannerResponse>(buildScannerUrl(serverFilters));
-      return data;
+      if (!Array.isArray(data.stocks)) return data;
+      return {
+        ...data,
+        stocks: data.stocks.map(normalizeScannerStock),
+      };
     },
     staleTime: 10 * 60_000,   // 10 min — data changes only on nightly recompute
     gcTime: 30 * 60_000,
