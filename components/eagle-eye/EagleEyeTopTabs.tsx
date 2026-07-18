@@ -6,12 +6,13 @@ import React, { useRef } from "react";
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type EagleEyeTab = {
-  key: "scanner" | "simulator" | "methodology" | "settings";
+  key: "scanner" | "simulator" | "v2-preview" | "methodology" | "settings";
   label: string;
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   href:
     | "/(tabs)/eagle-eye"
     | "/(tabs)/eagle-eye/simulator"
+    | "/(tabs)/eagle-eye/v2-preview"
     | "/(tabs)/eagle-eye/methodology"
     | "/(tabs)/eagle-eye/settings";
   matches: string[];
@@ -31,6 +32,13 @@ const EAGLE_EYE_TABS: readonly EagleEyeTab[] = [
     icon: "play-circle",
     href: "/(tabs)/eagle-eye/simulator",
     matches: ["/eagle-eye/simulator"],
+  },
+  {
+    key: "v2-preview",
+    label: "V2 Preview",
+    icon: "flask",
+    href: "/(tabs)/eagle-eye/v2-preview",
+    matches: ["/eagle-eye/v2-preview"],
   },
   {
     key: "methodology",
