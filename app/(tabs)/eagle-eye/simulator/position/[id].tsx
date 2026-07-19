@@ -34,13 +34,11 @@ type TaggedPosition = SimPosition & { strategyName: string };
 
 const PORTFOLIO_META: Record<number, {
   name: string;
-  minConfidence: number;
   color: string;
-  allowedStages: readonly string[];
+  entryTransition: string;
 }> = {
-  1: { name: "Conservative", minConfidence: 65, color: "#22c55e", allowedStages: ["EARLY_BREAKOUT", "MARKUP_TRENDING"] },
-  2: { name: "Moderate",     minConfidence: 60, color: "#f59e0b", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING"] },
-  3: { name: "Aggressive",   minConfidence: 55, color: "#ef4444", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING", "CAPITULATION_EXHAUSTION"] },
+  1: { name: "BUY", color: "#16a34a", entryTransition: "Transition -> BUY" },
+  2: { name: "WATCHLIST", color: "#0ea5e9", entryTransition: "Transition -> WATCH" },
 };
 
 // ── Info row ─────────────────────────────────────────────────────────────────
@@ -192,14 +190,12 @@ export default function SimulatorPositionDetailScreen() {
   // We query all trades and find the right one by id.
   // In a larger system we'd have a dedicated GET /simulator/positions/:id endpoint.
   // For now we search through the trades pages — position ids are small enough.
-  const { data: conservativeTrades } = useSimulatorTrades("CONSERVATIVE", 1);
-  const { data: moderateTrades } = useSimulatorTrades("MODERATE", 1);
-  const { data: aggressiveTrades } = useSimulatorTrades("AGGRESSIVE", 1);
+  const { data: buyTrades } = useSimulatorTrades("BUY", 1);
+  const { data: watchTrades } = useSimulatorTrades("WATCHLIST", 1);
 
   const taggedTrades: TaggedPosition[] = [
-    ...(conservativeTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Conservative" })),
-    ...(moderateTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Moderate" })),
-    ...(aggressiveTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Aggressive" })),
+    ...(buyTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "BUY" })),
+    ...(watchTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "WATCHLIST" })),
   ];
 
   const pos = taggedTrades.find((t) => t.id === positionId);
@@ -221,7 +217,7 @@ export default function SimulatorPositionDetailScreen() {
   const pnlColor = pnl >= 0 ? colors.success : colors.danger;
   const accentColor = isOpen ? colors.accentPrimary : pnlColor;
 
-  const meta = PORTFOLIO_META[pos.portfolio_id] ?? { name: "Unknown", minConfidence: 0, color: colors.accentPrimary, allowedStages: [] };
+  const meta = PORTFOLIO_META[pos.portfolio_id] ?? { name: "Unknown", color: colors.accentPrimary, entryTransition: "n/a" };
   const crossStrategyOpen = taggedTrades.filter(
     (t) => t.ticker === pos.ticker && t.status === "OPEN" && t.id !== pos.id
   );
@@ -305,23 +301,22 @@ export default function SimulatorPositionDetailScreen() {
         </View>
 
         <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
-          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Confidence Gate</Text>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Entry Rule</Text>
           <Text style={[styles.infoValue, { color: colors.success }]}>
-            {pos.entry_confidence != null ? `${pos.entry_confidence.toFixed(1)}%` : "—"}{" "}
-            {"\u2265"} {meta.minConfidence}% min
+            {meta.entryTransition}
           </Text>
         </View>
 
         <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
-          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Stage Gate</Text>
+          <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Fill Rule</Text>
           <Text style={[styles.infoValue, { color: colors.success }]}>
-            {(pos.entry_stage ?? "—").replace(/_/g, " ")} (allowed)
+            Next session open (no same-bar fills)
           </Text>
         </View>
 
         <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>
           <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Price Source</Text>
-          <Text style={[styles.infoValue, { color: colors.textMuted }]}>Same-day close</Text>
+          <Text style={[styles.infoValue, { color: colors.textMuted }]}>Next-session open</Text>
         </View>
 
         <View style={[styles.infoRow, { borderBottomColor: colors.borderColor }]}>

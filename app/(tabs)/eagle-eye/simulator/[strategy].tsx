@@ -38,15 +38,13 @@ import Svg, {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STRATEGY_COLORS: Record<string, string> = {
-  conservative: "#22c55e",
-  moderate: "#f59e0b",
-  aggressive: "#ef4444",
+  buy: "#16a34a",
+  watchlist: "#0ea5e9",
 };
 
 const STRATEGY_LABELS: Record<string, string> = {
-  conservative: "Conservative",
-  moderate: "Moderate",
-  aggressive: "Aggressive",
+  buy: "BUY",
+  watchlist: "WATCHLIST",
 };
 
 // ── Equity curve chart ───────────────────────────────────────────────────────
@@ -225,14 +223,14 @@ export default function SimulatorStrategyScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { strategy } = useLocalSearchParams<{ strategy: string }>();
-  const stratKey = (strategy ?? "conservative").toLowerCase();
+  const stratKey = (strategy ?? "buy").toLowerCase();
   const stratUpper = stratKey.toUpperCase() as StrategyName;
   const accentColor = STRATEGY_COLORS[stratKey] ?? colors.accentPrimary;
 
   const { data, isLoading, refetch, isRefetching } = useSimulatorPortfolioDetail(stratUpper);
   const { data: perf } = useSimulatorPerformance(stratUpper);
 
-  const [tab, setTab] = useState<"open" | "closed" | "perf">("open");
+  const [tab, setTab] = useState<"open" | "history" | "perf">("open");
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
   const handlePositionPress = useCallback(
@@ -258,7 +256,7 @@ export default function SimulatorStrategyScreen() {
     );
   }
 
-  const { summary, equity_curve, open_positions, recent_closed_trades } = data;
+  const { summary, equity_curve, open_positions, transaction_history } = data;
 
   return (
     <ScrollView
@@ -280,7 +278,7 @@ export default function SimulatorStrategyScreen() {
         <Text style={[styles.backText, { color: accentColor }]}>← Simulator</Text>
       </Pressable>
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
-        {STRATEGY_LABELS[stratKey]} Strategy
+        PAPER - SIMULATION - {STRATEGY_LABELS[stratKey]} Card
       </Text>
 
       {/* KPIs */}
@@ -298,6 +296,7 @@ export default function SimulatorStrategyScreen() {
           { label: "Win Rate", value: `${summary.win_rate.toFixed(1)}%` },
           { label: "Max DD", value: `${summary.max_drawdown_pct.toFixed(1)}%`, color: colors.danger },
           { label: "Profit Factor", value: summary.profit_factor.toFixed(2) },
+          { label: "Exposure", value: `${summary.exposure_pct.toFixed(1)}%` },
           { label: "Open", value: String(summary.open_positions_count) },
         ].map((kpi) => (
           <View key={kpi.label} style={[styles.kpiCard, { backgroundColor: colors.bgCard }]}>
@@ -327,7 +326,7 @@ export default function SimulatorStrategyScreen() {
 
       {/* Tab selector */}
       <View style={[styles.tabBar, { backgroundColor: colors.bgCard }]}>
-        {(["open", "closed", "perf"] as const).map((t) => (
+        {(["open", "history", "perf"] as const).map((t) => (
           <Pressable
             key={t}
             onPress={() => setTab(t)}
@@ -339,7 +338,7 @@ export default function SimulatorStrategyScreen() {
                 { color: tab === t ? accentColor : colors.textMuted },
               ]}
             >
-              {t === "open" ? `Open (${open_positions.length})` : t === "closed" ? `Closed (${recent_closed_trades.length})` : "Performance"}
+              {t === "open" ? `Open (${open_positions.length})` : t === "history" ? `History (${transaction_history.length})` : "Performance"}
             </Text>
           </Pressable>
         ))}
@@ -364,20 +363,34 @@ export default function SimulatorStrategyScreen() {
         </View>
       )}
 
-      {tab === "closed" && (
+      {tab === "history" && (
         <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
-          {recent_closed_trades.length === 0 ? (
+          {transaction_history.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No closed trades yet
+              No transactions yet
             </Text>
           ) : (
-            recent_closed_trades.map((pos) => (
-              <PositionRow
-                key={pos.id}
-                pos={pos}
-                onPress={() => handlePositionPress(pos.id)}
-              />
-            ))
+            transaction_history.map((tx) => {
+              const pnl = Number(tx.realized_pnl_pct ?? 0);
+              const pnlColor = pnl >= 0 ? colors.success : colors.danger;
+              const exitSnapshot = (tx.exit_snapshot_json ?? {}) as Record<string, unknown>;
+              const outcome = String(tx.outcome_class ?? "SCRATCH");
+              return (
+                <View key={tx.id} style={[styles.posRow, { borderBottomColor: colors.borderColor }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.posTicker, { color: colors.textPrimary }]}>{tx.ticker}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Entry why: {String((tx.entry_snapshot_json as Record<string, unknown>)?.rating ?? "n/a")} / {String((tx.entry_snapshot_json as Record<string, unknown>)?.stage ?? "n/a")}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Exit why: {String(tx.exit_reason).replace(/_/g, " ")} / {String(exitSnapshot?.rating ?? "n/a")}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Outcome: {outcome}</Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={[styles.posPnl, { color: pnlColor }]}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}%</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>{Number(tx.holding_sessions ?? 0)} sessions</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>MFE {Number(tx.mfe_pct ?? 0).toFixed(1)}% / MAE {Number(tx.mae_pct ?? 0).toFixed(1)}%</Text>
+                  </View>
+                </View>
+              );
+            })
           )}
         </View>
       )}

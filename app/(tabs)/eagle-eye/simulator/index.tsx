@@ -2,8 +2,8 @@
 /**
  * Eagle Eye Simulator — Index Page
  *
- * Displays three strategy cards side-by-side, a comparison table,
- * and a recent activity feed across all three strategies.
+ * Displays two paper cards (BUY/WATCHLIST), a comparison table,
+ * and a recent activity feed.
  */
 
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
@@ -72,15 +72,13 @@ function Sparkline({
 // ── Strategy card ────────────────────────────────────────────────────────────
 
 const STRATEGY_COLORS: Record<StrategyName, string> = {
-  CONSERVATIVE: "#22c55e",
-  MODERATE: "#f59e0b",
-  AGGRESSIVE: "#ef4444",
+  BUY: "#16a34a",
+  WATCHLIST: "#0ea5e9",
 };
 
 const STRATEGY_LABELS: Record<StrategyName, string> = {
-  CONSERVATIVE: "Conservative",
-  MODERATE: "Moderate",
-  AGGRESSIVE: "Aggressive",
+  BUY: "BUY",
+  WATCHLIST: "WATCHLIST",
 };
 
 function StrategyCard({
@@ -102,7 +100,7 @@ function StrategyCard({
       style={[styles.card, { backgroundColor: colors.bgCard, borderColor: accentColor }]}
     >
       <Text style={[styles.strategyLabel, { color: accentColor }]}>
-        {STRATEGY_LABELS[summary.strategy_name]}
+        PAPER - SIMULATION - {STRATEGY_LABELS[summary.strategy_name]}
       </Text>
 
       <Text style={[styles.totalValue, { color: colors.textPrimary }]}>
@@ -130,6 +128,10 @@ function StrategyCard({
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
         {summary.open_positions_count} open positions
+      </Text>
+
+      <Text style={[styles.metaText, { color: colors.textMuted }]}>
+        Exposure: {summary.exposure_pct.toFixed(1)}%
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
@@ -165,6 +167,7 @@ const METRICS: Array<{ label: string; key: keyof SimPortfolioSummary; fmt: (v: n
   { label: "Avg win", key: "avg_win_pct", fmt: (v) => `+${v.toFixed(1)}%` },
   { label: "Avg loss", key: "avg_loss_pct", fmt: (v) => `-${v.toFixed(1)}%` },
   { label: "Profit factor", key: "profit_factor", fmt: (v) => v.toFixed(2) },
+  { label: "Exposure", key: "exposure_pct", fmt: (v) => `${v.toFixed(1)}%` },
   { label: "Max drawdown", key: "max_drawdown_pct", fmt: (v) => `${v.toFixed(1)}%` },
   {
     label: "Current value (KWD)",
@@ -186,12 +189,12 @@ function ComparisonTable({
   const byStrategy: Partial<Record<StrategyName, SimPortfolioSummary>> = {};
   for (const p of portfolios) byStrategy[p.strategy_name] = p;
 
-  const strategies: StrategyName[] = ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"];
+  const strategies: StrategyName[] = ["BUY", "WATCHLIST"];
 
   return (
     <View style={[styles.tableContainer, { backgroundColor: colors.bgCard }]}>
       <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-        Strategy Comparison
+        PAPER Cards Comparison
       </Text>
       {/* Header */}
       <View style={[styles.tableRow, { borderBottomColor: colors.borderColor }]}>
@@ -320,7 +323,7 @@ export default function SimulatorIndexScreen() {
   const handleResetNow = useCallback(() => {
     Alert.alert(
       "Reset Simulator?",
-      "This will clear all simulator trades and restart all three strategies from today.",
+      "This will clear all simulator trades and restart both paper cards from today.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -384,6 +387,19 @@ export default function SimulatorIndexScreen() {
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}> 
           Three parallel strategies • 10,000 KWD each • Live forward from today
         </Text>
+
+        {/* Paper Backtester navigation button */}
+        <Pressable
+          onPress={() => router.push("/(tabs)/eagle-eye/simulator/backtester")}
+          style={[styles.backtesterBtn, { borderColor: colors.accentSecondary }]}
+        >
+          <Text style={[styles.backtesterBtnText, { color: colors.accentSecondary }]}>
+            📊  Open Paper Backtester
+          </Text>
+          <Text style={[styles.backtesterBtnSub, { color: colors.textMuted }]}>
+            Forward paper simulation · Stored historical replay when available
+          </Text>
+        </Pressable>
 
         {/* Manual run button */}
         <Pressable
@@ -480,6 +496,16 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 16, gap: 16 },
   pageTitle: { fontSize: 22, fontWeight: "700", marginBottom: 2 },
   pageSubtitle: { fontSize: 13, marginBottom: 8 },
+
+  backtesterBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  backtesterBtnText: { fontSize: 14, fontWeight: "600" },
+  backtesterBtnSub: { fontSize: 11, marginTop: 3 },
 
   cardsRow: { marginHorizontal: -4, minHeight: 220 },
   cardsContent: { paddingHorizontal: 4, paddingBottom: 8, alignItems: "stretch" },

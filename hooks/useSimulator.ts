@@ -18,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type StrategyName = "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE";
+export type StrategyName = "BUY" | "WATCHLIST";
 
 export interface EquityPoint {
   date: string;
@@ -41,9 +41,36 @@ export interface SimPortfolioSummary {
   avg_win_pct: number;
   avg_loss_pct: number;
   profit_factor: number;
+  exposure_pct: number;
   max_drawdown_pct: number;
   equity_curve: EquityPoint[];
   live_since: string | null;
+}
+
+export interface SimTransaction {
+  id: number;
+  position_id: number;
+  ticker: string;
+  event_kind: "FULL_EXIT" | "PARTIAL_EXIT";
+  fraction_closed: number;
+  entry_date: string;
+  entry_price: number;
+  entry_snapshot_json: Record<string, unknown>;
+  exit_date: string;
+  exit_price: number;
+  exit_reason: string;
+  realized_pnl_pct: number;
+  holding_sessions: number;
+  mfe_pct: number;
+  mae_pct: number;
+  exit_snapshot_json: Record<string, unknown>;
+  outcome_class: "WIN" | "LOSS" | "SCRATCH";
+  persisted_fields_json: string[];
+  flipped_fields_json: string[];
+  sessions_to_flip_json: Record<string, number | null>;
+  mfe_gt_10: number;
+  mfe_gt_20: number;
+  attribution_json: Record<string, unknown>;
 }
 
 export interface SimPosition {
@@ -114,6 +141,7 @@ export interface SimPortfolioDetail {
   equity_curve: DailySnapshot[];
   open_positions: SimPosition[];
   recent_closed_trades: SimPosition[];
+  transaction_history: SimTransaction[];
   considered_not_taken_count: number;
   breakdown_by_stage: BreakdownRow[];
   breakdown_by_exit_reason: ExitReasonRow[];
