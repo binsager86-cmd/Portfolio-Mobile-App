@@ -11,9 +11,7 @@ import { StageTag } from "@/components/eagle-eye/StageTag";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import {
-  useResetSimulator,
   useSimulatorActivity,
-  useSimulatorCompare,
   useSimulatorPortfolios,
   useRunSimulatorNow,
   type SimPortfolioSummary,
@@ -22,7 +20,6 @@ import {
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
   ActivityIndicator,
   Pressable,
   RefreshControl,
@@ -32,7 +29,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Polyline, Rect } from "react-native-svg";
+import Svg, { Polyline } from "react-native-svg";
 
 // ── Sparkline ────────────────────────────────────────────────────────────────
 
@@ -81,6 +78,8 @@ const STRATEGY_LABELS: Record<StrategyName, string> = {
   WATCHLIST: "WATCHLIST",
 };
 
+const STRATEGY_ORDER: StrategyName[] = ["BUY", "WATCHLIST"];
+
 function StrategyCard({
   summary,
   onPress,
@@ -100,8 +99,10 @@ function StrategyCard({
       style={[styles.card, { backgroundColor: colors.bgCard, borderColor: accentColor }]}
     >
       <Text style={[styles.strategyLabel, { color: accentColor }]}>
-        PAPER - SIMULATION - {STRATEGY_LABELS[summary.strategy_name]}
+        PAPER — SIMULATION — {STRATEGY_LABELS[summary.strategy_name]}
       </Text>
+
+      <Text style={[styles.metaText, { color: colors.textMuted }]}>Initial capital: {summary.starting_capital_kwd.toLocaleString("en-KW", { maximumFractionDigits: 0 })} KWD</Text>
 
       <Text style={[styles.totalValue, { color: colors.textPrimary }]}>
         {summary.total_value_kwd.toLocaleString("en-KW", {
@@ -121,9 +122,11 @@ function StrategyCard({
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-        {summary.total_trades === 0
-          ? "Waiting for signal (\u226565% confidence)"
-          : `${summary.wins}W / ${summary.losses}L = ${((summary.wins / summary.total_trades) * 100).toFixed(1)}%`}
+        Entry: R11 rating transition to {STRATEGY_LABELS[summary.strategy_name]}
+      </Text>
+
+      <Text style={[styles.metaText, { color: colors.textMuted }]}>
+        Exit: Sell/Topping full; Reduce half; Avoid full
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
@@ -147,7 +150,7 @@ function StrategyCard({
 
       <View style={styles.sparklineContainer}>
         <Sparkline
-          data={sparkData.length > 0 ? sparkData : [10000]}
+          data={sparkData.length > 0 ? sparkData : [100000]}
           color={accentColor}
         />
       </View>
@@ -189,7 +192,7 @@ function ComparisonTable({
   const byStrategy: Partial<Record<StrategyName, SimPortfolioSummary>> = {};
   for (const p of portfolios) byStrategy[p.strategy_name] = p;
 
-  const strategies: StrategyName[] = ["BUY", "WATCHLIST"];
+  const strategies = STRATEGY_ORDER;
 
   return (
     <View style={[styles.tableContainer, { backgroundColor: colors.bgCard }]}>
@@ -207,7 +210,7 @@ function ComparisonTable({
               { color: STRATEGY_COLORS[s] },
             ]}
           >
-            {STRATEGY_LABELS[s].slice(0, 4)}
+            {STRATEGY_LABELS[s]}
           </Text>
         ))}
       </View>
@@ -302,9 +305,7 @@ export default function SimulatorIndexScreen() {
 
   const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios();
   const runNow = useRunSimulatorNow();
-  const resetNow = useResetSimulator();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
-  const [resetStatus, setResetStatus] = useState<"idle" | "ok" | "err">("idle");
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
 
@@ -320,36 +321,13 @@ export default function SimulatorIndexScreen() {
     }
   }, [runNow]);
 
-  const handleResetNow = useCallback(() => {
-    Alert.alert(
-      "Reset Simulator?",
-      "This will clear all simulator trades and restart both paper cards from today.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setResetStatus("idle");
-              try {
-                await resetNow.mutateAsync({ runAfterReset: false });
-                setResetStatus("ok");
-                setTimeout(() => setResetStatus("idle"), 4000);
-              } catch {
-                setResetStatus("err");
-                setTimeout(() => setResetStatus("idle"), 4000);
-              }
-            })();
-          },
-        },
-      ]
-    );
-  }, [resetNow]);
-
   const handleCardPress = useCallback((strategy: string) => {
     router.push(`/eagle-eye/simulator/${strategy.toLowerCase()}`);
   }, []);
+
+  const visiblePortfolios = STRATEGY_ORDER
+    .map((strategy) => portfolios?.find((p) => p.strategy_name === strategy))
+    .filter((p): p is SimPortfolioSummary => Boolean(p));
 
   if (isLoading) {
     return (
@@ -385,7 +363,7 @@ export default function SimulatorIndexScreen() {
           Paper Trading Simulator
         </Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}> 
-          Three parallel strategies • 10,000 KWD each • Live forward from today
+          BUY and WATCHLIST paper cards • 100,000 KWD each • R11 rating-transition entries
         </Text>
 
         {/* Paper Backtester navigation button */}
@@ -431,36 +409,6 @@ export default function SimulatorIndexScreen() {
           )}
         </Pressable>
 
-        {/* Reset button */}
-        <Pressable
-          onPress={handleResetNow}
-          disabled={resetNow.isPending || runNow.isPending}
-          style={[
-            styles.resetBtn,
-            {
-              borderColor:
-                resetStatus === "ok"
-                  ? colors.success
-                  : resetStatus === "err"
-                  ? colors.danger
-                  : colors.borderColor,
-              opacity: resetNow.isPending ? 0.6 : 1,
-            },
-          ]}
-        >
-          {resetNow.isPending ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} />
-          ) : (
-            <Text style={[styles.resetBtnText, { color: colors.textPrimary }]}> 
-              {resetStatus === "ok"
-                ? "✓ Simulator reset"
-                : resetStatus === "err"
-                ? "✗ Reset failed"
-                : "Reset Simulator Data"}
-            </Text>
-          )}
-        </Pressable>
-
         {/* Strategy cards */}
         <ScrollView
           horizontal
@@ -468,7 +416,7 @@ export default function SimulatorIndexScreen() {
           style={styles.cardsRow}
           contentContainerStyle={styles.cardsContent}
         >
-          {(portfolios ?? []).map((p) => (
+          {visiblePortfolios.map((p) => (
             <StrategyCard
               key={p.strategy_name}
               summary={p}
@@ -478,7 +426,7 @@ export default function SimulatorIndexScreen() {
         </ScrollView>
 
         {/* Comparison table */}
-        {portfolios && <ComparisonTable portfolios={portfolios} />}
+  <ComparisonTable portfolios={visiblePortfolios} />
 
         {/* Activity feed */}
         <ActivityFeed />
@@ -564,15 +512,4 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   runBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  resetBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    minHeight: 44,
-  },
-  resetBtnText: { fontSize: 14, fontWeight: "600" },
 });

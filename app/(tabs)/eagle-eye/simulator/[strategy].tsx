@@ -3,7 +3,7 @@
  * Eagle Eye Simulator — Strategy Detail Page
  *
  * Shows equity curve, open positions, closed trades, and performance breakdowns
- * for one of the three simulator strategies.
+ * for one of the two simulator paper cards.
  *
  * Route: /eagle-eye/simulator/[strategy]
  */
@@ -46,6 +46,18 @@ const STRATEGY_LABELS: Record<string, string> = {
   buy: "BUY",
   watchlist: "WATCHLIST",
 };
+
+function formatList(value: unknown): string {
+  if (Array.isArray(value)) return value.length ? value.map(String).join(", ") : "none";
+  if (typeof value === "string") return value || "none";
+  return "none";
+}
+
+function formatRecord(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "none";
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item != null);
+  return entries.length ? entries.map(([key, item]) => `${key}: ${String(item)}`).join(", ") : "none";
+}
 
 // ── Equity curve chart ───────────────────────────────────────────────────────
 
@@ -278,8 +290,9 @@ export default function SimulatorStrategyScreen() {
         <Text style={[styles.backText, { color: accentColor }]}>← Simulator</Text>
       </Pressable>
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
-        PAPER - SIMULATION - {STRATEGY_LABELS[stratKey]} Card
+        PAPER — SIMULATION — {STRATEGY_LABELS[stratKey]} Card
       </Text>
+      <Text style={[styles.ruleText, { color: colors.textMuted }]}>Entry: next-session open after R11 rating transitions to {STRATEGY_LABELS[stratKey]}. Exit: Sell/Topping full, Reduce half, Avoid transition full.</Text>
 
       {/* KPIs */}
       <View style={[styles.kpiRow]}>
@@ -373,20 +386,27 @@ export default function SimulatorStrategyScreen() {
             transaction_history.map((tx) => {
               const pnl = Number(tx.realized_pnl_pct ?? 0);
               const pnlColor = pnl >= 0 ? colors.success : colors.danger;
+              const entrySnapshot = (tx.entry_snapshot_json ?? {}) as Record<string, unknown>;
               const exitSnapshot = (tx.exit_snapshot_json ?? {}) as Record<string, unknown>;
               const outcome = String(tx.outcome_class ?? "SCRATCH");
               return (
                 <View key={tx.id} style={[styles.posRow, { borderBottomColor: colors.borderColor }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.posTicker, { color: colors.textPrimary }]}>{tx.ticker}</Text>
-                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Entry why: {String((tx.entry_snapshot_json as Record<string, unknown>)?.rating ?? "n/a")} / {String((tx.entry_snapshot_json as Record<string, unknown>)?.stage ?? "n/a")}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Entry snapshot: {String(entrySnapshot.rating ?? "n/a")} / {String(entrySnapshot.stage ?? "n/a")}</Text>
                     <Text style={[styles.posMeta, { color: colors.textMuted }]}>Exit why: {String(tx.exit_reason).replace(/_/g, " ")} / {String(exitSnapshot?.rating ?? "n/a")}</Text>
                     <Text style={[styles.posMeta, { color: colors.textMuted }]}>Outcome: {outcome}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Persisted: {formatList(tx.persisted_fields_json)}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Flipped: {formatList(tx.flipped_fields_json)}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Sessions to flip: {formatRecord(tx.sessions_to_flip_json)}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>Attribution: {formatRecord(tx.attribution_json)}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={[styles.posPnl, { color: pnlColor }]}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}%</Text>
                     <Text style={[styles.posMeta, { color: colors.textMuted }]}>{Number(tx.holding_sessions ?? 0)} sessions</Text>
                     <Text style={[styles.posMeta, { color: colors.textMuted }]}>MFE {Number(tx.mfe_pct ?? 0).toFixed(1)}% / MAE {Number(tx.mae_pct ?? 0).toFixed(1)}%</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>MFE&gt;10 {tx.mfe_gt_10 ? "yes" : "no"}</Text>
+                    <Text style={[styles.posMeta, { color: colors.textMuted }]}>MFE&gt;20 {tx.mfe_gt_20 ? "yes" : "no"}</Text>
                   </View>
                 </View>
               );
@@ -437,6 +457,7 @@ const styles = StyleSheet.create({
   backBtn: { marginBottom: 4 },
   backText: { fontSize: 14, fontWeight: "600" },
   pageTitle: { fontSize: 22, fontWeight: "700" },
+  ruleText: { fontSize: 12, lineHeight: 17 },
 
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   kpiCard: {
