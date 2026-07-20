@@ -124,8 +124,6 @@ export function fmtCell(
 
 // ── Cell value helpers ──────────────────────────────────────────────
 
-const DEFAULT_USD_KWD_RATE = 0.307;
-
 const KWD_MONEY_KEYS = new Set([
   "avg_cost", "total_cost", "market_price", "market_value",
   "unrealized_pnl", "realized_pnl", "current_pnl",
@@ -185,10 +183,7 @@ export function getCellValue(holding: Holding, key: string): unknown {
     }
     if (key === "market_value") return holding.market_value_kwd ?? 0;
     if (key === "unrealized_pnl") return holding.unrealized_pnl_kwd ?? 0;
-    if (key === "realized_pnl") {
-      return (holding.total_pnl_kwd ?? 0) - (holding.unrealized_pnl_kwd ?? 0)
-        - (holding.cash_dividends ?? 0) * DEFAULT_USD_KWD_RATE;
-    }
+    if (key === "realized_pnl") return holding.realized_pnl_kwd ?? 0;
   }
 
   return (holding as unknown as Record<string, unknown>)[key];

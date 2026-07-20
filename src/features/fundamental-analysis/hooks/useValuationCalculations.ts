@@ -357,6 +357,11 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     return null;
   }, [annualIncomeStatements]);
 
+  const statementWaccInputs = useMemo(() => ({
+    costOfDebt: derivedCostOfDebt?.kd ?? null,
+    taxRate: derivedEffectiveTaxRate,
+  }), [derivedCostOfDebt?.kd, derivedEffectiveTaxRate]);
+
   // ── Derived WACC (recalculated when user edits Rf/Tax/Kd) ──
   // CFA WACC: WACC = (E/V) × Ke + (D/V) × Kd × (1 − T)
   // where Ke = Rf + β × ERP (CAPM)
@@ -686,6 +691,7 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     mv, setMv: onSetMv, pm, setPm, multipleType, setMultipleType,
     useWacc, setUseWacc,
     waccRf, setWaccRf, waccTax, setWaccTax, waccKd, setWaccKd, waccComputed,
+    statementWaccInputs,
     derivedCostOfDebt,
     derivedEffectiveTaxRate,
     grahamMut, dcfMut, ddmMut, multMut,

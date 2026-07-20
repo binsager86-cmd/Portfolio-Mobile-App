@@ -25,7 +25,6 @@ import {
 } from "react-native";
 
 const PORTFOLIO_CCY: Record<string, string> = { KFH: "KWD", BBYN: "KWD", USA: "USD" };
-export const DEFAULT_USD_KWD_RATE = 0.307;
 
 export function CashBalancesSection({ cashData, depositTotals, colors, spacing, queryClient, onReconcile }: {
   cashData: Record<string, PortfolioCashBalance>;
@@ -69,7 +68,7 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
     for (const pf of cashPortfolios) {
       const item = cashData[pf];
       if (!item) continue;
-      total += item.currency === "USD" ? item.balance * DEFAULT_USD_KWD_RATE : item.balance;
+      total += item.balance_kwd ?? (item.currency === "KWD" ? item.balance : 0);
     }
     return total;
   }, [cashData]);
@@ -97,8 +96,8 @@ export function CashBalancesSection({ cashData, depositTotals, colors, spacing, 
         const item = cashData[pf];
         const balance = item?.balance ?? 0;
         const ccy = PORTFOLIO_CCY[pf] ?? "KWD";
-        const ccyDisplay = ccy === "USD" ? `USD (${DEFAULT_USD_KWD_RATE.toFixed(3)})` : ccy;
-        const balanceKwd = ccy === "USD" ? balance * DEFAULT_USD_KWD_RATE : balance;
+        const ccyDisplay = ccy === "USD" && item?.fx_rate ? `USD (${item.fx_rate.toFixed(3)})` : ccy;
+        const balanceKwd = item?.balance_kwd ?? (ccy === "KWD" ? balance : 0);
         const totalDeposited = depositTotals[pf] ?? 0;
         const isEditing = editingPf === pf;
         const isManual = item?.manual_override ?? false;

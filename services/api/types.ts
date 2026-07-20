@@ -104,6 +104,7 @@ export interface Holding {
   currency: string;
   market_value_kwd: number;
   unrealized_pnl_kwd: number;
+  realized_pnl_kwd?: number;
   total_pnl_kwd: number;
   total_cost_kwd: number;
   weight_by_cost: number;
@@ -249,7 +250,11 @@ export interface CashDepositListResponse {
 
 export interface PortfolioCashBalance {
   balance: number;
+  balance_kwd?: number;
   currency: string;
+  fx_rate?: number;
+  fx_source?: string;
+  fx_as_of?: number;
   manual_override: boolean;
   /** Reconciliation status for this portfolio's cash */
   reconciliationStatus?: 'pending' | 'reconciled' | 'skipped';
