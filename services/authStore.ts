@@ -233,7 +233,11 @@ export const useAuthStore = create<AuthState>((set) => ({
             headers: { Authorization: `Bearer ${stored}` },
           });
           if (__DEV__) console.info("[hydrate] /me response status:", resp.status);
-          if (!resp.ok) throw new Error(`Token invalid (${resp.status})`);
+          if (!resp.ok) {
+            const authError = new Error(`Token invalid (${resp.status})`);
+            (authError as any).status = resp.status;
+            throw authError;
+          }
           const json = await resp.json();
           const me = json.data ?? json;
           if (__DEV__) console.info("[hydrate] Token valid, user:", me.username);
@@ -245,8 +249,23 @@ export const useAuthStore = create<AuthState>((set) => ({
             name: me.name ?? null,
             isAdmin: me.is_admin ?? false,
             isLoading: false,
+            error: null,
+            lastAuthError: null,
           });
-        } catch (err) {
+        } catch (err: any) {
+          const status = err?.status ?? err?.response?.status;
+          if (status !== 401 && status !== 403) {
+            if (__DEV__) console.info("[hydrate] Keeping stored token after non-auth validation failure:", err);
+            set({
+              token: stored,
+              refreshToken: storedRefresh,
+              isLoading: false,
+              error: null,
+              lastAuthError: null,
+            });
+            return;
+          }
+
           if (__DEV__) console.info("[hydrate] Access token invalid, attempting refresh:", err);
 
           if (storedRefresh) {

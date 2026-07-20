@@ -99,8 +99,15 @@ def is_password_strong(password: str) -> bool:
 def ensure_password_resets_attempts_column(cur) -> None:
     """Best-effort migration for legacy password_resets rows."""
     try:
+        if is_postgres():
+            db_execute(cur, "ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0")
+            return
         db_execute(cur, "ALTER TABLE password_resets ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
     except Exception:
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
         pass
 
 # ====== SESSION MANAGEMENT ======
@@ -271,30 +278,27 @@ def login_page(cookie_manager=None):
                 else:
                     db_execute(cur, "SELECT id FROM users WHERE email=? OR username=?", (email_reset, email_reset))
                     res = cur.fetchone()
-                    conn.close()
-                    
+
                     if res:
                         otp_code = f"{secrets.randbelow(900000) + 100000:06d}"
                         exp_time = now + 900
                         if not send_otp_email(email_reset, otp_code):
+                            conn.close()
                             st.error("Password reset email could not be sent. Please contact support.")
                             return
-                        
-                        conn = get_conn()
-                        cur = conn.cursor()
-                        ensure_password_resets_attempts_column(cur)
-                        db_execute(cur, "DELETE FROM password_resets WHERE email=?", (email_reset,))
+                        db_execute(cur, "UPDATE password_resets SET expires_at=? WHERE email=? AND expires_at > ?", (now, email_reset, now))
                         db_execute(cur, "INSERT INTO password_resets (email, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
                                    (email_reset, otp_code, exp_time, now))
-                        conn.commit()
-                        conn.close()
-                        
-                        st.success("If the account exists, a reset code has been sent.")
-                        st.session_state.reset_email = email_reset
-                        st.session_state.auth_mode = "verify_otp"
-                        st.rerun()
                     else:
-                        st.success("If the account exists, a reset code has been sent.")
+                        db_execute(cur, "INSERT INTO password_resets (email, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                                   (email_reset, "", now, now))
+
+                    conn.commit()
+                    conn.close()
+                    st.success("If the account exists, a reset code has been sent.")
+                    st.session_state.reset_email = email_reset
+                    st.session_state.auth_mode = "verify_otp"
+                    st.rerun()
     
     # =============================
     # VERIFY OTP MODE
@@ -329,14 +333,14 @@ def login_page(cookie_manager=None):
                     row = cur.fetchone()
                     
                     if row and int(row[1] or 0) >= MAX_OTP_VERIFY_ATTEMPTS:
-                        db_execute(cur, "DELETE FROM password_resets WHERE email=?", (target_email,))
+                        db_execute(cur, "UPDATE password_resets SET expires_at=? WHERE email=?", (now, target_email))
                         conn.commit()
                         conn.close()
                         st.error("Too many invalid attempts. Please request a new code.")
                     elif row and row[0] == otp_input:
                         new_hash = hash_password(new_pass_1)
                         db_execute(cur, "UPDATE users SET password_hash=? WHERE email=? OR username=?", (new_hash, target_email, target_email))
-                        db_execute(cur, "DELETE FROM password_resets WHERE email=?", (target_email,))
+                        db_execute(cur, "UPDATE password_resets SET expires_at=? WHERE email=?", (now, target_email))
                         conn.commit()
                         conn.close()
                         st.session_state.auth_mode = "login"

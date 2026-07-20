@@ -120,4 +120,23 @@ describe("authStore hydration", () => {
     expect(mockRemoveToken).toHaveBeenCalledTimes(1);
     expect(mockRemoveRefreshToken).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps stored tokens when hydration cannot reach the backend", async () => {
+    mockGetToken.mockResolvedValue("stored-access-token");
+    mockGetRefreshToken.mockResolvedValue("stored-refresh-token");
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("Network Error"));
+
+    await useAuthStore.getState().hydrate();
+
+    expect(useAuthStore.getState()).toEqual(
+      expect.objectContaining({
+        token: "stored-access-token",
+        refreshToken: "stored-refresh-token",
+        isLoading: false,
+        error: null,
+      }),
+    );
+    expect(mockRemoveToken).not.toHaveBeenCalled();
+    expect(mockRemoveRefreshToken).not.toHaveBeenCalled();
+  });
 });
