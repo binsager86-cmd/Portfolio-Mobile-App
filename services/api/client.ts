@@ -18,13 +18,14 @@ import axios, {
 
 import { API_BASE_URL, API_TIMEOUT } from "@/constants/Config";
 import {
+  isDefinitiveRefreshRejection,
+  refreshSession,
+} from "@/services/authRefresh";
+import {
     clearTokens,
     getStoredAccessToken,
-    getTokens,
-    setTokens,
 } from "@/services/tokenStorage";
 import { useAuthStore } from "@/services/authStore";
-import type { RefreshResponse } from "./types";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -159,41 +160,29 @@ client.interceptors.response.use(
     setRefreshState(true, refreshAttempts + 1);
 
     try {
-      const { refresh } = await getTokens();
-      if (!refresh) throw new Error("No refresh token available.");
-
-      const { data } = await axios.post<RefreshResponse>(
-        `${API_BASE_URL}/api/v1/auth/refresh`,
-        { refresh_token: refresh },
-        { headers: { "Content-Type": "application/json" } },
-      );
-
-      // Persist new tokens
-      await setTokens(
-        data.access_token,
-        data.refresh_token ?? refresh,
-        data.expires_in,
-      );
+      const tokens = await refreshSession();
 
       // Update store state (without triggering full re-login)
       useAuthStore.setState({
-        token: data.access_token,
-        refreshToken: data.refresh_token ?? refresh,
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
       });
 
-      processQueue(null, data.access_token);
+      processQueue(null, tokens.accessToken);
       if (original.headers) {
-        original.headers.Authorization = `Bearer ${data.access_token}`;
+        original.headers.Authorization = `Bearer ${tokens.accessToken}`;
       }
       setRefreshState(false, 0);
       refreshInFlight = false;
       return client(original);
     } catch (refreshError) {
       processQueue(refreshError as Error, null);
-      await clearTokens();
       setRefreshState(false, 0);
       refreshInFlight = false;
-      await useAuthStore.getState().logout();
+      if (isDefinitiveRefreshRejection(refreshError)) {
+        await clearTokens();
+        await useAuthStore.getState().logout();
+      }
       return Promise.reject(refreshError);
     }
   },

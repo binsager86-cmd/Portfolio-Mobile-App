@@ -9,6 +9,7 @@
  */
 
 import { API_BASE_URL } from "@/constants/Config";
+import { refreshSession } from "@/services/authRefresh";
 import type { LoginResponse } from "@/services/api/types";
 import {
     logAuthError,
@@ -144,27 +145,17 @@ async function refreshAndValidate(
   set: (partial: Partial<AuthState>) => void,
   logTag: string,
 ): Promise<void> {
-  const refreshResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: storedRefresh }),
-  });
-  if (!refreshResp.ok) throw new Error(`Refresh failed (${refreshResp.status})`);
-  const refreshJson = await refreshResp.json();
-  const newAccess: string = refreshJson.access_token;
-  const newRefresh: string | undefined = refreshJson.refresh_token;
-  await setToken(newAccess);
-  if (newRefresh) await setRefreshToken(newRefresh);
+  const tokens = await refreshSession();
   const meResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${newAccess}` },
+    headers: { Authorization: `Bearer ${tokens.accessToken}` },
   });
   if (!meResp.ok) throw new Error(`New token invalid (${meResp.status})`);
   const meJson = await meResp.json();
   const me = meJson.data ?? meJson;
   if (__DEV__) console.info(`[hydrate] Refresh succeeded${logTag}, user:`, me.username);
   set({
-    token: newAccess,
-    refreshToken: newRefresh ?? storedRefresh,
+    token: tokens.accessToken,
+    refreshToken: tokens.refreshToken ?? storedRefresh,
     userId: me.user_id,
     username: me.username,
     name: me.name ?? null,
@@ -357,7 +348,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (__DEV__) console.info("[AuthStore] ✅ Session persisted, user is now authenticated");
       return true;
     } catch (err: unknown) {
-      if (__DEV__) console.error("[AuthStore] ❌ googleSignIn error:", err);
+      if (__DEV__) console.warn("[AuthStore] ⚠ googleSignIn error:", err);
       const mapped = mapAuthError(err, "google");
       logAuthError(mapped, "googleSignIn");
       set({ isLoading: false, error: mapped.message, lastAuthError: mapped });

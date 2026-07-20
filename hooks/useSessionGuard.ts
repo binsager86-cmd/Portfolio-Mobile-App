@@ -18,15 +18,16 @@ import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform } from "react-native";
 
 import { API_BASE_URL } from "@/constants/Config";
+import {
+  isDefinitiveRefreshRejection,
+  refreshSession,
+} from "@/services/authRefresh";
 import { useAuthStore } from "@/services/authStore";
 import {
-    getRefreshToken,
     getToken,
     isTokenExpired,
     removeRefreshToken,
     removeToken,
-    setRefreshToken,
-    setToken,
 } from "@/services/tokenStorage";
 
 /** How often to ping the backend while the user is logged in (ms). */
@@ -42,23 +43,13 @@ async function validateSession(): Promise<boolean> {
   // ── 1. Client-side expiry check (no network needed) ────────────
   if (isTokenExpired(token, 0)) {
     // Token is expired — try refresh
-    const refreshTok = await getRefreshToken();
-    if (!refreshTok) return false;
-
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshTok }),
-      });
-      if (!resp.ok) return false;
-      const data = await resp.json();
-      await setToken(data.access_token);
-      if (data.refresh_token) await setRefreshToken(data.refresh_token);
+      const tokens = await refreshSession();
+      useAuthStore.setState({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
       return true;
-    } catch {
+    } catch (error) {
       // Network error during refresh — can't confirm session
-      return false;
+      return !isDefinitiveRefreshRejection(error);
     }
   }
 
@@ -71,24 +62,12 @@ async function validateSession(): Promise<boolean> {
 
     // 401 — token rejected by server, try refresh
     if (resp.status === 401) {
-      const refreshTok = await getRefreshToken();
-      if (!refreshTok) return false;
       try {
-        const refreshResp = await fetch(
-          `${API_BASE_URL}/api/v1/auth/refresh`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refresh_token: refreshTok }),
-          },
-        );
-        if (!refreshResp.ok) return false;
-        const data = await refreshResp.json();
-        await setToken(data.access_token);
-        if (data.refresh_token) await setRefreshToken(data.refresh_token);
+        const tokens = await refreshSession();
+        useAuthStore.setState({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
         return true;
-      } catch {
-        return false;
+      } catch (error) {
+        return !isDefinitiveRefreshRejection(error);
       }
     }
 
