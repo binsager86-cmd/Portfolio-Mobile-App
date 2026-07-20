@@ -234,7 +234,6 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
   // ── Form state ──────────────────────────────────────────────────
   const [eps, setEps] = useState("");
   const [grahamGrowth, setGrahamGrowth] = useState("");
-  const [corpYield, setCorpYield] = useState("4");
   const [marginOfSafety, setMarginOfSafety] = useState("25");
   const [currentPrice, setCurrentPrice] = useState("");
   // Per-model MoS (editable in result cards, persisted in state)
@@ -459,8 +458,6 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
     if (effectiveEps != null) setEps(effectiveEps.toFixed(3));
     // Graham-specific defaults
     if (d.graham_growth_cagr != null) setGrahamGrowth(String(d.graham_growth_cagr));
-    // Product requirement: default bond yield should start at 4.
-    setCorpYield("4");
     if (d.current_price != null && !currentPriceEdited.current) {
       setCurrentPrice(normalizePriceTo3Dp(d.current_price));
     }
@@ -569,7 +566,6 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
       return runGrahamValuation(stockId, {
         eps: parseFloat(eps),
         growth_rate: parseFloat(grahamGrowth) || 0,
-        corporate_yield: parseFloat(corpYield) || 4,
         margin_of_safety: parseFloat(marginOfSafety) || 25,
         current_price: !isNaN(cp) && cp > 0 ? cp : null,
       });
@@ -682,7 +678,7 @@ export function useValuationCalculations(stockId: number, stockSymbol?: string) 
   return {
     model, setModel,
     eps, setEps: onSetEps, currentPrice, setCurrentPrice: onSetCurrentPrice,
-    grahamGrowth, setGrahamGrowth, corpYield, setCorpYield, marginOfSafety, setMarginOfSafety,
+    grahamGrowth, setGrahamGrowth, marginOfSafety, setMarginOfSafety,
     fcf, setFcf,
     g1, setG1, g2, setG2, dr, setDr, tg, setTg,
     s1, setS1, s2, setS2,

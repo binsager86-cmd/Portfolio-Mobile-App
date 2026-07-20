@@ -93,7 +93,7 @@ export const INITIAL_STEPS: ProcessingStep[] = [
 
 // ── Valuation model info ──────────────────────────────────────────
 export const MODEL_INFO: Record<string, { title: string; formula: string; icon: IconName }> = {
-  graham:    { title: "Graham Growth",        formula: "IV = EPS × (8.5 + 2g) × 4.4 / Y",  icon: "university" },
+  graham:    { title: "Graham Growth",        formula: "IV = EPS × (8.5 + 2g)",          icon: "university" },
   dcf:       { title: "Two-Stage DCF",        formula: "Gordon Growth Terminal Value", icon: "sitemap" },
   ddm:       { title: "Dividend Discount",    formula: "Gordon Growth Model",          icon: "money" },
   multiples: { title: "Comparable Multiples", formula: "e.g., P/E × EPS",             icon: "balance-scale" },

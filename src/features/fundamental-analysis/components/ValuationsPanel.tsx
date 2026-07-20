@@ -52,7 +52,7 @@ const _LABELS: Record<string, string> = {
   stage1_years: "Stage 1 Years", stage2_years: "Stage 2 Years",
   shares_outstanding: "Shares", growth_rate: "Growth Rate",
   required_return: "Required Return", last_dividend: "Last Dividend",
-  corporate_yield: "Corp Bond Yield", margin_of_safety: "Margin of Safety",
+  margin_of_safety: "Margin of Safety",
   current_price: "Current Price", metric_value: "Metric Value",
   peer_multiple: "Peer Multiple", multiple_type: "Multiple Type",
 };
@@ -120,10 +120,7 @@ function GrahamResultCard({ r, colors, mos, onChangeMos }: { r: ValuationRunResu
     : verdict?.includes("Fair") ? colors.warning
     : verdict?.includes("Overvalued") ? colors.danger
     : colors.textMuted;
-  const ivOriginal = r.iv_original as number | undefined;
-  const ivRevised = r.iv_revised as number | undefined;
-  const peOriginal = r.implied_pe_original as number | undefined;
-  const peRevised = r.implied_pe_revised as number | undefined;
+  const impliedPe = r.parameters?.implied_pe as number | undefined;
   return (
     <Card colors={colors} style={{ marginTop: 12, borderLeftWidth: 3, borderLeftColor: colors.success }}>
       <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: "800", marginBottom: 8 }}>
@@ -133,31 +130,17 @@ function GrahamResultCard({ r, colors, mos, onChangeMos }: { r: ValuationRunResu
       {/* Parameters used */}
       <KVRow label="EPS (TTM)" value={fmt(r.parameters?.eps)} colors={colors} />
       <KVRow label="Growth Rate (g)" value={`${fmt(r.parameters?.growth_rate, 1)}%`} colors={colors} />
-      <KVRow label="AAA Yield (Y)" value={`${fmt(r.parameters?.aaa_yield, 2)}%`} colors={colors} />
 
       <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
 
-      {/* Original formula */}
-      {peOriginal != null && (
-        <KVRow label="P/E Original (8.5 + 2g)" value={fmt(peOriginal, 1)} colors={colors} />
-      )}
-      {ivOriginal != null && (
-        <KVRow label="IV Original" value={fmt(ivOriginal, 4)} colors={colors} bold />
-      )}
-
-      {/* Revised formula */}
-      {peRevised != null && (
-        <KVRow label="P/E Revised (7 + 1g)" value={fmt(peRevised, 1)} colors={colors} />
-      )}
-      {ivRevised != null && (
-        <KVRow label="IV Revised" value={fmt(ivRevised, 4)} colors={colors} bold />
+      {impliedPe != null && (
+        <KVRow label="Implied P/E (8.5 + 2g)" value={fmt(impliedPe, 1)} colors={colors} />
       )}
 
       <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
 
-      {/* Intrinsic value = revised */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>Intrinsic Value (Revised)</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>Intrinsic Value</Text>
         <Text style={{ color: colors.success, fontSize: 22, fontWeight: "900", fontVariant: ["tabular-nums"] }}>
           {fmt(r.intrinsic_value)}
         </Text>
@@ -439,7 +422,7 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   const {
     model, setModel,
     eps, setEps, currentPrice, setCurrentPrice,
-    grahamGrowth, setGrahamGrowth, corpYield, setCorpYield, marginOfSafety, setMarginOfSafety,
+    grahamGrowth, setGrahamGrowth, marginOfSafety, setMarginOfSafety,
     mosGraham, setMosGraham, mosDcf, setMosDcf, mosDdm, setMosDdm, mosMult, setMosMult,
     fcf, setFcf,
     g1, setG1, g2, setG2, dr, setDr, tg, setTg,
@@ -787,12 +770,8 @@ export function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
                   helperText="Expected annual EPS growth rate (%). Auto-filled as the average year-over-year historical EPS growth. Graham caps this between 0–15% for conservatism. Higher g = higher intrinsic value." />
               </View>
               <View style={{ flexDirection: "row", gap: 10 }}>
-                <LabeledInput label="AAA BOND YIELD (Y) %" value={corpYield} onChangeText={setCorpYield} colors={colors} keyboardType="numeric" flex={1}
-                  helperText="Current yield on AAA-rated corporate bonds (%). Graham used 4.4% as the baseline in his era. Auto-filled from 10-Year US Treasury yield (^TNX). Higher Y = lower intrinsic value (stricter discount)." />
                 <LabeledInput label="CURRENT PRICE" value={currentPrice} onChangeText={setCurrentPrice} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The stock's current market price per share. Auto-filled from live market data (Yahoo Finance). Used to determine the verdict: Undervalued, Fair Value, or Overvalued." />
-              </View>
-              <View style={{ flexDirection: "row", gap: 10 }}>
                 <LabeledInput label="MARGIN OF SAFETY %" value={marginOfSafety} onChangeText={setMarginOfSafety} colors={colors} keyboardType="numeric" flex={1}
                   helperText="The discount (%) you require below intrinsic value before buying. Graham recommended 25–35%. A 25% MoS on a $100 intrinsic value = buy price of $75. Higher MoS = more conservative." />
               </View>
