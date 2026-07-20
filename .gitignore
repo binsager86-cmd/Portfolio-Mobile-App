@@ -2,6 +2,10 @@
 
 # dependencies
 node_modules/
+.venv/
+venv/
+env/
+ENV/
 
 # Expo
 .expo/
@@ -25,6 +29,8 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+logs/
 
 # macOS
 .DS_Store
@@ -35,6 +41,20 @@ yarn-error.*
 .env.*
 .env*.local
 !.env.example
+
+# Python / local backend artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.bak
+*.backup
 
 # typescript
 *.tsbuildinfo
