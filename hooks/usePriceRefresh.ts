@@ -1,7 +1,8 @@
 /**
  * Shared price-refresh hook.
  *
- * Calls the backend `updatePrices` endpoint (yfinance) then invalidates
+ * Calls the backend `updatePrices` endpoint (TickerChart first, Yahoo fallback)
+ * then invalidates
  * every query whose data depends on stock prices.  This ensures that
  * refreshing from *any* tab (Overview, Holdings, …) propagates fresh
  * prices across the entire app.
@@ -38,7 +39,8 @@ export function usePriceRefresh() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   /**
-   * 1. Hit backend to fetch latest prices from yfinance (best-effort).
+   * 1. Hit backend to fetch latest prices from TickerChart first,
+   *    with Yahoo fallback (best-effort).
    * 2. Invalidate all price-dependent query caches so every screen
    *    picks up the new data on next render / focus.
    */
