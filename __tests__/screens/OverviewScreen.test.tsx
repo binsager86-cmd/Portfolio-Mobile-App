@@ -2,10 +2,11 @@
  * OverviewScreen — Integration tests.
  *
  * Covers:
- *   - Loading state (skeleton)
- *   - Successful data render (hero banner, metric cards, portfolio cards)
+ *   - Loading state (spinner + message)
+ *   - Successful data render (hero banner, metric cards, portfolio cards, FX footer)
  *   - Error state (error message + retry button)
- *   - Computed metrics (unrealized, realized, total profit)
+ *   - Pull-to-refresh triggers refetch
+ *   - Computed metrics (unrealized, realized, total profit aggregated from by_portfolio)
  */
 
 import React from "react";
@@ -15,40 +16,11 @@ import { MOCK_OVERVIEW_DATA, MOCK_USER, createTestQueryClient } from "../helpers
 
 // ── Mocks ───────────────────────────────────────────────────────────
 
-const mockRefetch = jest.fn().mockResolvedValue({});
-
-// Mock query hooks directly — the component uses hooks, not raw API calls
-const mockPortfolioOverview = {
-  data: undefined as any,
-  isLoading: false,
-  isError: false,
-  error: null as any,
-  refetch: mockRefetch,
-  isRefetching: false,
-};
-
-jest.mock("@/hooks/queries", () => ({
-  usePortfolioOverview: () => mockPortfolioOverview,
-  useHoldings: () => ({ data: null }),
-  useCashBalances: () => ({ data: null, refetch: jest.fn() }),
-  useOverviewDependentQueries: () => [
-    { data: null },
-    { data: null },
-    { data: null },
-  ],
-  useRiskMetrics: () => ({ data: null }),
-  useRfRateSetting: () => ({ data: null }),
-  useAiStatus: () => ({ data: null }),
-  useMarketSummary: () => ({ data: null }),
-  portfolioKeys: { all: ["portfolio"] },
-}));
-
-// Mock API module (for analyzePortfolio mutation + other imports)
+// Mock API module
+const mockGetOverview = jest.fn();
 jest.mock("@/services/api", () => ({
-  getOverview: jest.fn(),
-  analyzePortfolio: jest.fn(),
-  savePortfolioSnapshot: jest.fn(),
-  exportHoldingsExcel: jest.fn(),
+  getOverview: (...args: any[]) => mockGetOverview(...args),
+  getRfRate: jest.fn().mockResolvedValue(0.307),
 }));
 
 // Mock auth hook
@@ -58,22 +30,16 @@ jest.mock("@/hooks/useAuth", () => ({
     token: "test-token",
     isAuthenticated: true,
     loading: false,
+    error: null,
+    login: jest.fn(),
+    logout: jest.fn(),
   }),
 }));
 
-// Mock auth store
-jest.mock("@/services/authStore", () => ({
-  useAuthStore: Object.assign(
-    () => ({ token: "test-token", user: MOCK_USER }),
-    { getState: () => ({ token: "test-token", user: MOCK_USER }) }
-  ),
-}));
-
-// Mock theme store
+// Mock theme store — return dark theme colors
 jest.mock("@/services/themeStore", () => ({
   useThemeStore: () => ({
     mode: "dark",
-    toggle: jest.fn(),
     colors: {
       bgPrimary: "#0a0a15",
       bgSecondary: "#121220",
@@ -108,38 +74,20 @@ jest.mock("@/hooks/useResponsive", () => ({
     isTablet: false,
     isDesktop: false,
     metricCols: 2,
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
-    fonts: { xs: 10, sm: 12, md: 14, lg: 18, xl: 24, xxl: 32 },
     maxContentWidth: 375,
+    showSidebar: false,
+    showHamburger: true,
+    touchTarget: 44,
+    spacing: { pagePx: 16, sectionGap: 16, gridGap: 10, cardPadding: 14 },
+    fonts: { hero: 28, title: 18, body: 15, caption: 13, min: 14 },
   }),
 }));
 
-// Mock price refresh
-jest.mock("@/hooks/usePriceRefresh", () => ({
-  usePriceRefresh: () => ({ refresh: jest.fn().mockResolvedValue(undefined) }),
-}));
-
-// Mock user prefs store
-jest.mock("@/src/store/userPrefsStore", () => ({
-  useUserPrefsStore: (selector?: any) => {
-    const state = {
-      preferences: { expertiseLevel: "intermediate", showAdvancedMetrics: false, dividendFocus: false },
-    };
-    return selector ? selector(state) : state;
-  },
-}));
-
-// Mock safe area
-jest.mock("react-native-safe-area-context", () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-  SafeAreaProvider: ({ children }: any) => children,
-}));
-
 // Mock child components to isolate screen logic
-jest.mock("@/components/ui/OverviewSkeleton", () => ({
-  OverviewSkeleton: () => {
+jest.mock("@/components/ui/LoadingScreen", () => ({
+  LoadingScreen: ({ message }: { message?: string }) => {
     const { Text } = require("react-native");
-    return <Text testID="loading-skeleton">Loading…</Text>;
+    return <Text testID="loading-screen">{message ?? "Loading…"}</Text>;
   },
 }));
 
@@ -186,50 +134,6 @@ jest.mock("@/components/charts/PortfolioChart", () => ({
   },
 }));
 
-jest.mock("@/components/charts/SnapshotLineChart", () => ({
-  SnapshotLineChart: () => null,
-}));
-
-jest.mock("@/components/overview/HistoricalPerformance", () => ({
-  HistoricalPerformance: () => null,
-}));
-
-jest.mock("@/components/overview/AIFinancialIntelligence", () => ({
-  AIFinancialIntelligence: () => null,
-}));
-
-jest.mock("@/components/overview/PortfolioHealthCard", () => ({
-  PortfolioHealthCard: () => null,
-}));
-
-jest.mock("@/components/overview/RealizedTradesSection", () => ({
-  RealizedTradesSection: () => null,
-}));
-
-jest.mock("@/components/overview/LocalInsightsPanel", () => ({
-  LocalInsightsPanel: () => null,
-}));
-
-jest.mock("@/components/overview/StrategySelector", () => ({
-  StrategySelector: () => null,
-}));
-
-jest.mock("@/components/trading/TradeSimulatorModal", () => ({
-  TradeSimulatorModal: () => null,
-}));
-
-jest.mock("@/components/news/NewsFeed", () => ({
-  NewsFeed: () => null,
-}));
-
-jest.mock("@/components/onboarding/FirstTimeSetup", () => ({
-  FirstTimeSetup: () => null,
-}));
-
-jest.mock("@/components/ui/ErrorBoundary", () => ({
-  withErrorBoundary: (Component: any) => Component,
-}));
-
 // ── Import screen after mocks ───────────────────────────────────────
 
 import OverviewScreen from "@/app/(tabs)/index";
@@ -252,12 +156,7 @@ describe("OverviewScreen", () => {
 
   beforeEach(() => {
     queryClient = createTestQueryClient();
-    mockRefetch.mockClear();
-    // Reset to default state
-    mockPortfolioOverview.data = undefined;
-    mockPortfolioOverview.isLoading = false;
-    mockPortfolioOverview.isError = false;
-    mockPortfolioOverview.error = null;
+    mockGetOverview.mockReset();
   });
 
   afterEach(() => {
@@ -266,90 +165,233 @@ describe("OverviewScreen", () => {
 
   // ── Loading state ──
 
-  it("shows loading skeleton while data is fetching", () => {
-    mockPortfolioOverview.isLoading = true;
+  it("shows loading screen while data is fetching", () => {
+    // Never resolves — stays in loading state
+    mockGetOverview.mockReturnValue(new Promise(() => {}));
 
     renderScreen(queryClient);
-    expect(screen.getByTestId("loading-skeleton")).toBeTruthy();
+    expect(screen.getByTestId("loading-screen")).toBeTruthy();
+    expect(screen.getByText("Loading portfolio…")).toBeTruthy();
   });
 
   // ── Success state ──
 
-  it("renders content after data loads", () => {
-    mockPortfolioOverview.data = MOCK_OVERVIEW_DATA;
+  it("renders hero banner with total value after data loads", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
 
     renderScreen(queryClient);
 
-    // Should render something from the overview data
-    expect(screen.queryByTestId("loading-skeleton")).toBeNull();
-    expect(screen.queryByTestId("error-message")).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText(/Total Portfolio Value/)).toBeTruthy();
+    });
+
+    // Total value appears in multiple places (hero + metric card)
+    const matches = screen.getAllByText(/55,000/);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders per-portfolio cards", () => {
-    mockPortfolioOverview.data = MOCK_OVERVIEW_DATA;
+  it("renders Portfolio Snapshot metric cards", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
 
     renderScreen(queryClient);
 
-    expect(screen.getByTestId("portfolio-card-KFH")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-Total Value")).toBeTruthy();
+    });
+
+    expect(screen.getByTestId("metric-Total Deposits")).toBeTruthy();
+    expect(screen.getByTestId("metric-Net Gain")).toBeTruthy();
+    expect(screen.getByTestId("metric-Active Holdings")).toBeTruthy();
+    expect(screen.getByTestId("metric-Net Income")).toBeTruthy();
+  });
+
+  it("renders Profit Breakdown metric cards", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-Realized Profit")).toBeTruthy();
+    });
+
+    expect(screen.getByTestId("metric-Unrealized P/L")).toBeTruthy();
+    expect(screen.getByTestId("metric-Total Profit")).toBeTruthy();
+  });
+
+  it("renders per-portfolio cards", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("portfolio-card-KFH")).toBeTruthy();
+    });
+
     expect(screen.getByTestId("portfolio-card-BBYN")).toBeTruthy();
     expect(screen.getByTestId("portfolio-card-USA")).toBeTruthy();
   });
 
-  it("renders portfolio chart", () => {
-    mockPortfolioOverview.data = MOCK_OVERVIEW_DATA;
+  it("renders FX rate footer", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
 
     renderScreen(queryClient);
 
-    expect(screen.getByTestId("portfolio-chart")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText(/USD\/KWD Rate/)).toBeTruthy();
+    });
+
+    expect(screen.getByText(/0\.307000/)).toBeTruthy();
+  });
+
+  it("renders portfolio chart placeholder", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("portfolio-chart")).toBeTruthy();
+    });
+  });
+
+  it("displays correct active holdings count", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-Active Holdings")).toBeTruthy();
+    });
+
+    // Sum of holding_count: KFH(8) + BBYN(5) + USA(3) = 16
+    const holdingsValue = screen.getByTestId("metric-value-Active Holdings");
+    expect(holdingsValue.children[0]).toBe("16");
+  });
+
+  it("displays correct transaction count in Active Holdings subline", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-sub-Active Holdings")).toBeTruthy();
+    });
+
+    expect(screen.getByText(/42 transactions/)).toBeTruthy();
+  });
+
+  // ── Aggregated computed metrics ──
+
+  it("computes aggregated unrealized PnL from by_portfolio", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metric-Unrealized P/L")).toBeTruthy();
+    });
+
+    // Sum: KFH(2500) + BBYN(-300) + USA(800) = 3000
+    const unrealValue = screen.getByTestId("metric-value-Unrealized P/L");
+    expect(unrealValue).toBeTruthy();
   });
 
   // ── Error state ──
 
-  it("shows error screen on API failure", () => {
-    mockPortfolioOverview.isError = true;
-    mockPortfolioOverview.error = new Error("Network Error");
+  it("shows error screen on API failure", async () => {
+    mockGetOverview.mockRejectedValueOnce(new Error("Network Error"));
 
     renderScreen(queryClient);
 
-    expect(screen.getByTestId("error-message")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("error-message")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Network Error")).toBeTruthy();
+    expect(screen.getByTestId("retry-button")).toBeTruthy();
   });
 
-  it("retry button calls refetch", () => {
-    mockPortfolioOverview.isError = true;
-    mockPortfolioOverview.error = new Error("Temporary failure");
+  it("shows API error detail when available", async () => {
+    const apiError: any = new Error("Request failed");
+    apiError.response = { data: { detail: "Token expired" } };
+    mockGetOverview.mockRejectedValueOnce(apiError);
 
     renderScreen(queryClient);
 
-    const retryButton = screen.getByTestId("retry-button");
-    fireEvent.press(retryButton);
+    await waitFor(() => {
+      expect(screen.getByText("Token expired")).toBeTruthy();
+    });
+  });
 
-    expect(mockRefetch).toHaveBeenCalled();
+  it("retry button triggers refetch", async () => {
+    mockGetOverview
+      .mockRejectedValueOnce(new Error("Temporary failure"))
+      .mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    // Wait for error state
+    await waitFor(() => {
+      expect(screen.getByTestId("retry-button")).toBeTruthy();
+    });
+
+    // Press retry
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("retry-button"));
+    });
+
+    // Should now load data
+    await waitFor(() => {
+      expect(screen.getByText(/Total Portfolio Value/)).toBeTruthy();
+    });
+
+    expect(mockGetOverview).toHaveBeenCalledTimes(2);
   });
 
   // ── Edge cases ──
 
-  it("handles empty portfolio_values gracefully", () => {
-    mockPortfolioOverview.data = {
+  it("handles null/zero by_portfolio gracefully", async () => {
+    const data = {
       ...MOCK_OVERVIEW_DATA,
       by_portfolio: {},
       portfolio_values: {},
     };
+    mockGetOverview.mockResolvedValueOnce(data);
 
     renderScreen(queryClient);
 
+    await waitFor(() => {
+      expect(screen.getByText(/Total Portfolio Value/)).toBeTruthy();
+    });
+
+    // Should not crash — no portfolio cards rendered
     expect(screen.queryByTestId("portfolio-card-KFH")).toBeNull();
   });
 
-  it("handles zero values without crashing", () => {
-    mockPortfolioOverview.data = {
+  it("handles missing optional fields with dash fallback", async () => {
+    const data = {
       ...MOCK_OVERVIEW_DATA,
       total_value: 0,
       total_gain: 0,
       roi_percent: 0,
     };
+    mockGetOverview.mockResolvedValueOnce(data);
 
     renderScreen(queryClient);
 
-    expect(screen.queryByTestId("error-message")).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText(/Total Portfolio Value/)).toBeTruthy();
+    });
+  });
+
+  // ── Query key includes user id ──
+
+  it("calls getOverview on mount", async () => {
+    mockGetOverview.mockResolvedValueOnce(MOCK_OVERVIEW_DATA);
+
+    renderScreen(queryClient);
+
+    await waitFor(() => {
+      expect(mockGetOverview).toHaveBeenCalledTimes(1);
+    });
   });
 });

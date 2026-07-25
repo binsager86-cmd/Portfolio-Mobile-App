@@ -12,7 +12,6 @@
 
 import React from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react-native";
-import { Platform } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTestQueryClient } from "../helpers";
 
@@ -32,7 +31,7 @@ jest.mock("expo-router", () => ({
     replace: jest.fn(),
     back: mockRouterBack,
   }),
-  useLocalSearchParams: jest.fn(() => ({})),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock("@/services/themeStore", () => ({
@@ -142,15 +141,6 @@ function renderForm(qc?: QueryClient) {
   );
 }
 
-/** Navigate from Step 1 to Step 2 by pressing "Next". */
-async function goToStep2(qc?: QueryClient) {
-  const result = renderForm(qc);
-  await act(async () => {
-    fireEvent.press(screen.getByText("Next"));
-  });
-  return result;
-}
-
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("AddTransactionScreen", () => {
@@ -160,8 +150,6 @@ describe("AddTransactionScreen", () => {
     queryClient = createTestQueryClient();
     mockCreateTransaction.mockReset();
     mockRouterBack.mockReset();
-    // Use web platform to avoid dynamic import("expo-haptics") crash in triggerHaptic
-    (Platform as any).OS = "web";
   });
 
   afterEach(() => {
@@ -187,40 +175,32 @@ describe("AddTransactionScreen", () => {
     expect(screen.getByTestId("form-field-Transaction Type")).toBeTruthy();
   });
 
-  it("renders Stock Symbol field", async () => {
-    await goToStep2(queryClient);
-    await waitFor(() => {
-      expect(screen.getByTestId("form-field-Stock Symbol")).toBeTruthy();
-    });
-  });
-
-  it("renders Date field", async () => {
-    await goToStep2(queryClient);
-    await waitFor(() => {
-      expect(screen.getByTestId("form-field-Date")).toBeTruthy();
-    });
-  });
-
-  it("renders Shares field", async () => {
-    await goToStep2(queryClient);
-    await waitFor(() => {
-      expect(screen.getByTestId("form-field-Shares")).toBeTruthy();
-    });
-  });
-
-  it("renders Purchase Cost field by default (Buy is default)", async () => {
-    await goToStep2(queryClient);
-    await waitFor(() => {
-      expect(screen.getByTestId("form-field-Purchase Cost")).toBeTruthy();
-    });
-  });
-
-  it("renders submit button", async () => {
+  it("renders Stock Symbol field", () => {
     renderForm(queryClient);
-    // Step 1 shows "Next" as submit button label
-    expect(screen.getByText("Next")).toBeTruthy();
-    // Title still says "Add Transaction"
-    expect(screen.getAllByText("Add Transaction").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId("form-field-Stock Symbol")).toBeTruthy();
+  });
+
+  it("renders Date field", () => {
+    renderForm(queryClient);
+    expect(screen.getByTestId("form-field-Date")).toBeTruthy();
+  });
+
+  it("renders Shares field", () => {
+    renderForm(queryClient);
+    expect(screen.getByTestId("form-field-Shares")).toBeTruthy();
+  });
+
+  it("renders Purchase Cost field by default (Buy is default)", () => {
+    renderForm(queryClient);
+    expect(screen.getByTestId("form-field-Purchase Cost")).toBeTruthy();
+  });
+
+  it("renders submit button", () => {
+    renderForm(queryClient);
+    // Both title and submit button have this text
+    const matches = screen.getAllByText("Add Transaction");
+    // title + submit button = at least 2
+    expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 
   // ── Portfolio selection ──
@@ -247,14 +227,9 @@ describe("AddTransactionScreen", () => {
   it("shows Sell Value field when switching to Sell type", async () => {
     renderForm(queryClient);
 
-    // Switch to Sell on Step 1
+    // Switch to Sell
     await act(async () => {
       fireEvent.press(screen.getByTestId("segment-option-Sell"));
-    });
-
-    // Navigate to Step 2
-    await act(async () => {
-      fireEvent.press(screen.getByText("Next"));
     });
 
     await waitFor(() => {
@@ -276,22 +251,20 @@ describe("AddTransactionScreen", () => {
 
   // ── Advanced fields ──
 
-  it("shows Advanced Fields toggle", async () => {
-    await goToStep2(queryClient);
-    await waitFor(() => {
-      expect(screen.getByText("Advanced Fields")).toBeTruthy();
-    });
+  it("shows Advanced Fields toggle", () => {
+    renderForm(queryClient);
+    expect(screen.getByText("Advanced Fields")).toBeTruthy();
   });
 
   it("does not show advanced fields by default", () => {
     renderForm(queryClient);
     expect(screen.queryByTestId("form-field-Fees")).toBeNull();
-    expect(screen.queryByTestId("form-field-Bonus Shares")).toBeNull();
+    expect(screen.getByTestId("form-field-Bonus Shares (Stock Dividend)")).toBeTruthy();
     expect(screen.queryByTestId("form-field-Broker")).toBeNull();
   });
 
   it("shows advanced fields after toggling", async () => {
-    await goToStep2(queryClient);
+    renderForm(queryClient);
 
     await act(async () => {
       fireEvent.press(screen.getByText("Advanced Fields"));
@@ -301,10 +274,10 @@ describe("AddTransactionScreen", () => {
       expect(screen.getByTestId("form-field-Fees")).toBeTruthy();
     });
 
-    expect(screen.getByTestId("form-field-Bonus Shares (Stock Dividend)")).toBeTruthy();
-    expect(screen.getByTestId("form-field-Cash Dividend")).toBeTruthy();
-    expect(screen.getByTestId("form-field-Reinvested Dividend")).toBeTruthy();
     expect(screen.getByTestId("form-field-Price Override")).toBeTruthy();
+    expect(screen.getByTestId("form-field-Planned Cum. Shares")).toBeTruthy();
+    expect(screen.getByTestId("form-field-Broker")).toBeTruthy();
+    expect(screen.getByTestId("form-field-Reference")).toBeTruthy();
     expect(screen.getByTestId("form-field-Planned Cum. Shares")).toBeTruthy();
     expect(screen.getByTestId("form-field-Broker")).toBeTruthy();
     expect(screen.getByTestId("form-field-Reference")).toBeTruthy();

@@ -1,37 +1,29 @@
 {
   "cli": {
-    "version": ">= 12.0.0",
-    "appVersionSource": "remote"
+    "version": ">= 13.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://localhost:8002",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_API_URL": "http://192.168.1.5:8002"
       }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app"
       }
     },
     "production": {
-      "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "549902495569-6kbcenrhcir2iqskj377fm561e8e6l50.apps.googleusercontent.com",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_API_URL": "https://backend-api-app-hfc2n.ondigitalocean.app"
       }
     }
   },

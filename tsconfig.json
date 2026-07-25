@@ -1,15 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "module": "ESNext",
-    "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "types": [
-      "jest",
-      "node"
-    ],
     "paths": {
       "@/*": [
         "./*"
@@ -17,9 +9,35 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "constants/**/*.ts",
+    "constants/**/*.tsx",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
+    "types/**/*.d.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "mobile-migration",
+    "frontend",
+    ".claude",
+    ".wt-*",
+    "dist",
+    "web-build",
+    "coverage",
+    "artifacts",
+    "test_yfinance_env",
+    "venv",
+    ".venv",
+    "__tests__"
   ]
 }

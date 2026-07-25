@@ -1,83 +1,48 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-    DarkTheme as NavDark,
-    DefaultTheme as NavLight,
-    ThemeProvider,
-  Stack,
-} from "expo-router";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+  DarkTheme as NavDark,
+  DefaultTheme as NavLight,
+} from "@react-navigation/native";
+import { ThemeProvider } from "@react-navigation/core";
 import { useFonts } from "expo-font";
-import * as Notifications from "expo-notifications";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { AppState, I18nManager, Platform, View } from "react-native";
-import { PaperProvider } from "react-native-paper";
 import "react-native-reanimated";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PaperProvider, MD3DarkTheme, MD3LightTheme } from "react-native-paper";
+import { QueryClientProvider } from "@tanstack/react-query";
 
-import { AppErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { NetworkBanner } from "@/components/ui/NetworkBanner";
-import { ToastProvider } from "@/components/ui/ToastProvider";
-import { useAuthCacheSync } from "@/hooks/useAuthCacheSync";
-import { useOfflineSync } from "@/hooks/useOfflineSync";
-import { useOfflineSyncEngine } from "@/hooks/useOfflineSyncEngine";
-import { usePageViewTracking } from "@/hooks/usePageViewTracking";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useSessionGuard } from "@/hooks/useSessionGuard";
-import { analytics } from "@/lib/analytics";
-import i18n from "@/lib/i18n/config";
-import { queryClient } from "@/lib/queryClient";
-import { initSentry } from "@/lib/sentry";
-import { prewarmCriticalQueries, startBackgroundPrewarm } from "@/services/preloadManager";
-import { getHoldings, getOverview, getStockList } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
-import { marketApi } from "@/services/market/marketApi";
-import { newsApi } from "@/services/news/newsApi";
-import { registerPushToken } from "@/services/notifications/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
-import { useUserPrefsStore } from "@/src/store/userPrefsStore";
-import { useAppTheme } from "@/theme";
-
-// ── Critical: set notification handler at module load time ───────────
-// Must be called synchronously before any component renders so notifications
-// delivered when the app is backgrounded / cold-started are handled correctly.
-if (Platform.OS !== "web") {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-}
+import { queryClient } from "@/lib/queryClient";
+import { getStockList } from "@/services/api";
 
 export {
-    ErrorBoundary
+  ErrorBoundary,
 } from "expo-router";
 
 export const unstable_settings = {
-  initialRouteName: "index",
+  initialRouteName: "(tabs)",
 };
 
 SplashScreen.preventAutoHideAsync();
 
 // ── Navigation themes derived from our palette ──────────────────────
 
-function buildNavTheme(theme: ReturnType<typeof useAppTheme>) {
-  const base = theme.isDark ? NavDark : NavLight;
-  if (theme.isDark) {
+const STOCK_LIST_STALE_TIME_MS = 6 * 60 * 60 * 1000;
+
+function buildNavTheme(mode: "light" | "dark") {
+  const base = mode === "dark" ? NavDark : NavLight;
+  if (mode === "dark") {
     return {
       ...base,
       colors: {
         ...base.colors,
-        background: theme.colors.background,
-        card: theme.colors.surface,
-        text: theme.colors.onSurface,
-        border: theme.colors.outline,
-        primary: theme.colors.primary,
+        background: "#0a0a15",
+        card: "#121220",
+        text: "#e6e6f0",
+        border: "rgba(255,255,255,0.08)",
+        primary: "#8a2be2",
       },
     };
   }
@@ -85,18 +50,17 @@ function buildNavTheme(theme: ReturnType<typeof useAppTheme>) {
     ...base,
     colors: {
       ...base.colors,
-      background: theme.colors.background,
-      card: theme.colors.surface,
-      text: theme.colors.onSurface,
-      border: theme.colors.outline,
-      primary: theme.colors.primary,
+      background: "#f8fafc",
+      card: "#ffffff",
+      text: "#1e293b",
+      border: "rgba(203,213,225,0.6)",
+      primary: "#6366f1",
     },
   };
 }
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     ...FontAwesome.font,
   });
@@ -119,283 +83,98 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const router = useRouter();
+  const segments = useSegments();
   const token = useAuthStore((s) => s.token);
+  const authLoading = useAuthStore((s) => s.loading);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
-  const googleSignIn = useAuthStore((s) => s.googleSignIn);
   const hydrateTheme = useThemeStore((s) => s.hydrate);
-  const hydrateUserPrefs = useUserPrefsStore((s) => s.hydrate);
-  const pullRemoteUserPrefs = useUserPrefsStore((s) => s.pullRemote);
-  const language = useUserPrefsStore((s) => s.preferences.language);
-  const theme = useAppTheme();
+  const themeMode = useThemeStore((s) => s.mode);
 
-  // ── Session guard: periodic heartbeat + focus re-validation ────
-  useSessionGuard();
-  usePushNotifications();
-
-  // Clear badge count when the user opens the app (foreground)
+  // Hydrate auth + theme from storage on first mount
   useEffect(() => {
-    if (Platform.OS === "web") return;
-    Notifications.setBadgeCountAsync(0).catch(() => {});
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        Notifications.setBadgeCountAsync(0).catch(() => {});
-      }
-    });
-    return () => sub.remove();
+    hydrateAuth();
+    hydrateTheme();
   }, []);
 
-  // ── Google Analytics: track page views on route changes (web) ──
-  usePageViewTracking();
-
-  // ── Single init effect: theme → OAuth hash check → hydration ───
-  // Must be one sequential async flow so nothing can redirect
-  // before auth state is fully resolved.
-  useEffect(() => {
-    async function init() {
-      initSentry();
-      hydrateTheme();
-      hydrateUserPrefs();
-      analytics.init();
-
-      // Check for Google OAuth redirect (web only)
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        const hash = window.location.hash;
-        if (hash && hash.includes("access_token=")) {
-          const params = new URLSearchParams(hash.substring(1));
-          const accessToken = params.get("access_token");
-          const returnedState = params.get("state");
-          // CSRF defence: only accept the token if we initiated an OAuth
-          // request in this session AND the returned state matches the
-          // value we stashed in lib/googleAuth.ts. Drop everything
-          // otherwise — protects against attacker-crafted hash injection.
-          let expectedState: string | null = null;
-          // Read from localStorage first; fall back to sessionStorage for
-          // backward compatibility with any in-flight legacy requests.
-          try { expectedState = window.localStorage.getItem("google_oauth_state"); } catch { /* storage may be disabled */ }
-          if (!expectedState) {
-            try { expectedState = window.sessionStorage.getItem("google_oauth_state"); } catch { /* storage may be disabled */ }
-          }
-          // Always clean the URL so the token isn't visible / replayable.
-          window.history.replaceState(
-            null,
-            "",
-            window.location.pathname + window.location.search,
-          );
-          try { window.localStorage.removeItem("google_oauth_state"); } catch { /* noop */ }
-          try { window.sessionStorage.removeItem("google_oauth_state"); } catch { /* noop */ }
-          if (
-            accessToken &&
-            expectedState &&
-            returnedState &&
-            expectedState === returnedState
-          ) {
-            // Retry the backend exchange up to 3 attempts total.
-            // The server may be cold-starting on DigitalOcean (spin-up adds
-            // 15-25s), causing the first attempt to hit the backend's internal
-            // Google-verification timeout and return a 401. A warm retry
-            // almost always succeeds, avoiding a needless round-trip back
-            // through the Google consent screen.
-            let ok = false;
-            for (let attempt = 0; attempt < 3 && !ok; attempt++) {
-              if (attempt > 0) {
-                // Wait before retry: 2 s after 1st failure, 4 s after 2nd.
-                await new Promise<void>((resolve) => {
-                  setTimeout(resolve, attempt * 2000);
-                });
-              }
-              ok = await googleSignIn(accessToken);
-            }
-            if (ok) {
-              return; // skip hydration — googleSignIn already set session
-            }
-            // All retries exhausted — fall through to normal hydration.
-            // The error is already stored in authStore; the login screen
-            // will surface it so the user understands what happened.
-          }
-          if (__DEV__ && accessToken) {
-            console.warn("[OAuth] Discarded callback: state mismatch or no pending request.");
-          }
-        }
-      }
-
-      // Normal path: hydrate from stored tokens (awaited so redirect
-      // effect cannot fire before hydration finishes)
-      await hydrateAuth();
-    }
-    init();
-  }, []);
-
-  // Sync i18n language + RTL direction when userPrefsStore language changes
-  useEffect(() => {
-    if (language && i18n.language !== language) {
-      i18n.changeLanguage(language);
-    }
-    const shouldBeRTL = language === "ar";
-    if (I18nManager.isRTL !== shouldBeRTL) {
-      I18nManager.allowRTL(shouldBeRTL);
-      I18nManager.forceRTL(shouldBeRTL);
-    }
-  }, [language]);
-
-
-
-  // Prefetch critical data on login so first screens render instantly
+  // Prefetch stock reference lists (static data) so dropdowns load instantly
   useEffect(() => {
     if (!token) return; // only after login
-
-    const prefetchIfStale = <T,>(opts: {
-      queryKey: readonly unknown[];
-      queryFn: () => Promise<T>;
-      staleTime: number;
-    }) => {
-      const state = queryClient.getQueryState(opts.queryKey);
-      const updatedAt = state?.dataUpdatedAt ?? 0;
-      if (updatedAt > 0 && Date.now() - updatedAt < opts.staleTime) return;
-      queryClient.prefetchQuery(opts).catch(() => {});
-    };
-
-    // Pull the user's server-side preferences so expertise level / language
-    // / feature flags follow the account across devices and re-installs.
-    void pullRemoteUserPrefs();
-
-    // Portfolio overview — the first thing the user sees
-    prefetchIfStale({
-      queryKey: ["portfolio-overview", undefined],
-      queryFn: getOverview,
-      staleTime: 30_000,
-    });
-
-    // Stock reference lists (static data) so dropdowns load instantly
-    prefetchIfStale({
+    queryClient.prefetchQuery({
       queryKey: ["stock-list", "kuwait"],
       queryFn: () => getStockList({ market: "kuwait" }),
-      staleTime: Infinity,
+      staleTime: STOCK_LIST_STALE_TIME_MS,
     });
-    prefetchIfStale({
+    queryClient.prefetchQuery({
       queryKey: ["stock-list", "us"],
       queryFn: () => getStockList({ market: "us" }),
-      staleTime: Infinity,
-    });
-
-    // Next-likely screens. Keep web startup lean to avoid refresh jank.
-    prefetchIfStale({
-      queryKey: ["holdings", undefined],
-      queryFn: () => getHoldings(),
-      staleTime: 30_000,
-    });
-
-    if (Platform.OS !== "web") {
-      prefetchIfStale({
-        queryKey: ["news", "feed", {}],
-        queryFn: () => newsApi.getFeed({ limit: 15 }),
-        staleTime: 5 * 60_000,
-      });
-      prefetchIfStale({
-        queryKey: ["market", "summary"],
-        queryFn: () => marketApi.getSummary(),
-        staleTime: 5 * 60_000,
-      });
-    }
-
-    // Register push token for real-time news notifications
-    registerPushToken().catch((err) => {
-      analytics.logEvent("push_registration_failed", {
-        message: err instanceof Error ? err.message : String(err),
-      });
+      staleTime: STOCK_LIST_STALE_TIME_MS,
     });
   }, [token]);
 
-  // Keep backend token registration fresh if Expo rotates the push token
-  // while the app is running.
+  // Redirect based on auth state — only after hydration completes
   useEffect(() => {
-    if (!token || Platform.OS === "web") return;
-    let sub: { remove: () => void } | undefined;
-    let cancelled = false;
+    if (authLoading) return;
 
-    (async () => {
-      try {
-        const Notifications = await import("expo-notifications");
-        if (cancelled) return;
-        sub = Notifications.addPushTokenListener(() => {
-          registerPushToken().catch((err) => {
-            analytics.logEvent("push_token_rollover_registration_failed", {
-              message: err instanceof Error ? err.message : String(err),
-            });
-          });
-        });
-      } catch {
-        // expo-notifications unavailable in this runtime
-      }
-    })();
+    const inAuthGroup = segments[0] === "(auth)";
 
-    return () => {
-      cancelled = true;
-      sub?.remove();
-    };
-  }, [token]);
+    if (!token && !inAuthGroup) {
+      router.replace("/(auth)/login");
+    } else if (token && inAuthGroup) {
+      router.replace("/(tabs)");
+    }
+  }, [token, authLoading, segments]);
+
+  // While hydrating, render nothing (keep splash visible)
+  if (authLoading) {
+    return null;
+  }
+
+  // Paper theme
+  const paperTheme =
+    themeMode === "dark"
+      ? {
+          ...MD3DarkTheme,
+          colors: {
+            ...MD3DarkTheme.colors,
+            primary: "#8a2be2",
+            secondary: "#4cc9f0",
+            background: "#0a0a15",
+            surface: "#1a1a2e",
+            surfaceVariant: "#121220",
+            onSurface: "#e6e6f0",
+            onSurfaceVariant: "#a0a0b0",
+            outline: "rgba(255,255,255,0.08)",
+            error: "#ff4757",
+          },
+        }
+      : {
+          ...MD3LightTheme,
+          colors: {
+            ...MD3LightTheme.colors,
+            primary: "#6366f1",
+            secondary: "#3b82f6",
+            background: "#f8fafc",
+            surface: "#ffffff",
+            surfaceVariant: "#f1f5f9",
+            onSurface: "#1e293b",
+            onSurfaceVariant: "#64748b",
+            outline: "rgba(203,213,225,0.6)",
+            error: "#ef4444",
+          },
+        };
 
   return (
-    <SafeAreaProvider>
-    <View style={{ flex: 1, direction: language === "ar" ? "rtl" : "ltr" }}>
-    <StatusBar style={theme.isDark ? "light" : "dark"} />
     <QueryClientProvider client={queryClient}>
-      <OfflineSyncProvider />
-      <SyncEngineProvider />
-      <AuthCacheSyncProvider />
-      <PaperProvider theme={theme}>
-        <ThemeProvider value={buildNavTheme(theme)}>
-          <AppErrorBoundary>
-            <ToastProvider>
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-              </Stack>
-            </ToastProvider>
-          </AppErrorBoundary>
+      <PaperProvider theme={paperTheme}>
+        <ThemeProvider value={buildNavTheme(themeMode)}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          </Stack>
         </ThemeProvider>
       </PaperProvider>
     </QueryClientProvider>
-    </View>
-    </SafeAreaProvider>
   );
-}
-
-/** Runs useAuthCacheSync inside the QueryClientProvider tree. */
-function AuthCacheSyncProvider() {
-  useAuthCacheSync();
-  return null;
-}
-
-/** Runs useOfflineSync + renders NetworkBanner inside QueryClientProvider. */
-function OfflineSyncProvider() {
-  const isOffline = useOfflineSync();
-  return <NetworkBanner isOffline={isOffline} />;
-}
-
-/** Runs offline sync engine + startup prewarm inside QueryClientProvider. */
-function SyncEngineProvider() {
-  const queryClient = useQueryClient();
-  const { sync } = useOfflineSyncEngine();
-
-  useEffect(() => {
-    // Defer startup prewarm + offline sync so they don't compete with the
-    // first paint on Android. Without this they kick off network requests
-    // and React Query writes during initial mount, which makes the first
-    // screen feel sluggish.
-    const handle = setTimeout(() => {
-      prewarmCriticalQueries(queryClient).catch(() => {});
-      sync().catch(() => {});
-    }, 600);
-
-    const stopPrewarm = startBackgroundPrewarm(queryClient, sync);
-    return () => {
-      clearTimeout(handle);
-      stopPrewarm();
-    };
-  }, [queryClient, sync]);
-
-  return null;
 }
