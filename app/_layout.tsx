@@ -267,12 +267,12 @@ function RootLayoutNav() {
 
     // Stock reference lists (static data) so dropdowns load instantly
     prefetchIfStale({
-      queryKey: ["stock-list", "kuwait"],
+      queryKey: ["stock-list-v2", "kuwait"],
       queryFn: () => getStockList({ market: "kuwait" }),
       staleTime: Infinity,
     });
     prefetchIfStale({
-      queryKey: ["stock-list", "us"],
+      queryKey: ["stock-list-v2", "us"],
       queryFn: () => getStockList({ market: "us" }),
       staleTime: Infinity,
     });

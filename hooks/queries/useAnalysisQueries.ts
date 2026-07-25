@@ -50,6 +50,8 @@ export function useAnalysisStocks(search?: string) {
     queryKey: analysisKeys.stocks(search),
     queryFn: () => getAnalysisStocks({ search: search || undefined }),
     staleTime: STOCK_LIST_STALE_TIME,
+    gcTime: 5 * 60 * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
