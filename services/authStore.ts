@@ -9,6 +9,8 @@
  */
 
 import { API_BASE_URL } from "@/constants/Config";
+import { queryClient } from "@/lib/queryClient";
+import { logout as apiLogout } from "@/services/api/auth";
 import type { LoginResponse } from "@/services/api/types";
 import {
     logAuthError,
@@ -388,21 +390,23 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      await Promise.all([removeToken(), removeRefreshToken()]);
+      await apiLogout();
     } catch {
-      // Best-effort — clear state even if storage fails
+      // Logout must always clear local state even if the server token is already invalid.
+    } finally {
+      await Promise.allSettled([removeToken(), removeRefreshToken(), queryClient.clear()]);
+      set({
+        token: null,
+        refreshToken: null,
+        expiresIn: null,
+        userId: null,
+        username: null,
+        name: null,
+        isAdmin: false,
+        isLoading: false,
+        error: null,
+        lastAuthError: null,
+      });
     }
-    set({
-      token: null,
-      refreshToken: null,
-      expiresIn: null,
-      userId: null,
-      username: null,
-      name: null,
-      isAdmin: false,
-      isLoading: false,
-      error: null,
-      lastAuthError: null,
-    });
   },
 }));

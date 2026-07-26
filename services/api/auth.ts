@@ -71,6 +71,11 @@ export async function googleSignIn(idToken: string): Promise<LoginResponse> {
   return data;
 }
 
+/** Revoke the current server-side session. */
+export async function logout(): Promise<void> {
+  await api.post("/api/v1/auth/logout");
+}
+
 /** Change password. */
 export async function changePassword(
   currentPassword: string,
