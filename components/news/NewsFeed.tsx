@@ -127,6 +127,7 @@ export const NewsFeed = React.memo(function NewsFeed({
   } = useNewsHistoryInfinite({
     categories: categoryFilter,
     lang,
+    enabled: !maxItems && hasNextPage === false,
   });
 
   const { data: selectedDetail } = useNewsDetail(selectedItem?.id ?? "", !!selectedItem?.id);
