@@ -52,16 +52,15 @@ export function usePriceRefresh() {
       if (__DEV__) console.warn("Price update failed:", e);
     }
 
-    // Single predicate-based invalidation — React Query walks the cache once
-    // and matches every query whose first key segment is in our list. This
-    // replaces N parallel invalidations (one per key) which previously
-    // triggered N parallel background refetches.
+    // Mark every price-dependent query stale and refetch only the active ones.
+    // This keeps mounted screens in sync without issuing two refresh passes.
     const priceKeySet = new Set<string>(PRICE_DEPENDENT_QUERY_KEYS);
     await queryClient.invalidateQueries({
       predicate: (q) => {
         const head = q.queryKey[0];
         return typeof head === "string" && priceKeySet.has(head);
       },
+      refetchType: "active",
     });
 
     // Fire push notification for the daily price update

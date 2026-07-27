@@ -416,8 +416,11 @@ function OverviewScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshPrices();
-    setRefreshing(false);
+    try {
+      await refreshPrices();
+    } finally {
+      setRefreshing(false);
+    }
   }, [refreshPrices]);
 
   const doSaveSnapshot = useCallback(async () => {
