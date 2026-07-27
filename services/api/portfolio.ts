@@ -51,7 +51,7 @@ function unwrapApiData<T>(payload: unknown): T {
 /** Get complete portfolio overview (all KWD). */
 export async function getOverview(): Promise<OverviewData> {
   const { data } = await api.get<{ status?: string; data?: OverviewData } | OverviewData>(
-    "/api/portfolio/overview"
+    "/api/v1/portfolio/overview"
   );
   return unwrapApiData<OverviewData>(data);
 }
@@ -62,7 +62,7 @@ export async function getHoldings(
 ): Promise<HoldingsResponse> {
   const params = portfolio ? { portfolio } : {};
   const { data } = await api.get<{ status?: string; data?: HoldingsResponse } | HoldingsResponse>(
-    "/api/portfolio/holdings",
+    "/api/v1/portfolio/holdings",
     { params }
   );
   return unwrapApiData<HoldingsResponse>(data);
@@ -83,7 +83,7 @@ export async function getPortfolioTable(
     holdings: Holding[];
     count: number;
   } }>(
-    `/api/portfolio/table/${portfolioName}`
+    `/api/v1/portfolio/table/${portfolioName}`
   );
   return data.data;
 }
@@ -94,7 +94,7 @@ export async function getFxRate(): Promise<{
   source: string;
 }> {
   const { data } = await api.get<{ status: string; data: { usd_kwd: number; source: string } }>(
-    "/api/portfolio/fx-rate"
+    "/api/v1/portfolio/fx-rate"
   );
   return data.data;
 }
@@ -110,7 +110,7 @@ export async function healthCheck(): Promise<{
 
 /** Get account/cash balances. */
 export async function getAccounts(): Promise<{ total_cash_kwd: number; accounts: AccountEntry[] }> {
-  const { data } = await api.get<{ status: string; data: { total_cash_kwd: number; accounts: AccountEntry[] } }>("/api/portfolio/accounts");
+  const { data } = await api.get<{ status: string; data: { total_cash_kwd: number; accounts: AccountEntry[] } }>("/api/v1/portfolio/accounts");
   return data.data;
 }
 
