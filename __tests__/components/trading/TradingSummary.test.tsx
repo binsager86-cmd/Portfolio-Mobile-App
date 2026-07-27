@@ -216,6 +216,90 @@ describe("TradingSummaryCards", () => {
     ]);
   });
 
+  it("consolidates realized transactions by stock", () => {
+    const realizedWithDuplicateStock = {
+      total_realized_kwd: 300,
+      total_profit_kwd: 300,
+      total_loss_kwd: 0,
+      details: [
+        {
+          id: 21,
+          symbol: "NBK",
+          portfolio: "KFH",
+          txn_date: "2025-05-20",
+          shares: 400,
+          sell_value: 1000,
+          avg_cost_at_txn: 2,
+          realized_pnl: 120,
+          realized_pnl_kwd: 120,
+          dividends_allocated_kwd: 10,
+          net_pnl_kwd: 130,
+          currency: "KWD",
+          source: "manual",
+        },
+        {
+          id: 22,
+          symbol: "NBK",
+          portfolio: "KFH",
+          txn_date: "2025-05-25",
+          shares: 100,
+          sell_value: 280,
+          avg_cost_at_txn: 2.2,
+          realized_pnl: 40,
+          realized_pnl_kwd: 40,
+          dividends_allocated_kwd: 5,
+          net_pnl_kwd: 45,
+          currency: "KWD",
+          source: "manual",
+        },
+        {
+          id: 23,
+          symbol: "ZAIN",
+          portfolio: "KFH",
+          txn_date: "2025-05-23",
+          shares: 50,
+          sell_value: 150,
+          avg_cost_at_txn: 2,
+          realized_pnl: 20,
+          realized_pnl_kwd: 20,
+          currency: "KWD",
+          source: "manual",
+        },
+      ],
+    };
+
+    render(
+      <TradingSummaryCards
+        summary={summary}
+        realizedData={realizedWithDuplicateStock}
+        activeTab="realizedTransactions"
+        onTabChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByTestId("realized-row-symbol").map((node) => node.props.children)).toEqual([
+      "NBK",
+      "ZAIN",
+      "NBK",
+    ]);
+
+    fireEvent.press(screen.getByText("By stock"));
+
+    expect(screen.getByText("Realized transactions by stock")).toBeTruthy();
+    expect(screen.getAllByText("2 records").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByTestId("realized-row-symbol").map((node) => node.props.children)).toEqual([
+      "NBK",
+      "ZAIN",
+    ]);
+    expect(screen.getByText("2025-05-20 -> 2025-05-25")).toBeTruthy();
+    expect(screen.getByText("1,020.000 KWD")).toBeTruthy();
+    expect(screen.getByText("500")).toBeTruthy();
+    expect(screen.getByText("+160.000 KWD")).toBeTruthy();
+    expect(screen.getByText("+15.000 KWD")).toBeTruthy();
+    expect(screen.getByText("+175.000 KWD")).toBeTruthy();
+    expect(screen.getByText("+17.16%")).toBeTruthy();
+  });
+
   it("exports the visible realized transactions report", async () => {
     render(<TradingSummaryHarness />);
 

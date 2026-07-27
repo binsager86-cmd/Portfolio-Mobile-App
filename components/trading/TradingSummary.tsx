@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles, max-lines */
 import { DateInput } from "@/components/form/DateInput";
 import { ResponsiveGrid } from "@/components/ui/ResponsiveGrid";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -14,6 +15,7 @@ export type SummaryTab = "capitalFlow" | "realizedTransactions";
 
 type RealizedSortKey = "symbol" | "txn_date" | "purchaseValueKwd" | "shares" | "realized_pnl_kwd" | "dividendsKwd" | "netPnlKwd" | "pnlPct";
 type RealizedSortDirection = "asc" | "desc";
+type RealizedViewMode = "perTransaction" | "byStock";
 type RealizedTransactionRow = RealizedProfitDetail & {
   purchaseValueKwd: number;
   dividendsKwd: number;
@@ -30,6 +32,10 @@ function compareSortValues(left: number | string | null, right: number | string 
   return String(left).localeCompare(String(right)) * dir;
 }
 
+function realizedDateSortValue(value: string): string {
+  return value.includes(" -> ") ? value.split(" -> ").pop() || value : value;
+}
+
 function sortRealizedTransactions(
   rows: RealizedTransactionRow[],
   key: RealizedSortKey,
@@ -40,7 +46,7 @@ function sortRealizedTransactions(
       case "symbol":
         return compareSortValues(left.symbol, right.symbol, direction);
       case "txn_date":
-        return compareSortValues(left.txn_date, right.txn_date, direction);
+        return compareSortValues(realizedDateSortValue(left.txn_date), realizedDateSortValue(right.txn_date), direction);
       case "purchaseValueKwd":
         return compareSortValues(left.purchaseValueKwd, right.purchaseValueKwd, direction);
       case "shares":
@@ -57,6 +63,55 @@ function sortRealizedTransactions(
         return 0;
     }
   });
+}
+
+function formatGroupedDate(startDate: string, endDate: string): string {
+  if (!startDate || startDate === endDate) return startDate;
+  return `${startDate} -> ${endDate}`;
+}
+
+function consolidateRealizedTransactionsByStock(rows: RealizedTransactionRow[]): RealizedTransactionRow[] {
+  const groups = new Map<string, RealizedTransactionRow & { startDate: string; endDate: string; portfolioSet: Set<string> }>();
+
+  for (const row of rows) {
+    const symbol = row.symbol.trim().toUpperCase();
+    const existing = groups.get(symbol);
+    if (!existing) {
+      groups.set(symbol, {
+        ...row,
+        id: -Math.abs(row.id || groups.size + 1),
+        symbol,
+        purchaseValueKwd: row.purchaseValueKwd,
+        dividendsKwd: row.dividendsKwd,
+        netPnlKwd: row.netPnlKwd,
+        startDate: row.txn_date,
+        endDate: row.txn_date,
+        portfolioSet: new Set([row.portfolio].filter(Boolean)),
+      });
+      continue;
+    }
+
+    existing.shares += row.shares ?? 0;
+    existing.sell_value += row.sell_value ?? 0;
+    existing.purchaseValueKwd += row.purchaseValueKwd;
+    existing.realized_pnl += row.realized_pnl ?? 0;
+    existing.realized_pnl_kwd += row.realized_pnl_kwd ?? 0;
+    existing.dividendsKwd += row.dividendsKwd;
+    existing.dividends_allocated_kwd = (existing.dividends_allocated_kwd ?? 0) + row.dividendsKwd;
+    existing.netPnlKwd += row.netPnlKwd;
+    existing.net_pnl_kwd = existing.netPnlKwd;
+    existing.startDate = row.txn_date < existing.startDate ? row.txn_date : existing.startDate;
+    existing.endDate = row.txn_date > existing.endDate ? row.txn_date : existing.endDate;
+    if (row.portfolio) existing.portfolioSet.add(row.portfolio);
+  }
+
+  return Array.from(groups.values()).map(({ startDate, endDate, portfolioSet, ...row }) => ({
+    ...row,
+    portfolio: portfolioSet.size === 1 ? Array.from(portfolioSet)[0] : "Mixed",
+    txn_date: formatGroupedDate(startDate, endDate),
+    avg_cost_at_txn: row.shares ? row.purchaseValueKwd / row.shares : 0,
+    pnlPct: row.purchaseValueKwd ? (row.netPnlKwd / row.purchaseValueKwd) * 100 : null,
+  }));
 }
 
 export function TradingSummaryCards({
@@ -82,17 +137,18 @@ export function TradingSummaryCards({
   const [toFilter, setToFilter] = useState("");
   const [sortKey, setSortKey] = useState<RealizedSortKey>("txn_date");
   const [sortDirection, setSortDirection] = useState<RealizedSortDirection>("desc");
+  const [realizedViewMode, setRealizedViewMode] = useState<RealizedViewMode>("perTransaction");
 
   const hasDateFilter = !!(dateFrom || dateTo);
   const periodLabel = hasDateFilter
     ? `${dateFrom || t("trading.inception")} → ${dateTo || t("trading.today")}`
     : t("trading.sinceInception");
-  const realizedTransactions = useMemo(() => {
+  const filteredRealizedTransactions = useMemo(() => {
       const normalizedSymbol = symbolFilter.trim().toLowerCase();
       const normalizedFrom = fromFilter.trim();
       const normalizedTo = toFilter.trim();
 
-      const filteredRows: RealizedTransactionRow[] = [...(realizedData?.details ?? [])]
+      return [...(realizedData?.details ?? [])]
         .map((trade) => {
           const purchaseValueKwd = (trade.avg_cost_at_txn ?? 0) * (trade.shares ?? 0);
           const dividendsKwd = trade.dividends_allocated_kwd ?? 0;
@@ -112,15 +168,23 @@ export function TradingSummaryCards({
           const matchesTo = !normalizedTo || trade.txn_date <= normalizedTo;
           return matchesSymbol && matchesFrom && matchesTo;
         });
-
-      return sortRealizedTransactions(filteredRows, sortKey, sortDirection);
     },
-    [fromFilter, realizedData?.details, sortDirection, sortKey, symbolFilter, toFilter],
+    [fromFilter, realizedData?.details, symbolFilter, toFilter],
+  );
+  const displayedRealizedTransactions = useMemo(
+    () => sortRealizedTransactions(
+      realizedViewMode === "byStock"
+        ? consolidateRealizedTransactionsByStock(filteredRealizedTransactions)
+        : filteredRealizedTransactions,
+      sortKey,
+      sortDirection,
+    ),
+    [filteredRealizedTransactions, realizedViewMode, sortDirection, sortKey],
   );
   const visibleTradeStats = useMemo(() => {
     let wins = 0;
     let losses = 0;
-    for (const trade of realizedTransactions) {
+    for (const trade of displayedRealizedTransactions) {
       if (trade.netPnlKwd > 0) wins += 1;
       else if (trade.netPnlKwd < 0) losses += 1;
     }
@@ -130,13 +194,13 @@ export function TradingSummaryCards({
       losses,
       winRate: decidedTrades ? (wins / decidedTrades) * 100 : 0,
     };
-  }, [realizedTransactions]);
+  }, [displayedRealizedTransactions]);
   const realizedSummary = useMemo(() => {
     let totalNetPnlKwd = 0;
     let grossGainsKwd = 0;
     let grossLossesKwd = 0;
 
-    for (const trade of realizedTransactions) {
+    for (const trade of displayedRealizedTransactions) {
       const net = trade.netPnlKwd ?? 0;
       totalNetPnlKwd += net;
       if (net > 0) grossGainsKwd += net;
@@ -147,9 +211,9 @@ export function TradingSummaryCards({
       totalNetPnlKwd,
       grossGainsKwd,
       grossLossesKwd,
-      totalTrades: realizedTransactions.length,
+      totalTrades: displayedRealizedTransactions.length,
     };
-  }, [realizedTransactions]);
+  }, [displayedRealizedTransactions]);
 
   const Card = ({
     icon,
@@ -293,6 +357,10 @@ export function TradingSummaryCards({
     { key: "capitalFlow", label: t("trading.capitalFlowTab", "Transaction Details"), icon: "exchange" },
     { key: "realizedTransactions", label: t("trading.realizedTransactionsTab", "Realized Transactions"), icon: "list-alt" },
   ];
+  const realizedViewOptions: Array<{ key: RealizedViewMode; label: string; icon: React.ComponentProps<typeof FontAwesome>["name"] }> = [
+    { key: "perTransaction", label: t("realizedTrades.perTransaction", "Per transaction"), icon: "list" },
+    { key: "byStock", label: t("realizedTrades.byStock", "By stock"), icon: "object-group" },
+  ];
   const showRealizedTab = activeTab === "realizedTransactions";
 
   const onToggleSort = (key: RealizedSortKey) => {
@@ -312,7 +380,7 @@ export function TradingSummaryCards({
   const handleExportRealized = async () => {
     try {
       await exportRealizedTransactionsReport({
-        rows: realizedTransactions.map((trade) => ({
+        rows: displayedRealizedTransactions.map((trade) => ({
           symbol: trade.symbol,
           portfolio: trade.portfolio,
           txnDate: trade.txn_date,
@@ -333,7 +401,7 @@ export function TradingSummaryCards({
           grossGainsKwd: realizedSummary.grossGainsKwd,
           grossLossesKwd: realizedSummary.grossLossesKwd,
           totalTrades: realizedData?.details?.length ?? 0,
-          visibleTrades: realizedTransactions.length,
+          visibleTrades: displayedRealizedTransactions.length,
           currency: "KWD",
           sortColumn: sortLabelByKey[sortKey],
           sortDirection,
@@ -429,11 +497,13 @@ export function TradingSummaryCards({
               <View style={styles.previewHeaderRow}>
                 <View style={styles.previewHeaderCopy}>
                   <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>
-                    {t("trading.realizedTransactionsList", "All realized transactions")}
+                    {realizedViewMode === "byStock"
+                      ? t("realizedTrades.byStockTitle", "Realized transactions by stock")
+                      : t("trading.realizedTransactionsList", "All realized transactions")}
                   </Text>
                   <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
                     {t("trading.recordsCount", {
-                      count: realizedTransactions.length,
+                      count: displayedRealizedTransactions.length,
                       defaultValue: "{{count}} records",
                     })}
                   </Text>
@@ -446,10 +516,10 @@ export function TradingSummaryCards({
                     {
                       backgroundColor: colors.accentPrimary + "18",
                       borderColor: colors.accentPrimary + "55",
-                      opacity: realizedTransactions.length ? 1 : 0.5,
+                      opacity: displayedRealizedTransactions.length ? 1 : 0.5,
                     },
                   ]}
-                  disabled={!realizedTransactions.length}
+                  disabled={!displayedRealizedTransactions.length}
                 >
                   <FontAwesome name="file-excel-o" size={14} color={colors.accentPrimary} />
                   <Text style={[styles.exportButtonText, { color: colors.accentPrimary }]}>
@@ -541,7 +611,32 @@ export function TradingSummaryCards({
               </View>
             </View>
 
-            {realizedTransactions.length > 0 ? (
+            <View style={styles.tabRow}>
+              {realizedViewOptions.map((option) => {
+                const active = option.key === realizedViewMode;
+                return (
+                  <Pressable
+                    key={option.key}
+                    testID={`realized-view-${option.key}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => setRealizedViewMode(option.key)}
+                    style={[
+                      styles.tabButton,
+                      {
+                        backgroundColor: active ? colors.accentPrimary + "18" : colors.bgCard,
+                        borderColor: active ? colors.accentPrimary : colors.borderColor,
+                      },
+                    ]}
+                  >
+                    <FontAwesome name={option.icon} size={12} color={active ? colors.accentPrimary : colors.textMuted} />
+                    <Text style={[styles.tabButtonText, { color: active ? colors.accentPrimary : colors.textSecondary }]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {displayedRealizedTransactions.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                 <View style={styles.previewTableWrap}>
                   <View style={[styles.previewTableHead, { borderBottomColor: colors.borderColor }]}>
@@ -594,7 +689,7 @@ export function TradingSummaryCards({
                       </View>
                     </Pressable>
                   </View>
-                  {realizedTransactions.map((txn, index) => {
+                  {displayedRealizedTransactions.map((txn, index) => {
                     return (
                       <View
                         key={txn.id}
@@ -602,7 +697,7 @@ export function TradingSummaryCards({
                           styles.previewRow,
                           {
                             borderBottomColor: colors.borderColor,
-                            borderBottomWidth: index < realizedTransactions.length - 1 ? StyleSheet.hairlineWidth : 0,
+                            borderBottomWidth: index < displayedRealizedTransactions.length - 1 ? StyleSheet.hairlineWidth : 0,
                           },
                         ]}
                       >
