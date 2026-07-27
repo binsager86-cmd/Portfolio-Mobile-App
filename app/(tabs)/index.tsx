@@ -409,6 +409,11 @@ function OverviewScreen() {
     },
   ], [t]);
 
+  const holdingRowKey = useCallback((row: OverviewHoldingRow, idx: number) => {
+    // Symbols can repeat across multiple holdings rows; include index for uniqueness.
+    return `${row.symbol}-${idx}`;
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshPrices();
@@ -905,7 +910,7 @@ function OverviewScreen() {
 
                 {holdingsRows.map((row, idx) => (
                   <View
-                    key={row.symbol}
+                    key={holdingRowKey(row, idx)}
                     style={[
                       styles.holdingsDataRow,
                       {
@@ -943,7 +948,7 @@ function OverviewScreen() {
 
                     return (
                       <View
-                        key={row.symbol}
+                        key={holdingRowKey(row, idx)}
                         style={[
                           styles.holdingsDataRow,
                           {
@@ -979,9 +984,9 @@ function OverviewScreen() {
           /* Mobile: Professional card-based layout */
           <View style={{ gap: tokens.spacing.sm, paddingHorizontal: spacing.pagePx }}>
             {holdingsRows.length > 0 ? (
-              holdingsRows.map((row) => (
+              holdingsRows.map((row, idx) => (
                 <HoldingCard
-                  key={row.symbol}
+                  key={holdingRowKey(row, idx)}
                   holding={{
                     symbol: row.symbol,
                     company: row.company,

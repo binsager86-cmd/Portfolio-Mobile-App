@@ -312,7 +312,7 @@ export function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWi
   const chartData: GrowthChartPoint[] = useMemo(() => {
     if (!selectedLabel || !growth[selectedLabel]) return [];
     return growth[selectedLabel].map((g) => ({
-      label: g.period,
+      label: g.period_label ?? g.period,
       subLabel: g.prev_period,
       value: g.growth,
     }));
@@ -327,7 +327,7 @@ export function GrowthPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWi
       headers: ["From Period", "To Period", "Growth %"],
       rows: (growth[label] ?? []).map((g: GrowthEntry) => [
         g.prev_period,
-        g.period,
+        g.period_label ?? g.period,
         `${g.growth >= 0 ? "+" : ""}${(g.growth * 100).toFixed(1)}%`,
       ]),
     }));
