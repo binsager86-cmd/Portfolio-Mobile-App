@@ -52,22 +52,22 @@ export function usePriceRefresh() {
       if (__DEV__) console.warn("Price update failed:", e);
     }
 
-    // Mark every price-dependent query stale and refetch only the active ones.
-    // This keeps mounted screens in sync without issuing two refresh passes.
+    // Manual refresh should actively refetch all matching queries,
+    // including inactive ones, to prevent stale data on tab switches.
     const priceKeySet = new Set<string>(PRICE_DEPENDENT_QUERY_KEYS);
     await queryClient.invalidateQueries({
       predicate: (q) => {
         const head = q.queryKey[0];
         return typeof head === "string" && priceKeySet.has(head);
       },
-      refetchType: "active",
+      refetchType: "all",
     });
 
     // Fire push notification for the daily price update
     if (result) {
       sendPriceUpdateNotification({
         updatedCount: result.updated_count ?? result.updatedCount ?? 0,
-        message: result.message,
+        message: result.message ?? "Refresh complete",
       }).catch(() => {});
     }
 
