@@ -47,8 +47,8 @@ export async function calculateMetrics(
 /** Get growth analysis. */
 export async function getGrowthAnalysis(
   stockId: number,
-): Promise<{ growth: Record<string, Array<{ period: string; prev_period: string; period_label?: string; growth: number }>> }> {
-  const { data } = await api.get<{ status: string; data: { growth: Record<string, Array<{ period: string; prev_period: string; period_label?: string; growth: number }>> } }>(
+): Promise<{ growth: Record<string, Array<{ period: string; prev_period: string; growth: number }>> }> {
+  const { data } = await api.get<{ status: string; data: { growth: Record<string, Array<{ period: string; prev_period: string; growth: number }>> } }>(
     `/api/v1/fundamental/stocks/${stockId}/growth`,
   );
   return data.data;

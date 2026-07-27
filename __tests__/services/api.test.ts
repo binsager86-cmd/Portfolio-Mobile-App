@@ -189,7 +189,7 @@ describe("API Service", () => {
   // ── getOverview() ──
 
   describe("getOverview()", () => {
-    it("fetches from /api/v1/portfolio/overview and unwraps data", async () => {
+    it("fetches from /api/portfolio/overview and unwraps data", async () => {
       const mockData: Partial<OverviewData> = {
         total_value: 55000,
         total_gain: 5000,
@@ -202,7 +202,7 @@ describe("API Service", () => {
 
       const result = await getOverview();
 
-      expect(api.get).toHaveBeenCalledWith("/api/v1/portfolio/overview");
+      expect(api.get).toHaveBeenCalledWith("/api/portfolio/overview");
       expect(result).toEqual(mockData);
     });
   });
@@ -210,7 +210,7 @@ describe("API Service", () => {
   // ── getHoldings() ──
 
   describe("getHoldings()", () => {
-    it("fetches /api/v1/portfolio/holdings without filter", async () => {
+    it("fetches /api/portfolio/holdings without filter", async () => {
       const mockData: Partial<HoldingsResponse> = {
         holdings: [],
         count: 0,
@@ -222,7 +222,7 @@ describe("API Service", () => {
 
       const result = await getHoldings();
 
-      expect(api.get).toHaveBeenCalledWith("/api/v1/portfolio/holdings", {
+      expect(api.get).toHaveBeenCalledWith("/api/portfolio/holdings", {
         params: {},
       });
       expect(result).toEqual(mockData);
@@ -235,7 +235,7 @@ describe("API Service", () => {
 
       await getHoldings("KFH");
 
-      expect(api.get).toHaveBeenCalledWith("/api/v1/portfolio/holdings", {
+      expect(api.get).toHaveBeenCalledWith("/api/portfolio/holdings", {
         params: { portfolio: "KFH" },
       });
     });
@@ -343,14 +343,14 @@ describe("API Service", () => {
   // ── getFxRate() ──
 
   describe("getFxRate()", () => {
-    it("fetches /api/v1/portfolio/fx-rate", async () => {
+    it("fetches /api/portfolio/fx-rate", async () => {
       jest.spyOn(api, "get").mockResolvedValueOnce({
         data: { status: "ok", data: { usd_kwd: 0.307, source: "live" } },
       });
 
       const result = await getFxRate();
 
-      expect(api.get).toHaveBeenCalledWith("/api/v1/portfolio/fx-rate");
+      expect(api.get).toHaveBeenCalledWith("/api/portfolio/fx-rate");
       expect(result.usd_kwd).toBe(0.307);
     });
   });

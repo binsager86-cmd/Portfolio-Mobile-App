@@ -176,6 +176,5 @@ export interface PanelWithSymbolProps extends PanelProps {
 export interface GrowthEntry {
   prev_period: string;
   period: string;
-  period_label?: string;
   growth: number;
 }
