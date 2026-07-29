@@ -10,11 +10,19 @@ import { useAuthStore } from "@/services/authStore";
 import { useQuery } from "@tanstack/react-query";
 import { getToken } from "@/services/tokenStorage";
 
+function asAdminFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
 export function useAdminGate() {
   const clientIsAdmin = useAuthStore((s) => s.isAdmin);
+  const userId = useAuthStore((s) => s.userId);
+  const token = useAuthStore((s) => s.token);
+
+  const hasSession = Boolean(token);
 
   const { data: serverIsAdmin, isLoading } = useQuery({
-    queryKey: ["admin-gate"],
+    queryKey: ["admin-gate", userId ?? 0],
     queryFn: async () => {
       const token = await getToken();
       if (!token) return false;
@@ -24,15 +32,16 @@ export function useAdminGate() {
       if (!res.ok) return false;
       const json = await res.json();
       const me = json.data ?? json;
-      return me.is_admin === true;
+      return asAdminFlag(me.is_admin);
     },
-    enabled: clientIsAdmin,
-    staleTime: 5 * 60 * 1000,
+    enabled: hasSession,
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: 1,
   });
 
   return {
-    isAdmin: clientIsAdmin && serverIsAdmin === true,
-    isLoading: clientIsAdmin && isLoading,
+    isAdmin: serverIsAdmin === true || (clientIsAdmin && !hasSession),
+    isLoading: hasSession && isLoading,
   };
 }
