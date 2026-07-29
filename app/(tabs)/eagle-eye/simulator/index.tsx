@@ -2,20 +2,24 @@
 /**
  * Eagle Eye Simulator — Index Page
  *
- * Displays three strategy cards side-by-side, a comparison table,
- * and a recent activity feed across all three strategies.
+ * Displays two paper trading cards, a comparison table,
+ * and a recent activity feed.
  */
 
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { StageTag } from "@/components/eagle-eye/StageTag";
+import { useAdminGate } from "@/hooks/useAdminGate";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import {
   useResetSimulator,
+  useSimulatorStatus,
   useSimulatorActivity,
   useSimulatorCompare,
   useSimulatorPortfolios,
   useRunSimulatorNow,
+  useStartSimulator,
+  useStopSimulator,
   type SimPortfolioSummary,
   type StrategyName,
 } from "@/hooks/useSimulator";
@@ -71,17 +75,54 @@ function Sparkline({
 
 // ── Strategy card ────────────────────────────────────────────────────────────
 
-const STRATEGY_COLORS: Record<StrategyName, string> = {
+const STRATEGY_COLORS: Partial<Record<StrategyName, string>> = {
   CONSERVATIVE: "#22c55e",
   MODERATE: "#f59e0b",
   AGGRESSIVE: "#ef4444",
+  BUY: "#22c55e",
+  WATCHLIST: "#38bdf8",
 };
 
-const STRATEGY_LABELS: Record<StrategyName, string> = {
+const STRATEGY_LABELS: Partial<Record<StrategyName, string>> = {
   CONSERVATIVE: "Conservative",
   MODERATE: "Moderate",
   AGGRESSIVE: "Aggressive",
+  BUY: "Buy Signals",
+  WATCHLIST: "Watchlist",
 };
+
+function strategyLabel(strategy: string) {
+  return STRATEGY_LABELS[strategy as StrategyName] ?? strategy.replace(/_/g, " ");
+}
+
+const ACTIVE_SIMULATOR_CARDS: StrategyName[] = ["BUY", "WATCHLIST"];
+
+function emptySummary(strategyName: StrategyName, id: number): SimPortfolioSummary {
+  return {
+    id,
+    strategy_name: strategyName,
+    starting_capital_kwd: 100000,
+    cash_balance_kwd: 100000,
+    total_value_kwd: 100000,
+    cumulative_return_pct: 0,
+    open_positions_count: 0,
+    pending_orders_count: 0,
+    total_trades: 0,
+    wins: 0,
+    losses: 0,
+    win_rate: 0,
+    avg_win_pct: 0,
+    avg_loss_pct: 0,
+    profit_factor: 0,
+    max_drawdown_pct: 0,
+    equity_curve: [{ date: new Date().toISOString().slice(0, 10), value: 100000, return_pct: 0 }],
+    live_since: null,
+  };
+}
+
+const EMPTY_SIMULATOR_CARDS = ACTIVE_SIMULATOR_CARDS.map((strategyName, index) =>
+  emptySummary(strategyName, index + 1)
+);
 
 function StrategyCard({
   summary,
@@ -102,7 +143,7 @@ function StrategyCard({
       style={[styles.card, { backgroundColor: colors.bgCard, borderColor: accentColor }]}
     >
       <Text style={[styles.strategyLabel, { color: accentColor }]}>
-        {STRATEGY_LABELS[summary.strategy_name]}
+        {strategyLabel(summary.strategy_name)}
       </Text>
 
       <Text style={[styles.totalValue, { color: colors.textPrimary }]}>
@@ -124,12 +165,13 @@ function StrategyCard({
 
       <Text style={[styles.metaText, { color: colors.textSecondary }]}>
         {summary.total_trades === 0
-          ? "Waiting for signal (\u226565% confidence)"
+          ? "Waiting for Eagle Eye signal"
           : `${summary.wins}W / ${summary.losses}L = ${((summary.wins / summary.total_trades) * 100).toFixed(1)}%`}
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
         {summary.open_positions_count} open positions
+        {summary.pending_orders_count ? ` • ${summary.pending_orders_count} pending` : ""}
       </Text>
 
       <Text style={[styles.metaText, { color: colors.textMuted }]}>
@@ -145,7 +187,7 @@ function StrategyCard({
 
       <View style={styles.sparklineContainer}>
         <Sparkline
-          data={sparkData.length > 0 ? sparkData : [10000]}
+          data={sparkData.length > 0 ? sparkData : [summary.starting_capital_kwd]}
           color={accentColor}
         />
       </View>
@@ -186,7 +228,7 @@ function ComparisonTable({
   const byStrategy: Partial<Record<StrategyName, SimPortfolioSummary>> = {};
   for (const p of portfolios) byStrategy[p.strategy_name] = p;
 
-  const strategies: StrategyName[] = ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"];
+  const strategies = portfolios.map((p) => p.strategy_name);
 
   return (
     <View style={[styles.tableContainer, { backgroundColor: colors.bgCard }]}>
@@ -201,10 +243,10 @@ function ComparisonTable({
             key={s}
             style={[
               styles.tableValueCell,
-              { color: STRATEGY_COLORS[s] },
+              { color: STRATEGY_COLORS[s] ?? colors.accentPrimary },
             ]}
           >
-            {STRATEGY_LABELS[s].slice(0, 4)}
+            {strategyLabel(s).slice(0, 4)}
           </Text>
         ))}
       </View>
@@ -236,9 +278,9 @@ function ComparisonTable({
 
 // ── Activity feed ────────────────────────────────────────────────────────────
 
-function ActivityFeed() {
+function ActivityFeed({ enabled }: { enabled: boolean }) {
   const { colors } = useThemeStore();
-  const { data: feed, isLoading } = useSimulatorActivity(20);
+  const { data: feed, isLoading } = useSimulatorActivity(20, enabled);
 
   if (isLoading) {
     return <ActivityIndicator style={{ margin: 16 }} color={colors.accentPrimary} />;
@@ -269,14 +311,18 @@ function ActivityFeed() {
           >
             <View style={[styles.feedStratBadge, { backgroundColor: stratColor + "22" }]}>
               <Text style={[styles.feedStratText, { color: stratColor }]}>
-                {STRATEGY_LABELS[item.strategy_name as StrategyName]?.slice(0, 4) ?? item.strategy_name}
+                {strategyLabel(item.strategy_name).slice(0, 4)}
               </Text>
             </View>
             <Text style={[styles.feedTicker, { color: colors.textPrimary }]}>
               {item.ticker}
             </Text>
             <Text style={[styles.feedAction, { color: isExit ? colors.textSecondary : colors.accentPrimary }]}>
-              {isExit ? `EXIT (${item.exit_reason?.replace("_", " ")})` : "ENTRY"}
+              {isExit
+                ? `EXIT (${item.exit_reason?.replace("_", " ")})`
+                : item.scheduled_date
+                ? `ENTRY queued ${item.scheduled_date}`
+                : "ENTRY"}
             </Text>
             {pnl != null && (
               <Text style={[styles.feedPnl, { color: pnlColor }]}>
@@ -296,11 +342,16 @@ export default function SimulatorIndexScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminGate();
 
-  const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios();
+  const { data: portfolios, isLoading, refetch, isRefetching } = useSimulatorPortfolios(isAdmin);
+  const { data: simStatus } = useSimulatorStatus(isAdmin);
   const runNow = useRunSimulatorNow();
+  const startNow = useStartSimulator();
+  const stopNow = useStopSimulator();
   const resetNow = useResetSimulator();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
+  const [controlStatus, setControlStatus] = useState<"idle" | "ok" | "err">("idle");
   const [resetStatus, setResetStatus] = useState<"idle" | "ok" | "err">("idle");
 
   const onRefresh = useCallback(() => refetch(), [refetch]);
@@ -317,10 +368,43 @@ export default function SimulatorIndexScreen() {
     }
   }, [runNow]);
 
+  const handleToggleRunning = useCallback(() => {
+    const isRunning = simStatus?.running ?? true;
+    const runToggle = async () => {
+      setControlStatus("idle");
+      try {
+        if (isRunning) {
+          await stopNow.mutateAsync();
+        } else {
+          await startNow.mutateAsync();
+        }
+        setControlStatus("ok");
+        setTimeout(() => setControlStatus("idle"), 4000);
+      } catch {
+        setControlStatus("err");
+        setTimeout(() => setControlStatus("idle"), 4000);
+      }
+    };
+
+    if (isRunning) {
+      Alert.alert(
+        "Stop Simulator?",
+        "This pauses automatic Eagle Eye paper buys and sells. Existing paper positions remain unchanged until you start it again.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Stop", style: "destructive", onPress: () => void runToggle() },
+        ]
+      );
+      return;
+    }
+
+    void runToggle();
+  }, [simStatus?.running, startNow, stopNow]);
+
   const handleResetNow = useCallback(() => {
     Alert.alert(
       "Reset Simulator?",
-      "This will clear all simulator trades and restart all three strategies from today.",
+      "This will clear all simulator trades and restart both paper cards from today.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -348,13 +432,38 @@ export default function SimulatorIndexScreen() {
     router.push(`/eagle-eye/simulator/${strategy.toLowerCase()}`);
   }, []);
 
-  if (isLoading) {
+  const activePortfolios = (portfolios ?? []).filter((p) =>
+    ACTIVE_SIMULATOR_CARDS.includes(p.strategy_name)
+  );
+  const visiblePortfolios = activePortfolios.length > 0 ? activePortfolios : EMPTY_SIMULATOR_CARDS;
+
+  if (isAdminLoading || (isAdmin && isLoading)) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
         <ActivityIndicator size="large" color={colors.accentPrimary} />
         <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-          Loading simulators…
+          {isAdminLoading ? "Checking simulator access…" : "Loading simulators…"}
         </Text>
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+        <EagleEyeTopTabs />
+        <View style={[styles.centered, { paddingHorizontal: 24 }]}>
+          <Text style={[styles.pageTitle, { color: colors.textPrimary, textAlign: "center" }]}>Admin Access Required</Text>
+          <Text style={[styles.pageSubtitle, { color: colors.textMuted, textAlign: "center" }]}> 
+            Eagle Eye simulator controls and paper-trading results are available to admin users only.
+          </Text>
+          <Pressable
+            onPress={() => router.replace("/(tabs)/eagle-eye")}
+            style={[styles.runBtn, { backgroundColor: colors.accentPrimary, marginTop: 12 }]}
+          >
+            <Text style={styles.runBtnText}>Back to Scanner</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -382,13 +491,72 @@ export default function SimulatorIndexScreen() {
           Paper Trading Simulator
         </Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}> 
-          Three parallel strategies • 10,000 KWD each • Live forward from today
+          Two paper cards • 100,000 KWD each • Live forward from today
         </Text>
+
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusPill,
+              {
+                borderColor: simStatus?.running === false ? colors.danger : colors.success,
+                backgroundColor: simStatus?.running === false ? colors.danger + "1A" : colors.success + "1A",
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusPillText,
+                { color: simStatus?.running === false ? colors.danger : colors.success },
+              ]}
+            >
+              {simStatus?.running === false ? "Simulator paused" : "Simulator running"}
+            </Text>
+          </View>
+          <Text style={[styles.statusHint, { color: colors.textMuted }]}> 
+            {simStatus?.running === false
+              ? "No automatic paper buys or sells will execute."
+              : "Automatic Eagle Eye paper buys and sells are enabled."}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={handleToggleRunning}
+          disabled={startNow.isPending || stopNow.isPending || runNow.isPending || resetNow.isPending}
+          style={[
+            styles.controlBtn,
+            {
+              backgroundColor:
+                controlStatus === "err"
+                  ? colors.danger
+                  : simStatus?.running === false
+                  ? colors.success
+                  : colors.danger,
+              opacity: startNow.isPending || stopNow.isPending ? 0.6 : 1,
+            },
+          ]}
+        >
+          {startNow.isPending || stopNow.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.runBtnText}>
+              {controlStatus === "ok"
+                ? simStatus?.running === false
+                  ? "✓ Simulator stopped"
+                  : "✓ Simulator running"
+                : controlStatus === "err"
+                ? "✗ Control failed"
+                : simStatus?.running === false
+                ? "▶ Start Automatic Simulator"
+                : "■ Stop Automatic Simulator"}
+            </Text>
+          )}
+        </Pressable>
 
         {/* Manual run button */}
         <Pressable
           onPress={handleRunNow}
-          disabled={runNow.isPending}
+          disabled={runNow.isPending || simStatus?.running === false}
           style={[
             styles.runBtn,
             {
@@ -398,7 +566,7 @@ export default function SimulatorIndexScreen() {
                   : runStatus === "err"
                   ? colors.danger
                   : colors.accentPrimary,
-              opacity: runNow.isPending ? 0.6 : 1,
+              opacity: runNow.isPending || simStatus?.running === false ? 0.6 : 1,
             },
           ]}
         >
@@ -410,6 +578,8 @@ export default function SimulatorIndexScreen() {
                 ? "✓ Simulator ran successfully"
                 : runStatus === "err"
                 ? "✗ Run failed — check logs"
+                : simStatus?.running === false
+                ? "Start simulator to run now"
                 : "▶  Run Simulator Now"}
             </Text>
           )}
@@ -452,7 +622,7 @@ export default function SimulatorIndexScreen() {
           style={styles.cardsRow}
           contentContainerStyle={styles.cardsContent}
         >
-          {(portfolios ?? []).map((p) => (
+          {visiblePortfolios.map((p) => (
             <StrategyCard
               key={p.strategy_name}
               summary={p}
@@ -462,10 +632,10 @@ export default function SimulatorIndexScreen() {
         </ScrollView>
 
         {/* Comparison table */}
-        {portfolios && <ComparisonTable portfolios={portfolios} />}
+        <ComparisonTable portfolios={visiblePortfolios} />
 
         {/* Activity feed */}
-        <ActivityFeed />
+        <ActivityFeed enabled={isAdmin} />
       </ScrollView>
     </View>
   );
@@ -480,6 +650,23 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 16, gap: 16 },
   pageTitle: { fontSize: 22, fontWeight: "700", marginBottom: 2 },
   pageSubtitle: { fontSize: 13, marginBottom: 8 },
+  statusRow: { gap: 6 },
+  statusPill: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  statusPillText: { fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  statusHint: { fontSize: 12 },
+  controlBtn: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
 
   cardsRow: { marginHorizontal: -4, minHeight: 220 },
   cardsContent: { paddingHorizontal: 4, paddingBottom: 8, alignItems: "stretch" },

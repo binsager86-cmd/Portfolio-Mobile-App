@@ -18,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type StrategyName = "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE";
+export type StrategyName = "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE" | "BUY" | "WATCHLIST";
 
 export interface EquityPoint {
   date: string;
@@ -34,6 +34,7 @@ export interface SimPortfolioSummary {
   total_value_kwd: number;
   cumulative_return_pct: number;
   open_positions_count: number;
+  pending_orders_count?: number;
   total_trades: number;
   wins: number;
   losses: number;
@@ -154,6 +155,7 @@ export interface ActivityItem {
   strategy_name: string;
   ticker: string;
   event_date?: string;
+  scheduled_date?: string;
   exit_date?: string;
   entry_date?: string;
   exit_reason?: string;
@@ -168,10 +170,17 @@ export interface CompareResponse {
   strategies: Record<StrategyName, SimPortfolioSummary>;
 }
 
+export interface SimulatorStatus {
+  status: string;
+  running: boolean;
+  updated_at: string | null;
+}
+
 // ── Query key factory ────────────────────────────────────────────────────────
 
 export const simKeys = {
   all: ["eagle-eye", "simulator"] as const,
+  status: () => [...simKeys.all, "status"] as const,
   portfolios: () => [...simKeys.all, "portfolios"] as const,
   compare: () => [...simKeys.all, "compare"] as const,
   portfolio: (strategy: string) => [...simKeys.all, "portfolio", strategy] as const,
@@ -183,7 +192,7 @@ export const simKeys = {
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 
-export function useSimulatorPortfolios() {
+export function useSimulatorPortfolios(enabled = true) {
   return useQuery({
     queryKey: simKeys.portfolios(),
     queryFn: async () => {
@@ -193,10 +202,24 @@ export function useSimulatorPortfolios() {
       return res.data.portfolios;
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 
-export function useSimulatorCompare() {
+export function useSimulatorStatus(enabled = true) {
+  return useQuery({
+    queryKey: simKeys.status(),
+    queryFn: async () => {
+      const res = await api.get<SimulatorStatus>("/api/v1/eagle-eye/simulator/status");
+      return res.data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    enabled,
+  });
+}
+
+export function useSimulatorCompare(enabled = true) {
   return useQuery({
     queryKey: simKeys.compare(),
     queryFn: async () => {
@@ -204,10 +227,11 @@ export function useSimulatorCompare() {
       return res.data.strategies;
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 
-export function useSimulatorPortfolioDetail(strategy: string) {
+export function useSimulatorPortfolioDetail(strategy: string, enabled = true) {
   return useQuery({
     queryKey: simKeys.portfolio(strategy),
     queryFn: async () => {
@@ -217,7 +241,7 @@ export function useSimulatorPortfolioDetail(strategy: string) {
       return res.data;
     },
     staleTime: 60_000,
-    enabled: !!strategy,
+    enabled: enabled && !!strategy,
   });
 }
 
@@ -225,7 +249,8 @@ export function useSimulatorTrades(
   strategy: string,
   page = 1,
   status?: string,
-  ticker?: string
+  ticker?: string,
+  enabled = true
 ) {
   return useQuery({
     queryKey: simKeys.trades(strategy, page, status),
@@ -240,11 +265,11 @@ export function useSimulatorTrades(
       return res.data;
     },
     staleTime: 60_000,
-    enabled: !!strategy,
+    enabled: enabled && !!strategy,
   });
 }
 
-export function useSimulatorPerformance(strategy: string) {
+export function useSimulatorPerformance(strategy: string, enabled = true) {
   return useQuery({
     queryKey: simKeys.performance(strategy),
     queryFn: async () => {
@@ -254,11 +279,11 @@ export function useSimulatorPerformance(strategy: string) {
       return res.data;
     },
     staleTime: 300_000,
-    enabled: !!strategy,
+    enabled: enabled && !!strategy,
   });
 }
 
-export function useSimulatorActivity(limit = 20) {
+export function useSimulatorActivity(limit = 20, enabled = true) {
   return useQuery({
     queryKey: simKeys.activity(),
     queryFn: async () => {
@@ -269,6 +294,7 @@ export function useSimulatorActivity(limit = 20) {
       return res.data.feed;
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -299,6 +325,32 @@ export function useRunSimulatorNow() {
   return useMutation({
     mutationFn: async () => {
       const res = await api.post("/api/v1/eagle-eye/simulator/run");
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: simKeys.all });
+    },
+  });
+}
+
+export function useStartSimulator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<SimulatorStatus>("/api/v1/eagle-eye/simulator/start");
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: simKeys.all });
+    },
+  });
+}
+
+export function useStopSimulator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<SimulatorStatus>("/api/v1/eagle-eye/simulator/stop");
       return res.data;
     },
     onSuccess: () => {

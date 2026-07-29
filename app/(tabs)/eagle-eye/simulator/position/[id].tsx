@@ -9,6 +9,7 @@
  */
 
 import { useThemeStore } from "@/services/themeStore";
+import { useAdminGate } from "@/hooks/useAdminGate";
 import {
   useCloseSimulatorPosition,
   useSimulatorTrades,
@@ -42,6 +43,11 @@ const PORTFOLIO_META: Record<number, {
   2: { name: "Moderate",     minConfidence: 60, color: "#f59e0b", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING"] },
   3: { name: "Aggressive",   minConfidence: 55, color: "#ef4444", allowedStages: ["STEALTH_ACCUMULATION", "EARLY_BREAKOUT", "MARKUP_TRENDING", "CAPITULATION_EXHAUSTION"] },
 };
+
+const SIMULATOR_STRATEGIES = [
+  { key: "BUY", label: "Buy Signals" },
+  { key: "WATCHLIST", label: "Watchlist" },
+] as const;
 
 // ── Info row ─────────────────────────────────────────────────────────────────
 
@@ -186,23 +192,43 @@ function ClosePositionSection({ pos }: { pos: SimPosition }) {
 export default function SimulatorPositionDetailScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminGate();
   const { id } = useLocalSearchParams<{ id: string }>();
   const positionId = parseInt(id ?? "0", 10);
 
   // We query all trades and find the right one by id.
   // In a larger system we'd have a dedicated GET /simulator/positions/:id endpoint.
   // For now we search through the trades pages — position ids are small enough.
-  const { data: conservativeTrades } = useSimulatorTrades("CONSERVATIVE", 1);
-  const { data: moderateTrades } = useSimulatorTrades("MODERATE", 1);
-  const { data: aggressiveTrades } = useSimulatorTrades("AGGRESSIVE", 1);
+  const { data: buyTrades } = useSimulatorTrades("BUY", 1, undefined, undefined, isAdmin);
+  const { data: watchlistTrades } = useSimulatorTrades("WATCHLIST", 1, undefined, undefined, isAdmin);
 
   const taggedTrades: TaggedPosition[] = [
-    ...(conservativeTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Conservative" })),
-    ...(moderateTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Moderate" })),
-    ...(aggressiveTrades?.trades ?? []).map((t) => ({ ...t, strategyName: "Aggressive" })),
+    ...(buyTrades?.trades ?? []).map((t) => ({ ...t, strategyName: SIMULATOR_STRATEGIES[0].label })),
+    ...(watchlistTrades?.trades ?? []).map((t) => ({ ...t, strategyName: SIMULATOR_STRATEGIES[1].label })),
   ];
 
   const pos = taggedTrades.find((t) => t.id === positionId);
+
+  if (isAdminLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
+        <ActivityIndicator size="large" color={colors.accentPrimary} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>Checking simulator access…</Text>
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.bgPrimary, paddingHorizontal: 24 }]}>
+        <Text style={[styles.cardTitle, { color: colors.textPrimary, textAlign: "center" }]}>Admin Access Required</Text>
+        <Text style={[styles.loadingText, { color: colors.textMuted, textAlign: "center" }]}>Simulator positions are available to admin users only.</Text>
+        <Pressable onPress={() => router.replace("/(tabs)/eagle-eye")} style={[styles.backBtn, { marginTop: 12 }]}>
+          <Text style={[styles.backText, { color: colors.accentPrimary }]}>Back to Scanner</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (!pos) {
     return (

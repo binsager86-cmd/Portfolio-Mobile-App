@@ -1,4 +1,5 @@
 import { UITokens } from "@/constants/uiTokens";
+import { useAdminGate } from "@/hooks/useAdminGate";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
@@ -55,8 +56,8 @@ function normalizePath(pathname: string): string {
 const SWIPE_THRESHOLD = 60;
 const VERTICAL_TO_HORIZONTAL_RATIO = 2;
 
-function findActiveTabIndex(pathname: string): number {
-  return EAGLE_EYE_TABS.findIndex((tab) =>
+function findActiveTabIndex(pathname: string, tabs: readonly EagleEyeTab[]): number {
+  return tabs.findIndex((tab) =>
     tab.matches.some((prefix) =>
       prefix === "/eagle-eye" ? pathname === prefix : pathname.startsWith(prefix)
     )
@@ -65,13 +66,17 @@ function findActiveTabIndex(pathname: string): number {
 
 export function EagleEyeTopTabs() {
   const { colors } = useThemeStore();
+  const { isAdmin } = useAdminGate();
   const pathname = normalizePath(usePathname());
   const router = useRouter();
   const activeTextColor = "#ffffff";
-  const activeTabIndex = findActiveTabIndex(pathname);
+  const visibleTabs = EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || isAdmin);
+  const activeTabIndex = findActiveTabIndex(pathname, visibleTabs);
 
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
+  const visibleTabsRef = useRef(visibleTabs);
+  visibleTabsRef.current = visibleTabs;
 
   const isNative = Platform.OS !== "web";
   const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
@@ -85,12 +90,13 @@ export function EagleEyeTopTabs() {
         return hasMinimumDistance && isHorizontallyDominant;
       },
       onPanResponderRelease: (_, { dx }) => {
-        const currentIndex = findActiveTabIndex(pathnameRef.current);
+        const currentTabs = visibleTabsRef.current;
+        const currentIndex = findActiveTabIndex(pathnameRef.current, currentTabs);
         if (currentIndex === -1) return;
-        if (dx < -SWIPE_THRESHOLD && currentIndex < EAGLE_EYE_TABS.length - 1) {
-          router.push(EAGLE_EYE_TABS[currentIndex + 1].href);
+        if (dx < -SWIPE_THRESHOLD && currentIndex < currentTabs.length - 1) {
+          router.push(currentTabs[currentIndex + 1].href);
         } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
-          router.push(EAGLE_EYE_TABS[currentIndex - 1].href);
+          router.push(currentTabs[currentIndex - 1].href);
         }
       },
     });
@@ -113,7 +119,7 @@ export function EagleEyeTopTabs() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        {EAGLE_EYE_TABS.map((tab, index) => {
+        {visibleTabs.map((tab, index) => {
           const active = index === activeTabIndex;
 
           return (

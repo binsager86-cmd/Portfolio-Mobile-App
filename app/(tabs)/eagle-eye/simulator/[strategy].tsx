@@ -9,6 +9,7 @@
  */
 
 import { useThemeStore } from "@/services/themeStore";
+import { useAdminGate } from "@/hooks/useAdminGate";
 import {
   useSimulatorPerformance,
   useSimulatorPortfolioDetail,
@@ -41,12 +42,16 @@ const STRATEGY_COLORS: Record<string, string> = {
   conservative: "#22c55e",
   moderate: "#f59e0b",
   aggressive: "#ef4444",
+  buy: "#22c55e",
+  watchlist: "#38bdf8",
 };
 
 const STRATEGY_LABELS: Record<string, string> = {
   conservative: "Conservative",
   moderate: "Moderate",
   aggressive: "Aggressive",
+  buy: "Buy Signals",
+  watchlist: "Watchlist",
 };
 
 // ── Equity curve chart ───────────────────────────────────────────────────────
@@ -224,13 +229,14 @@ function BreakdownTable({
 export default function SimulatorStrategyScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
+  const { isAdmin, isLoading: isAdminLoading } = useAdminGate();
   const { strategy } = useLocalSearchParams<{ strategy: string }>();
-  const stratKey = (strategy ?? "conservative").toLowerCase();
+  const stratKey = (strategy ?? "buy").toLowerCase();
   const stratUpper = stratKey.toUpperCase() as StrategyName;
   const accentColor = STRATEGY_COLORS[stratKey] ?? colors.accentPrimary;
 
-  const { data, isLoading, refetch, isRefetching } = useSimulatorPortfolioDetail(stratUpper);
-  const { data: perf } = useSimulatorPerformance(stratUpper);
+  const { data, isLoading, refetch, isRefetching } = useSimulatorPortfolioDetail(stratUpper, isAdmin);
+  const { data: perf } = useSimulatorPerformance(stratUpper, isAdmin);
 
   const [tab, setTab] = useState<"open" | "closed" | "perf">("open");
   const onRefresh = useCallback(() => refetch(), [refetch]);
@@ -242,10 +248,22 @@ export default function SimulatorStrategyScreen() {
     []
   );
 
-  if (isLoading) {
+  if (isAdminLoading || (isAdmin && isLoading)) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
         <ActivityIndicator size="large" color={accentColor} />
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.bgPrimary, paddingHorizontal: 24 }]}>
+        <Text style={[styles.pageTitle, { color: colors.textPrimary, textAlign: "center" }]}>Admin Access Required</Text>
+        <Text style={[styles.subtitle, { color: colors.textMuted, textAlign: "center" }]}>Simulator details are available to admin users only.</Text>
+        <Pressable onPress={() => router.replace("/(tabs)/eagle-eye")} style={[styles.backBtn, { marginTop: 12 }]}>
+          <Text style={[styles.backText, { color: colors.accentPrimary }]}>Back to Scanner</Text>
+        </Pressable>
       </View>
     );
   }
@@ -424,6 +442,7 @@ const styles = StyleSheet.create({
   backBtn: { marginBottom: 4 },
   backText: { fontSize: 14, fontWeight: "600" },
   pageTitle: { fontSize: 22, fontWeight: "700" },
+  subtitle: { fontSize: 13, lineHeight: 19, marginTop: 8 },
 
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   kpiCard: {
