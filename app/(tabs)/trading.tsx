@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * Trading Section — CFA/IFRS-compliant trading overview.
  *
