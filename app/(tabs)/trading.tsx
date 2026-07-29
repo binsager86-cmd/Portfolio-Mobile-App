@@ -15,7 +15,8 @@
 import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { ErrorScreen } from "@/components/ui/ErrorScreen";
 import { TradingSkeleton } from "@/components/ui/PageSkeletons";
-import { useRealizedProfit, useRiskMetrics, useTradingSummary } from "@/hooks/queries";
+import { DateInput } from "@/components/form/DateInput";
+import { useDeposits, useRealizedProfit, useRiskMetrics, useTradingSummary } from "@/hooks/queries";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useResponsive } from "@/hooks/useResponsive";
 import { fmtNum } from "@/lib/currency";
@@ -26,6 +27,7 @@ import {
     exportTradingExcel,
     recalculateWAC,
     renameStockBySymbol,
+    type CashDepositRecord,
     TradingTransaction,
     updateTransaction,
 } from "@/services/api";
@@ -75,6 +77,45 @@ import {
     ts,
 } from "@/components/trading/TradingTable";
 
+function isCompleteDate(value?: string) {
+  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isCashTxnType(value?: string | null) {
+  const type = (value ?? "").toLowerCase();
+  return type === "deposit" || type === "withdrawal";
+}
+
+function depositToTradingTransaction(deposit: CashDepositRecord): TradingTransaction {
+  const amount = Math.abs(Number(deposit.amount) || 0);
+  const source = (deposit.source ?? "deposit").toLowerCase();
+  const isWithdrawal = source === "withdrawal" || Number(deposit.amount) < 0;
+
+  return {
+    id: -Math.abs(deposit.id),
+    date: deposit.deposit_date,
+    symbol: "CASH",
+    company_name: isWithdrawal ? "Cash Withdrawal" : "Cash Deposit",
+    stock_id: null,
+    portfolio: deposit.portfolio,
+    type: isWithdrawal ? "Withdrawal" : "Deposit",
+    status: isWithdrawal ? "Cash Out" : "Cash In",
+    source: "MANUAL",
+    quantity: 0,
+    avg_cost: 0,
+    price: 0,
+    current_price: 0,
+    sell_price: 0,
+    value: amount,
+    pnl: 0,
+    pnl_pct: 0,
+    fees: 0,
+    dividend: 0,
+    bonus_shares: 0,
+    notes: deposit.notes,
+  };
+}
+
 // ── Main Screen ─────────────────────────────────────────────────────
 
 function TradingScreen() {
@@ -117,6 +158,11 @@ function TradingScreen() {
     search: debouncedSearch,
     page,
     pageSize: 100,
+  });
+  const { data: depositsData, refetch: refetchDeposits } = useDeposits({
+    page: 1,
+    pageSize: 200,
+    portfolio: portfolios.length === 1 ? portfolios[0] : undefined,
   });
 
   // Recalculate WAC mutation
@@ -174,8 +220,10 @@ function TradingScreen() {
 
   const onRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["trading-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["deposits"] });
     refetch();
-  }, [refetch, queryClient]);
+    refetchDeposits();
+  }, [refetch, refetchDeposits, queryClient]);
 
   const totalPages = data?.pagination?.total_pages ?? 1;
 
@@ -199,10 +247,45 @@ function TradingScreen() {
   );
 
   const transactions = data?.transactions ?? [];
+  const selectedTxnType = txnTypes[0];
+  const showCashMovements = !selectedTxnType || selectedTxnType === "Deposit" || selectedTxnType === "Withdrawal";
+
+  const cashMovementTransactions = useMemo(() => {
+    if (!showCashMovements) return [];
+
+    const existingIds = new Set(
+      transactions
+        .filter((txn) => isCashTxnType(txn.type))
+        .map((txn) => txn.id)
+    );
+    const fromDate = isCompleteDate(debouncedDateFrom) ? debouncedDateFrom : undefined;
+    const toDate = isCompleteDate(debouncedDateTo) ? debouncedDateTo : undefined;
+    const searchWords = debouncedSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+    return (depositsData?.deposits ?? [])
+      .map(depositToTradingTransaction)
+      .filter((txn) => !existingIds.has(txn.id))
+      .filter((txn) => !selectedTxnType || txn.type === selectedTxnType)
+      .filter((txn) => !fromDate || (txn.date ?? "") >= fromDate)
+      .filter((txn) => !toDate || (txn.date ?? "") <= toDate)
+      .filter((txn) => {
+        if (!searchWords.length) return true;
+        const haystack = [txn.symbol, txn.company_name, txn.portfolio, txn.type, txn.notes]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return searchWords.every((word) => haystack.includes(word));
+      });
+  }, [debouncedDateFrom, debouncedDateTo, debouncedSearch, depositsData?.deposits, selectedTxnType, showCashMovements, transactions]);
 
   // Backend handles all server-side filtering for the single-select chips,
   // dates and search. No client-side filter needed (would clobber pagination).
-  const filteredTransactions = transactions;
+  const filteredTransactions = useMemo(
+    () => [...transactions, ...cashMovementTransactions],
+    [cashMovementTransactions, transactions]
+  );
+
+  const totalVisibleItems = (data?.pagination?.total_items ?? 0) + cashMovementTransactions.length;
 
   const sortedTransactions = useMemo(
     () => sortTransactions(filteredTransactions, sortCol, sortDir),
@@ -494,31 +577,21 @@ function TradingScreen() {
 
       {/* Date range filter */}
       <View style={s.dateRow}>
-        <View style={[s.dateInputWrap, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}>
-          <FontAwesome name="calendar" size={12} color={colors.textMuted} />
-          <TextInput
+        <View style={s.dateInputWrap}>
+          <DateInput
             value={dateFrom}
             onChangeText={(tx) => { setDateFrom(tx); setPage(1); }}
             placeholder={t('trading.fromDate')}
-            placeholderTextColor={colors.textMuted}
-            style={[s.dateInput, { color: colors.textPrimary }]}
-            maxLength={10}
-            returnKeyType="done"
-            accessibilityLabel={t('trading.fromDate')}
+            compact
           />
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 13 }}>→</Text>
-        <View style={[s.dateInputWrap, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}>
-          <FontAwesome name="calendar" size={12} color={colors.textMuted} />
-          <TextInput
+        <View style={s.dateInputWrap}>
+          <DateInput
             value={dateTo}
             onChangeText={(tx) => { setDateTo(tx); setPage(1); }}
             placeholder={t('trading.toDate')}
-            placeholderTextColor={colors.textMuted}
-            style={[s.dateInput, { color: colors.textPrimary }]}
-            maxLength={10}
-            returnKeyType="done"
-            accessibilityLabel={t('trading.toDate')}
+            compact
           />
         </View>
       </View>
@@ -559,7 +632,7 @@ function TradingScreen() {
       {/* Results count */}
       <View style={s.resultsRow}>
         <Text style={[s.resultsText, { color: colors.textSecondary }]}>
-          {data?.pagination?.total_items ?? 0} {t('trading.transactionsLabel')}
+          {totalVisibleItems} {t('trading.transactionsLabel')}
           {portfolios.length ? ` · ${portfolios.join(", ")}` : ""}
           {txnTypes.length ? ` · ${txnTypes.join(", ")}` : ""}
           {dateFrom ? ` · from ${dateFrom}` : ""}
@@ -1049,13 +1122,6 @@ const s = StyleSheet.create({
   },
   dateInputWrap: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === "ios" ? 8 : 4,
-    gap: 6,
   },
   dateInput: {
     flex: 1,

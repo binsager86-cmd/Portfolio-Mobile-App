@@ -171,13 +171,33 @@ export function mapAuthError(
     const name = String((err as { name?: string }).name || "").toLowerCase();
     const msg = String(err.message || "").toLowerCase();
     if (
+      context === "google" &&
+      (msg.includes("invalid google token") || msg.includes("could not verify with google"))
+    ) {
+      return {
+        code: "auth/google-invalid-token",
+        message: "Google sign-in could not be verified. Please try signing in again.",
+        severity: "warning",
+        originalError: err,
+      };
+    }
+    if (msg.includes("network request failed")) {
+      return {
+        code: "auth/network-error",
+        message: "Cannot reach the server. Please check your internet connection.",
+        severity: "error",
+        originalError: err,
+      };
+    }
+    if (
       name.includes("abort") ||
       msg.includes("aborted") ||
-      msg.includes("timeout")
+      msg.includes("timeout") ||
+      msg.includes("timed out")
     ) {
       return {
         code: "auth/timeout",
-        message: "Login request timed out. Please check that the backend is running and try again.",
+        message: "Request timed out. Please check your connection and try again.",
         severity: "warning",
         originalError: err,
       };
