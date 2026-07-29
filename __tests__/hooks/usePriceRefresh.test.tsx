@@ -101,7 +101,7 @@ describe("usePriceRefresh", () => {
 
     expect(mockSendPriceUpdateNotification).toHaveBeenCalledWith({
       updatedCount: 3,
-      message: undefined,
+      message: "Refresh complete",
     });
   });
 
