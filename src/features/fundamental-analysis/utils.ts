@@ -351,9 +351,43 @@ export function enrichMetricsWithFallbacks(
       )
     : allMetrics;
 
+  // Keep Metrics tab consistent with backend interim payout logic:
+  // for Q1-Q3 rows, prefer the latest prior annual payout ratio when available.
+  const annualPayoutByYear = new Map<number, number>();
+
+  for (const m of normalized) {
+    if (m.metric_type !== "valuation" || m.metric_name !== "Payout Ratio") continue;
+    const isAnnualMetric = m.fiscal_quarter == null || m.fiscal_quarter === 4;
+    if (!isAnnualMetric) continue;
+    annualPayoutByYear.set(m.fiscal_year, m.metric_value);
+  }
+
+  for (const s of statements) {
+    const quarter = s.fiscal_quarter ?? inferQuarterFromDate(s.period_end_date);
+    const isAnnualStatement = quarter == null || quarter === 4;
+    if (!isAnnualStatement || s.statement_type !== "income") continue;
+
+    const payoutFromStatement = extractLineItem(s, "PAYOUT_RATIO", "PAYOUTRATIO");
+    if (payoutFromStatement == null) continue;
+    const normalizedPayout = (Math.abs(payoutFromStatement) > 1 && Math.abs(payoutFromStatement) <= 100)
+      ? (payoutFromStatement / 100)
+      : payoutFromStatement;
+    annualPayoutByYear.set(s.fiscal_year, normalizedPayout);
+  }
+
+  const harmonized = normalized.map((m) => {
+    if (m.metric_type !== "valuation" || m.metric_name !== "Payout Ratio") return m;
+    const quarter = m.fiscal_quarter ?? inferQuarterFromDate(m.period_end_date);
+    if (quarter == null || quarter >= 4) return m;
+
+    const priorAnnualPayout = annualPayoutByYear.get(m.fiscal_year - 1);
+    if (priorAnnualPayout == null) return m;
+    return { ...m, metric_value: priorAnnualPayout };
+  });
+
   // Index existing valuation metrics by fiscal_year → metric_name
   const existing = new Map<string, number>();
-  for (const m of normalized) {
+  for (const m of harmonized) {
     if (m.metric_type === "valuation") {
       existing.set(`${m.fiscal_year}::${m.metric_name}`, m.metric_value);
     }
@@ -361,7 +395,7 @@ export function enrichMetricsWithFallbacks(
 
   // Index existing leverage metrics so we don't double-add
   const existingLeverage = new Set<string>();
-  for (const m of normalized) {
+  for (const m of harmonized) {
     if (m.metric_type === "leverage") {
       existingLeverage.add(`${m.fiscal_year}::${m.metric_name}`);
     }
@@ -369,7 +403,7 @@ export function enrichMetricsWithFallbacks(
 
   // Index existing profitability metrics so we don't double-add
   const existingProfitability = new Set<string>();
-  for (const m of normalized) {
+  for (const m of harmonized) {
     if (m.metric_type === "profitability") {
       existingProfitability.add(`${m.fiscal_year}::${m.metric_name}`);
     }
@@ -838,7 +872,7 @@ export function enrichMetricsWithFallbacks(
   }
 
   if (computed.length === 0) return normalized;
-  return [...normalized, ...computed];
+  return [...harmonized, ...computed];
 }
 
  

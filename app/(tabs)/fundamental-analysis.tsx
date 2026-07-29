@@ -133,6 +133,14 @@ function normalizeQuarter(raw: unknown): number | null {
   return qi >= 1 && qi <= 4 ? qi : null;
 }
 
+function normalizeStatementType(raw: unknown): string {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (v === "income_statement" || v === "incomestatement") return "income";
+  if (v === "balance_sheet" || v === "balancesheet") return "balance";
+  if (v === "cash_flow_statement" || v === "cashflow_statement" || v === "cashflowstatement") return "cashflow";
+  return v;
+}
+
 function isQuarterlySource(sourceFile: string | null | undefined): boolean {
   return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
 }
@@ -1180,7 +1188,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>("income");
   const [periodView, setPeriodView] = useState<StatementPeriodView>("annual");
-  const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
+  const { data, isLoading, refetch, isFetching } = useStatements(stockId);
 
   // ── Online fetch state ────────────────────────────────────────────
   const [fetchingOnline, setFetchingOnline] = useState(false);
@@ -1192,6 +1200,23 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
     try {
       const res = await fetchStatementsOnline(stockId);
       setOnlineResult(res.message);
+
+      // If source returns partial statement types, switch to an available tab
+      // so the user doesn't stay on an empty default view.
+      const availableFromSummary = Array.from(
+        new Set(
+          (res.summary ?? [])
+            .map((s) => normalizeStatementType(s.statement_type))
+            .filter((t): t is string => STMNT_TYPES.includes(t as (typeof STMNT_TYPES)[number])),
+        ),
+      );
+      if (availableFromSummary.length > 0) {
+        const preferredType = availableFromSummary.includes("income") ? "income" : availableFromSummary[0];
+        if (preferredType !== typeFilter) {
+          setTypeFilter(preferredType);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["analysis-statements"] });
       await refetch();
     } catch (err: unknown) {
@@ -1200,7 +1225,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
       setFetchingOnline(false);
       onAutoFetchDone?.();
     }
-  }, [stockId, queryClient, refetch, onAutoFetchDone]);
+  }, [stockId, typeFilter, queryClient, refetch, onAutoFetchDone]);
 
   // Auto-trigger fetch when navigating here from a newly added stock
   useEffect(() => {
@@ -1210,10 +1235,35 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFetch]);
   const statements = data?.statements ?? [];
+  const normalizedStatements = useMemo(
+    () => statements.map((s) => ({ ...s, statement_type: normalizeStatementType(s.statement_type) })),
+    [statements],
+  );
+  const availableStatementTypes = useMemo(
+    () => Array.from(
+      new Set(
+        normalizedStatements
+          .map((s) => s.statement_type)
+          .filter((t): t is string => STMNT_TYPES.includes(t as (typeof STMNT_TYPES)[number])),
+      ),
+    ),
+    [normalizedStatements],
+  );
+  useEffect(() => {
+    if (availableStatementTypes.length === 0) return;
+    if (!typeFilter || !availableStatementTypes.includes(typeFilter)) {
+      setTypeFilter(availableStatementTypes.includes("income") ? "income" : availableStatementTypes[0]);
+    }
+  }, [availableStatementTypes, typeFilter]);
+
+  const scopedStatements = useMemo(
+    () => normalizedStatements.filter((s) => !typeFilter || s.statement_type === typeFilter),
+    [normalizedStatements, typeFilter],
+  );
   const latestPreferred = data?.latest_preferred ?? null;
   const selection = useMemo(
-    () => selectStatementsForDisplay(statements, latestPreferred, periodView),
-    [statements, latestPreferred, periodView],
+    () => selectStatementsForDisplay(scopedStatements, latestPreferred, periodView),
+    [scopedStatements, latestPreferred, periodView],
   );
 
   return (
@@ -1736,8 +1786,6 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
               />
             </View>
           </View>
-                    const yoy = calculateYoYPercent(val, prevVal);
-                                const yoy = calculateYoYPercent(val, prevVal);
           <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 0, paddingBottom: 80 }}>
             <View>
               {/* Header row */}
