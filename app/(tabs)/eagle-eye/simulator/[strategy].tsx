@@ -1,501 +1,155 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
-/**
- * Eagle Eye Simulator — Strategy Detail Page
- *
- * Shows equity curve, open positions, closed trades, and performance breakdowns
- * for one of the three simulator strategies.
- *
- * Route: /eagle-eye/simulator/[strategy]
- */
-
+import {
+  useReadOnlySimulatorIntegrity,
+  useReadOnlySimulatorNav,
+  useReadOnlySimulatorPositions,
+  useReadOnlySimulatorTransactions,
+  type SimulatorBook,
+  type SimulatorIntegrity,
+  type SimulatorPosition,
+  type SimulatorTransaction,
+} from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
-import { useAdminGate } from "@/hooks/useAdminGate";
-import {
-  useSimulatorPerformance,
-  useSimulatorPortfolioDetail,
-  type SimPosition,
-  type StrategyName,
-} from "@/hooks/useSimulator";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useCallback } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, {
-  Defs,
-  LinearGradient,
-  Path,
-  Polyline,
-  Stop,
-} from "react-native-svg";
+import Svg, { Polyline } from "react-native-svg";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+const BOOK_COLORS: Record<SimulatorBook, string> = { BUY: "#16A34A", WATCHLIST: "#2563EB" };
 
-const STRATEGY_COLORS: Record<string, string> = {
-  conservative: "#22c55e",
-  moderate: "#f59e0b",
-  aggressive: "#ef4444",
-  buy: "#22c55e",
-  watchlist: "#38bdf8",
-};
-
-const STRATEGY_LABELS: Record<string, string> = {
-  conservative: "Conservative",
-  moderate: "Moderate",
-  aggressive: "Aggressive",
-  buy: "Buy Signals",
-  watchlist: "Watchlist",
-};
-
-// ── Equity curve chart ───────────────────────────────────────────────────────
-
-function EquityChart({
-  data,
-  color,
-}: {
-  data: Array<{ total_value_kwd: number | null }>;
-  color: string;
-}) {
-  const prices = data.map((d) => d.total_value_kwd ?? 10000);
-  if (prices.length < 2) return null;
-
-  const W = 340;
-  const H = 120;
-  const pad = 8;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
-
-  const pts = prices
-    .map((v, i) => {
-      const x = (i / (prices.length - 1)) * (W - 2 * pad) + pad;
-      const y = pad + ((max - v) / range) * (H - 2 * pad);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  // Filled area path
-  const coords = prices.map((v, i) => ({
-    x: (i / (prices.length - 1)) * (W - 2 * pad) + pad,
-    y: pad + ((max - v) / range) * (H - 2 * pad),
-  }));
-  const linePath = [
-    `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`,
-    ...coords.slice(1).map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`),
-  ].join(" ");
-  const areaPath = [
-    linePath,
-    `L ${coords[coords.length - 1].x.toFixed(1)} ${H}`,
-    `L ${coords[0].x.toFixed(1)} ${H}`,
-    "Z",
-  ].join(" ");
-
-  return (
-    <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-      <Defs>
-        <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor={color} stopOpacity={0.25} />
-          <Stop offset="100%" stopColor={color} stopOpacity={0.02} />
-        </LinearGradient>
-      </Defs>
-      <Path d={areaPath} fill="url(#grad)" />
-      <Polyline points={pts} fill="none" stroke={color} strokeWidth={2} />
-    </Svg>
-  );
+function normalizeBook(value?: string): SimulatorBook {
+  return value?.toUpperCase() === "WATCHLIST" ? "WATCHLIST" : "BUY";
 }
 
-// ── Position row ─────────────────────────────────────────────────────────────
-
-function PositionRow({
-  pos,
-  onPress,
-}: {
-  pos: SimPosition;
-  onPress: () => void;
-}) {
-  const { colors } = useThemeStore();
-  const isOpen = pos.status === "OPEN";
-  const pnl = pos.pnl_pct ?? 0;
-  const pnlColor = pnl >= 0 ? colors.success : colors.danger;
-
-  const _unrealizedPct =
-    isOpen && pos.entry_price && pos.planned_stop_loss != null
-      ? null // we don't have current price here; display entry context
-      : null;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.posRow, { borderBottomColor: colors.borderColor }]}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.posTicker, { color: colors.textPrimary }]}>
-          {pos.ticker}
-        </Text>
-        <Text style={[styles.posMeta, { color: colors.textMuted }]}>
-          {pos.entry_stage ?? ""} · {pos.entry_date ?? ""}
-        </Text>
-      </View>
-      <View style={{ alignItems: "flex-end" }}>
-        {isOpen ? (
-          <>
-            <Text style={[styles.posStatus, { color: colors.accentPrimary }]}>
-              OPEN
-            </Text>
-            <Text style={[styles.posMeta, { color: colors.textMuted }]}>
-              {pos.size_kwd?.toFixed(0)} KWD
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.posPnl, { color: pnlColor }]}>
-              {pnl >= 0 ? "+" : ""}
-              {pnl.toFixed(2)}%
-            </Text>
-            <Text style={[styles.posMeta, { color: colors.textMuted }]}>
-              {pos.exit_reason?.replace(/_/g, " ")}
-            </Text>
-          </>
-        )}
-      </View>
-    </Pressable>
-  );
+function formatKwd(value: number): string {
+  return value.toLocaleString("en-KW", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
-// ── Breakdown section ────────────────────────────────────────────────────────
-
-type AnyRow = Record<string, string | number | null | undefined>;
-
-function BreakdownTable({
-  title,
-  rows,
-  labelKey,
-}: {
-  title: string;
-  rows: AnyRow[];
-  labelKey: string;
-}) {
+function IntegrityStrip({ integrity }: { integrity?: SimulatorIntegrity }) {
   const { colors } = useThemeStore();
-  if (!rows || rows.length === 0) return null;
-
+  const ok = integrity?.seal_verification.pass === true && (integrity?.guard_trips_count ?? 0) === 0;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
-      <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{title}</Text>
-      {rows.map((r, i) => {
-        const label = String(r[labelKey] ?? "?");
-        const trades = Number(r.trades ?? r.count ?? 0);
-        const winRate = Number(r.win_rate ?? 0);
-        const avgPnl = Number(r.avg_pnl_pct ?? r.avg_pnl ?? 0);
-        const pnlColor =
-          avgPnl >= 0 ? colors.success : colors.danger;
-
-        return (
-          <View
-            key={i}
-            style={[styles.breakdownRow, { borderBottomColor: colors.borderColor }]}
-          >
-            <Text
-              style={[styles.breakdownLabel, { color: colors.textSecondary }]}
-              numberOfLines={1}
-            >
-              {label.replace(/_/g, " ")}
-            </Text>
-            <Text style={[styles.breakdownStat, { color: colors.textMuted }]}>
-              {trades}T
-            </Text>
-            <Text style={[styles.breakdownStat, { color: colors.textMuted }]}>
-              {winRate.toFixed(0)}%W
-            </Text>
-            <Text style={[styles.breakdownStat, { color: pnlColor }]}>
-              {avgPnl >= 0 ? "+" : ""}
-              {avgPnl.toFixed(1)}%
-            </Text>
-          </View>
-        );
-      })}
+    <View style={[styles.integrityStrip, { backgroundColor: ok ? colors.successBg : colors.dangerBg, borderColor: ok ? colors.success : colors.danger }]}>
+      <Text style={[styles.integrityText, { color: ok ? colors.successText : colors.dangerText }]}> 
+        {ok ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · 0 guard trips` : "Simulator integrity warning"}
+      </Text>
     </View>
   );
 }
 
-// ── Main screen ──────────────────────────────────────────────────────────────
+function EquityLine({ values, color }: { values: number[]; color: string }) {
+  if (values.length < 2) return null;
+  const width = 340;
+  const height = 96;
+  const pad = 6;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const points = values
+    .map((value, index) => {
+      const x = pad + (index / (values.length - 1)) * (width - pad * 2);
+      const y = pad + ((max - value) / range) * (height - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}><Polyline points={points} fill="none" stroke={color} strokeWidth={2} /></Svg>;
+}
 
-export default function SimulatorStrategyScreen() {
+function PositionRow({ position }: { position: SimulatorPosition }) {
+  const { colors } = useThemeStore();
+  const pnlColor = position.unrealized_pnl_pct >= 0 ? colors.success : colors.danger;
+  return (
+    <View style={[styles.tableRow, { borderBottomColor: colors.borderColor }]}>
+      <View style={styles.symbolCell}>
+        <Text style={[styles.symbolText, { color: colors.textPrimary }]}>{position.symbol}</Text>
+        <Text style={[styles.mutedText, { color: colors.textMuted }]}>{position.entry_reason?.replace(/_/g, " ") ?? "entry"}</Text>
+      </View>
+      <Text style={[styles.cellText, { color: colors.textSecondary }]}>{position.entry_date ?? "-"}</Text>
+      <Text style={[styles.cellText, { color: colors.textSecondary }]}>{position.sessions_held ?? 0}</Text>
+      <Text style={[styles.cellText, { color: pnlColor }]}>{position.unrealized_pnl_pct >= 0 ? "+" : ""}{position.unrealized_pnl_pct.toFixed(2)}%</Text>
+      <Text style={[styles.cellText, { color: colors.textMuted }]}>{position.current_lifecycle ?? "-"} · {position.avoid_tier}</Text>
+    </View>
+  );
+}
+
+function TransactionRow({ transaction }: { transaction: SimulatorTransaction }) {
+  const { colors } = useThemeStore();
+  const isVoid = transaction.transaction_type === "VOID" || transaction.status === "VOID";
+  return (
+    <View style={[styles.txRow, { borderBottomColor: colors.borderColor }]}>
+      <View style={styles.symbolCell}>
+        <Text style={[styles.symbolText, { color: colors.textPrimary }]}>{transaction.symbol}</Text>
+        <Text style={[styles.mutedText, { color: colors.textMuted }]}>{transaction.fill_session} · {transaction.reason.replace(/_/g, " ")}</Text>
+      </View>
+      <View style={[styles.voidBadge, { backgroundColor: isVoid ? colors.dangerBg : colors.bgCardHover, borderColor: isVoid ? colors.danger : colors.borderColor }]}>
+        <Text style={[styles.voidBadgeText, { color: isVoid ? colors.dangerText : colors.textSecondary }]}>{transaction.transaction_type}</Text>
+      </View>
+      <Text style={[styles.txValue, { color: colors.textSecondary }]}>{formatKwd(transaction.net_cash_delta_kwd)}</Text>
+    </View>
+  );
+}
+
+export default function SimulatorBookDetailScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
-  const { isAdmin, isLoading: isAdminLoading } = useAdminGate();
   const { strategy } = useLocalSearchParams<{ strategy: string }>();
-  const stratKey = (strategy ?? "buy").toLowerCase();
-  const stratUpper = stratKey.toUpperCase() as StrategyName;
-  const accentColor = STRATEGY_COLORS[stratKey] ?? colors.accentPrimary;
-
-  const { data, isLoading, refetch, isRefetching } = useSimulatorPortfolioDetail(stratUpper, isAdmin);
-  const { data: perf } = useSimulatorPerformance(stratUpper, isAdmin);
-
-  const [tab, setTab] = useState<"open" | "closed" | "perf">("open");
+  const book = normalizeBook(strategy);
+  const accent = BOOK_COLORS[book];
+  const { data: positions = [], isLoading: positionsLoading, isRefetching, refetch } = useReadOnlySimulatorPositions(book);
+  const { data: transactions = [] } = useReadOnlySimulatorTransactions(book, undefined, 25);
+  const { data: nav = [] } = useReadOnlySimulatorNav(book, 90);
+  const { data: integrity } = useReadOnlySimulatorIntegrity();
   const onRefresh = useCallback(() => refetch(), [refetch]);
-
-  const handlePositionPress = useCallback(
-    (posId: number) => {
-      router.push(`/eagle-eye/simulator/position/${posId}`);
-    },
-    []
-  );
-
-  if (isAdminLoading || (isAdmin && isLoading)) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
-        <ActivityIndicator size="large" color={accentColor} />
-      </View>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.bgPrimary, paddingHorizontal: 24 }]}>
-        <Text style={[styles.pageTitle, { color: colors.textPrimary, textAlign: "center" }]}>Admin Access Required</Text>
-        <Text style={[styles.subtitle, { color: colors.textMuted, textAlign: "center" }]}>Simulator details are available to admin users only.</Text>
-        <Pressable onPress={() => router.replace("/(tabs)/eagle-eye")} style={[styles.backBtn, { marginTop: 12 }]}>
-          <Text style={[styles.backText, { color: colors.accentPrimary }]}>Back to Scanner</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (!data) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.bgPrimary }]}>
-        <Text style={{ color: colors.textMuted }}>Strategy not found</Text>
-      </View>
-    );
-  }
-
-  const { summary, equity_curve, open_positions, recent_closed_trades } = data;
+  const latest = nav[nav.length - 1];
 
   return (
     <ScrollView
       style={{ backgroundColor: colors.bgPrimary }}
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 },
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={onRefresh}
-          tintColor={accentColor}
-        />
-      }
+      contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={accent} />}
     >
-      {/* Back + Title */}
-      <Pressable onPress={() => router.back()} style={styles.backBtn}>
-        <Text style={[styles.backText, { color: accentColor }]}>← Simulator</Text>
-      </Pressable>
-      <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>
-        {STRATEGY_LABELS[stratKey]} Strategy
-      </Text>
-
-      {/* KPIs */}
-      <View style={[styles.kpiRow]}>
-        {[
-          {
-            label: "Current Value",
-            value: `${summary.total_value_kwd.toLocaleString("en-KW", { maximumFractionDigits: 0 })} KWD`,
-          },
-          {
-            label: "Return",
-            value: `${summary.cumulative_return_pct >= 0 ? "+" : ""}${summary.cumulative_return_pct.toFixed(2)}%`,
-            color: summary.cumulative_return_pct >= 0 ? colors.success : colors.danger,
-          },
-          { label: "Win Rate", value: `${summary.win_rate.toFixed(1)}%` },
-          { label: "Max DD", value: `${summary.max_drawdown_pct.toFixed(1)}%`, color: colors.danger },
-          { label: "Profit Factor", value: summary.profit_factor.toFixed(2) },
-          { label: "Open", value: String(summary.open_positions_count) },
-        ].map((kpi) => (
-          <View key={kpi.label} style={[styles.kpiCard, { backgroundColor: colors.bgCard }]}>
-            <Text style={[styles.kpiValue, { color: kpi.color ?? colors.textPrimary }]}>
-              {kpi.value}
-            </Text>
-            <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>{kpi.label}</Text>
-          </View>
-        ))}
+      <Pressable onPress={() => router.back()} style={styles.backBtn}><Text style={[styles.backText, { color: accent }]}>Back to simulator</Text></Pressable>
+      <IntegrityStrip integrity={integrity} />
+      <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>{book} Paper Book</Text>
+      {book === "WATCHLIST" ? <Text style={[styles.subtitle, { color: colors.textMuted }]}>Shadow book — entries the system vetoed, tracked to measure selectivity.</Text> : null}
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>NAV</Text>
+        <Text style={[styles.navText, { color: colors.textPrimary }]}>{formatKwd(latest?.nav_kwd ?? 100_000)} KWD</Text>
+        <EquityLine values={nav.map((point) => point.nav_kwd)} color={accent} />
       </View>
-
-      {/* Equity Curve */}
-      {equity_curve.length > 1 && (
-        <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Equity Curve</Text>
-          <EquityChart data={equity_curve} color={accentColor} />
-          <View style={styles.equityLabels}>
-            <Text style={[styles.equityLabel, { color: colors.textMuted }]}>
-              {equity_curve[0]?.date}
-            </Text>
-            <Text style={[styles.equityLabel, { color: colors.textMuted }]}>
-              {equity_curve[equity_curve.length - 1]?.date}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Tab selector */}
-      <View style={[styles.tabBar, { backgroundColor: colors.bgCard }]}>
-        {(["open", "closed", "perf"] as const).map((t) => (
-          <Pressable
-            key={t}
-            onPress={() => setTab(t)}
-            style={[styles.tabBtn, tab === t && { borderBottomColor: accentColor, borderBottomWidth: 2 }]}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                { color: tab === t ? accentColor : colors.textMuted },
-              ]}
-            >
-              {t === "open" ? `Open (${open_positions.length})` : t === "closed" ? `Closed (${recent_closed_trades.length})` : "Performance"}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Open positions</Text>
+        {positionsLoading ? <ActivityIndicator color={accent} /> : positions.length === 0 ? <Text style={[styles.emptyText, { color: colors.textMuted }]}>No open positions from the ledger.</Text> : positions.map((position) => <PositionRow key={position.symbol} position={position} />)}
       </View>
-
-      {/* Tab content */}
-      {tab === "open" && (
-        <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
-          {open_positions.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No open positions
-            </Text>
-          ) : (
-            open_positions.map((pos) => (
-              <PositionRow
-                key={pos.id}
-                pos={pos}
-                onPress={() => handlePositionPress(pos.id)}
-              />
-            ))
-          )}
-        </View>
-      )}
-
-      {tab === "closed" && (
-        <View style={[styles.card, { backgroundColor: colors.bgCard }]}>
-          {recent_closed_trades.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No closed trades yet
-            </Text>
-          ) : (
-            recent_closed_trades.map((pos) => (
-              <PositionRow
-                key={pos.id}
-                pos={pos}
-                onPress={() => handlePositionPress(pos.id)}
-              />
-            ))
-          )}
-        </View>
-      )}
-
-      {tab === "perf" && perf && (
-        <>
-          <BreakdownTable
-            title="By Stage at Entry"
-            rows={perf.by_stage as unknown as AnyRow[]}
-            labelKey="stage"
-          />
-          <BreakdownTable
-            title="By Confidence Band"
-            rows={perf.by_confidence_band.map((r) => ({
-              stage: r.band,
-              trades: r.trades,
-              win_rate: r.win_rate,
-              avg_pnl_pct: r.avg_pnl_pct,
-            } as AnyRow))}
-            labelKey="stage"
-          />
-          <BreakdownTable
-            title="By Exit Reason"
-            rows={perf.by_exit_reason.map((r) => ({
-              stage: r.exit_reason,
-              trades: r.count,
-              avg_pnl_pct: r.avg_pnl,
-              win_rate: 0,
-            } as AnyRow))}
-            labelKey="stage"
-          />
-        </>
-      )}
+      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Recent transactions</Text>
+        {transactions.length === 0 ? <Text style={[styles.emptyText, { color: colors.textMuted }]}>No ledger transactions yet.</Text> : transactions.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} />)}
+      </View>
     </ScrollView>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   scrollContent: { paddingHorizontal: 16, gap: 14 },
-
-  backBtn: { marginBottom: 4 },
-  backText: { fontSize: 14, fontWeight: "600" },
-  pageTitle: { fontSize: 22, fontWeight: "700" },
-  subtitle: { fontSize: 13, lineHeight: 19, marginTop: 8 },
-
-  kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  kpiCard: {
-    flex: 1,
-    minWidth: "30%",
-    borderRadius: 10,
-    padding: 10,
-    alignItems: "center",
-  },
-  kpiValue: { fontSize: 16, fontWeight: "700" },
-  kpiLabel: { fontSize: 11, marginTop: 2 },
-
-  card: { borderRadius: 12, padding: 14 },
-  cardTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10 },
-
-  equityLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  equityLabel: { fontSize: 10 },
-
-  tabBar: {
-    flexDirection: "row",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  tabText: { fontSize: 13, fontWeight: "600" },
-
-  posRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  posTicker: { fontSize: 14, fontWeight: "700" },
-  posMeta: { fontSize: 11, marginTop: 2 },
-  posStatus: { fontSize: 12, fontWeight: "700" },
-  posPnl: { fontSize: 14, fontWeight: "700" },
-
-  breakdownRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 7,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  breakdownLabel: { flex: 2, fontSize: 12 },
-  breakdownStat: { flex: 1, fontSize: 12, textAlign: "right" },
-
-  emptyText: { fontSize: 13, textAlign: "center", padding: 24 },
+  backBtn: { alignSelf: "flex-start", paddingVertical: 4 },
+  backText: { fontSize: 14, fontWeight: "700" },
+  integrityStrip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  integrityText: { fontSize: 12, fontWeight: "700" },
+  pageTitle: { fontSize: 24, fontWeight: "800" },
+  subtitle: { fontSize: 13, lineHeight: 19 },
+  card: { borderWidth: 1, borderRadius: 8, padding: 14, gap: 10 },
+  cardTitle: { fontSize: 16, fontWeight: "800" },
+  kpiLabel: { fontSize: 12, fontWeight: "700" },
+  navText: { fontSize: 26, fontWeight: "800" },
+  tableRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth },
+  symbolCell: { flex: 1.4, minWidth: 96 },
+  symbolText: { fontSize: 13, fontWeight: "800" },
+  mutedText: { fontSize: 11, marginTop: 2 },
+  cellText: { flex: 1, fontSize: 12, textAlign: "right" },
+  txRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth },
+  voidBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  voidBadgeText: { fontSize: 11, fontWeight: "800" },
+  txValue: { width: 96, textAlign: "right", fontSize: 12, fontWeight: "700" },
+  emptyText: { fontSize: 13, lineHeight: 19, textAlign: "center", paddingVertical: 16 },
 });

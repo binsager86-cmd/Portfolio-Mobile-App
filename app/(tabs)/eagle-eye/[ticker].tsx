@@ -19,6 +19,7 @@ import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
 import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeStock } from "@/hooks/useEagleEye";
+import { useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -50,6 +51,7 @@ export default function EagleEyeDetailScreen() {
   const t = isDnaRoute ? "" : (ticker ?? "").toUpperCase().trim();
 
   const { data, isLoading, isError, refetch } = useEagleEyeStock(t, 0, !isDnaRoute);
+  const { data: simulatorStates } = useReadOnlySimulatorSymbolStates(!isDnaRoute);
   const analysis = data?.data;
 
   // Safety modal — auto-show when requires_confirmation
@@ -190,6 +192,7 @@ export default function EagleEyeDetailScreen() {
               <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
                 {analysis.confidence.toFixed(0)}% confidence
               </Text>
+              <SimulatorStateBadge state={simulatorStates?.[analysis.ticker]} />
             </View>
           </View>
 
@@ -347,6 +350,32 @@ function SectionTitle({
   );
 }
 
+function SimulatorStateBadge({ state }: { state?: SimulatorSymbolState }) {
+  const { colors } = useThemeStore();
+  const lifecycle = state?.lifecycle ?? "NEUTRAL";
+  const tier = state?.tier ?? "NONE";
+  const palette = getSimulatorStatePalette(lifecycle, tier, colors);
+  return (
+    <View style={[styles.simStateBadge, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+      <Text style={[styles.simStateText, { color: palette.text }]} numberOfLines={1}>
+        {lifecycle} · {tier}
+      </Text>
+    </View>
+  );
+}
+
+function getSimulatorStatePalette(
+  lifecycle: string,
+  tier: string,
+  colors: import("@/constants/theme").ThemePalette,
+) {
+  if (tier === "AVOID_HARD") return { bg: colors.dangerBg, text: colors.dangerText, border: colors.danger };
+  if (tier === "AVOID_SOFT") return { bg: colors.warningBg, text: colors.warning, border: colors.warning };
+  if (lifecycle === "MARKUP_ACTIVE") return { bg: "#DBEAFE", text: "#1D4ED8", border: "#2563EB" };
+  if (lifecycle === "BASE_VALID") return { bg: colors.successBg, text: colors.successText, border: colors.success };
+  return { bg: colors.bgCardHover, text: colors.textSecondary, border: colors.borderColor };
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -422,6 +451,17 @@ const styles = StyleSheet.create({
   heroConfidence: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  simStateBadge: {
+    maxWidth: 210,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  simStateText: {
+    fontSize: 10,
+    fontWeight: "800",
   },
   thesis: {
     fontSize: 14,
