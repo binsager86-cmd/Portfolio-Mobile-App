@@ -8,6 +8,9 @@ import { Stack } from "expo-router";
  * - [ticker]-dna    → DNA profile
  * - settings        → Eagle Eye settings
  * - simulator       → paper trading simulator index
+ * - simulator/decision → decision transparency scanner
+ * - simulator/decision/[ticker] → decision detail
+ * - simulator/decision/[ticker]-dna → cycle history
  * - simulator/[strategy]            → strategy detail
  * - simulator/position/[id]         → position detail
  */
@@ -19,6 +22,9 @@ export default function EagleEyeLayout() {
       <Stack.Screen name="[ticker]-dna" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="simulator/index" />
+      <Stack.Screen name="simulator/decision/index" />
+      <Stack.Screen name="simulator/decision/[ticker]" />
+      <Stack.Screen name="simulator/decision/[ticker]-dna" />
       <Stack.Screen name="simulator/[strategy]" />
       <Stack.Screen name="simulator/position/[id]" />
       <Stack.Screen name="methodology" />

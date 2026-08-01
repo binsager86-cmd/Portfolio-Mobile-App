@@ -30,8 +30,8 @@ const EAGLE_EYE_TABS: readonly EagleEyeTab[] = [
     key: "simulator",
     label: "Simulator",
     icon: "play-circle",
-    href: "/(tabs)/eagle-eye/simulator",
-    matches: ["/eagle-eye/simulator"],
+    href: "/(tabs)/eagle-eye/simulator/decision",
+    matches: ["/eagle-eye/simulator/decision", "/eagle-eye/simulator"],
   },
   {
     key: "methodology",

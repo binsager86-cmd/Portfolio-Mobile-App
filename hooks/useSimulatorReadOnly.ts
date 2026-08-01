@@ -70,10 +70,80 @@ export interface SimulatorDecision {
 
 export interface SimulatorSymbolState {
   symbol: string;
+  book?: SimulatorBook | null;
   lifecycle: string;
   tier: string;
   session: string | null;
   source: "decision_log" | "day_zero_inventory";
+  last_kind?: string | null;
+  last_disposition?: string | null;
+  confidence?: number | null;
+  gates_passing?: number | null;
+  gates?: Array<Record<string, unknown>> | null;
+  soft_conditions?: Record<string, unknown> | null;
+  hard_refs?: Record<string, unknown> | null;
+  base?: Record<string, unknown> | null;
+  entry_paths?: Record<string, unknown> | null;
+  exit_watch?: Record<string, unknown> | null;
+}
+
+export interface SimulatorScannerColumn {
+  key: string;
+  label: string;
+  source: string;
+}
+
+export interface SimulatorScannerChip {
+  key: string;
+  label: string;
+}
+
+export interface SimulatorSymbolEvent {
+  id: number;
+  symbol: string;
+  decision_session: string;
+  created_at: string;
+  kind: string;
+  disposition: string;
+  payload: {
+    created_at?: string | null;
+    decision_session?: string | null;
+    portfolio?: SimulatorBook | null;
+    reason?: string | null;
+    veto_tier?: string | null;
+    would_have_entry_reason?: string | null;
+    state_snapshot?: Record<string, unknown>;
+    frozen_action?: Record<string, unknown>;
+  };
+}
+
+export interface SimulatorCycle {
+  id: number;
+  book: SimulatorBook;
+  symbol: string;
+  base_start: string | null;
+  base_end: string | null;
+  entry_date: string | null;
+  entry_path: string | null;
+  entry_price: number;
+  peak_mfe: number;
+  shakeout_dates: string[];
+  exit_date: string | null;
+  exit_reason: string | null;
+  exit_price: number | null;
+  pnl_pct: number;
+}
+
+export interface SimulatorTrace {
+  symbol: string;
+  state: SimulatorSymbolState | null;
+  events: SimulatorSymbolEvent[];
+  cycles: SimulatorCycle[];
+}
+
+export interface SimulatorScannerColumnsResponse {
+  columns: SimulatorScannerColumn[];
+  chips: SimulatorScannerChip[];
 }
 
 export interface SimulatorIntegrity {
@@ -106,6 +176,10 @@ export const simulatorReadOnlyKeys = {
   decisions: (symbol?: string, limit?: number) =>
     [...simulatorReadOnlyKeys.all, "decisions", symbol ?? "all", limit ?? 100] as const,
   states: () => [...simulatorReadOnlyKeys.all, "states"] as const,
+  trace: (symbol: string) => [...simulatorReadOnlyKeys.all, "trace", symbol] as const,
+  events: (symbol: string, limit: number) => [...simulatorReadOnlyKeys.all, "events", symbol, limit] as const,
+  cycles: (symbol: string) => [...simulatorReadOnlyKeys.all, "cycles", symbol] as const,
+  scannerColumns: () => [...simulatorReadOnlyKeys.all, "scanner-columns"] as const,
   integrity: () => [...simulatorReadOnlyKeys.all, "integrity"] as const,
 };
 
@@ -181,6 +255,62 @@ export function useReadOnlySimulatorSymbolStates(enabled = true) {
       return data.symbols;
     },
     staleTime: 60_000,
+    enabled,
+  });
+}
+
+export function useReadOnlySimulatorTrace(symbol: string, enabled = true) {
+  const normalized = symbol.toUpperCase();
+  return useQuery({
+    queryKey: simulatorReadOnlyKeys.trace(normalized),
+    queryFn: async () => {
+      const { data } = await api.get<SimulatorTrace>(`/api/v2/simulator/symbols/${encodeURIComponent(normalized)}/trace`);
+      return data;
+    },
+    staleTime: 30_000,
+    enabled: enabled && !!normalized,
+  });
+}
+
+export function useReadOnlySimulatorSymbolEvents(symbol: string, limit = 50, enabled = true) {
+  const normalized = symbol.toUpperCase();
+  return useQuery({
+    queryKey: simulatorReadOnlyKeys.events(normalized, limit),
+    queryFn: async () => {
+      const { data } = await api.get<{ events: SimulatorSymbolEvent[]; count: number }>(
+        `/api/v2/simulator/symbols/${encodeURIComponent(normalized)}/events`,
+        { params: { limit } },
+      );
+      return data.events;
+    },
+    staleTime: 30_000,
+    enabled: enabled && !!normalized,
+  });
+}
+
+export function useReadOnlySimulatorSymbolCycles(symbol: string, enabled = true) {
+  const normalized = symbol.toUpperCase();
+  return useQuery({
+    queryKey: simulatorReadOnlyKeys.cycles(normalized),
+    queryFn: async () => {
+      const { data } = await api.get<{ cycles: SimulatorCycle[]; count: number }>(
+        `/api/v2/simulator/symbols/${encodeURIComponent(normalized)}/cycles`,
+      );
+      return data.cycles;
+    },
+    staleTime: 30_000,
+    enabled: enabled && !!normalized,
+  });
+}
+
+export function useReadOnlySimulatorScannerColumns(enabled = true) {
+  return useQuery({
+    queryKey: simulatorReadOnlyKeys.scannerColumns(),
+    queryFn: async () => {
+      const { data } = await api.get<SimulatorScannerColumnsResponse>("/api/v2/simulator/scanner/v2-columns");
+      return data;
+    },
+    staleTime: 5 * 60_000,
     enabled,
   });
 }
