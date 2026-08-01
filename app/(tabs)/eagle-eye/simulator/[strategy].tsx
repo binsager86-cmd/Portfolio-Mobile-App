@@ -28,11 +28,20 @@ function formatKwd(value: number): string {
 
 function IntegrityStrip({ integrity }: { integrity?: SimulatorIntegrity }) {
   const { colors } = useThemeStore();
-  const ok = integrity?.seal_verification.pass === true && (integrity?.guard_trips_count ?? 0) === 0;
+  const sealed = integrity?.seal_verification.pass === true && (integrity?.guard_trips_count ?? 0) === 0;
+  const staleProjection = integrity?.projection_stale === true || integrity?.projection_status === "STALE";
+  const ok = sealed && !staleProjection;
+  const bg = ok ? colors.successBg : staleProjection ? colors.warning + "22" : colors.dangerBg;
+  const border = ok ? colors.success : staleProjection ? colors.warning : colors.danger;
+  const textColor = ok ? colors.successText : staleProjection ? colors.warning : colors.dangerText;
   return (
-    <View style={[styles.integrityStrip, { backgroundColor: ok ? colors.successBg : colors.dangerBg, borderColor: ok ? colors.success : colors.danger }]}>
-      <Text style={[styles.integrityText, { color: ok ? colors.successText : colors.dangerText }]}> 
-        {ok ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · 0 guard trips` : "Simulator integrity warning"}
+    <View style={[styles.integrityStrip, { backgroundColor: bg, borderColor: border }]}>
+      <Text style={[styles.integrityText, { color: textColor }]}> 
+        {ok
+          ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · 0 guard trips`
+          : staleProjection
+          ? `Projection stale · ${integrity?.projection_stale_reason ?? "verification mismatch"}`
+          : "Simulator integrity warning"}
       </Text>
     </View>
   );

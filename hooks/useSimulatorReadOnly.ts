@@ -86,7 +86,13 @@ export interface SimulatorIntegrity {
   };
   guard_trips_count: number;
   last_session_processed: string | null;
+  projection_status?: "FRESH" | "STALE" | string;
+  projection_stale?: boolean;
+  projection_stale_reason?: string | null;
+  projection_row_count_match?: boolean;
+  projection_checksum_match?: boolean;
   row_counts: Record<string, number>;
+  source_row_counts?: Record<string, number>;
   ledger_sha256: string;
 }
 
