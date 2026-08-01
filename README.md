@@ -88,6 +88,10 @@ Expo embeds `EXPO_PUBLIC_*` variables at build time. After changing any env var:
 - **EAS:** trigger a new build
 - **DigitalOcean:** redeploy the app
 
+## Product Rules
+
+- [Fundamental statement period rules](docs/fundamental-statement-period-rules.md)
+
 ## Project Structure
 
 ```

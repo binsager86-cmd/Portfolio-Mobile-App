@@ -42,6 +42,29 @@ export async function calculateMetrics(
   return data.data;
 }
 
+/** Ensure metrics are calculated for all valid statement periods (lazy, idempotent). */
+export async function ensureStockMetrics(
+  stockId: number,
+): Promise<{
+  total_periods: number;
+  calculated_periods: number;
+  skipped_periods: number;
+  failed_periods: number;
+  failures: Array<{ period_end_date: string; error: string }>;
+}> {
+  const { data } = await api.post<{
+    status: string;
+    data: {
+      total_periods: number;
+      calculated_periods: number;
+      skipped_periods: number;
+      failed_periods: number;
+      failures: Array<{ period_end_date: string; error: string }>;
+    };
+  }>(`/api/v1/fundamental/stocks/${stockId}/metrics/ensure`);
+  return data.data;
+}
+
 // ── Growth ──────────────────────────────────────────────────────────
 
 /** Get growth analysis. */

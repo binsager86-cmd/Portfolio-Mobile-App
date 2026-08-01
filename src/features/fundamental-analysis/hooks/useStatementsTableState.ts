@@ -238,7 +238,14 @@ export function useStatementsTableState(
 
   const periods: PeriodInfo[] = useMemo(() =>
     [...statements]
-      .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date))
+      .sort((a, b) => {
+        if (periodView === "annual" && ttmPeriodEndDate != null) {
+          const aIsTtm = a.period_end_date === ttmPeriodEndDate;
+          const bIsTtm = b.period_end_date === ttmPeriodEndDate;
+          if (aIsTtm !== bIsTtm) return aIsTtm ? 1 : -1;
+        }
+        return a.period_end_date.localeCompare(b.period_end_date);
+      })
       .map((s) => {
         const q = s.fiscal_quarter ?? inferQuarterFromDate(s.period_end_date);
         const isTtmPeriod = periodView === "annual"

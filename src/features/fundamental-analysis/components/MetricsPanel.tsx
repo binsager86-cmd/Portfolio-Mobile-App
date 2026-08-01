@@ -7,7 +7,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";
@@ -16,6 +16,10 @@ import { showErrorAlert } from "@/lib/errorHandling";
 import type { TableData } from "@/lib/exportAnalysis";
 import type { MetricsCategoryData } from "@/lib/exportMetricsPdf";
 import { calculateMetrics, StockMetric } from "@/services/api";
+import {
+  buildMetricCalculationSignature,
+  calculateAllMetricPeriods,
+} from "../metricCalculation";
 import { st } from "../styles";
 import { CATEGORY_LABELS, type PanelWithSymbolProps } from "../types";
 import { buildHistoricalMetrics, buildMetricYearLabels, enrichMetricsWithFallbacks, formatMetricValue } from "../utils";
@@ -33,6 +37,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"historical" | "grouped">("historical");
   const [calcAllRunning, setCalcAllRunning] = useState(false);
+  const autoCalculatedSignatureRef = useRef<string | null>(null);
 
   const stmtQ = useStatements(stockId);
   const periods = useMemo(() => {
@@ -59,6 +64,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   }, [stmtQ.data?.latest_preferred?.period_end_date, periods, selectedPeriod]);
 
   const { data, isLoading, refetch, isFetching } = useStockMetrics(stockId);
+  const periodsSignature = useMemo(() => buildMetricCalculationSignature(periods), [periods]);
 
   const calcMut = useMutation({
     mutationFn: (p: { period_end_date: string; fiscal_year: number; fiscal_quarter?: number }) => calculateMetrics(stockId, p),
@@ -69,22 +75,35 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   const handleCalculateAll = async () => {
     if (periods.length === 0) return;
     setCalcAllRunning(true);
-    const results = await Promise.allSettled(
-      periods.map((p) =>
-        calculateMetrics(stockId, {
-          period_end_date: p.period_end_date,
-          fiscal_year: p.fiscal_year,
-          fiscal_quarter: p.fiscal_quarter ?? undefined,
-        })
-      )
-    );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorAlert("Partial Failure", new Error(`${failed}/${periods.length} period calculations failed.`));
+    const summary = await calculateAllMetricPeriods(stockId, periods);
+    if (summary.failedPeriods > 0) {
+      showErrorAlert("Partial Failure", new Error(`${summary.failedPeriods}/${summary.totalPeriods} period calculations failed.`));
     }
     queryClient.invalidateQueries({ queryKey: ["analysis-metrics", stockId] });
     setCalcAllRunning(false);
   };
+
+  useEffect(() => {
+    if (!periodsSignature || periods.length === 0 || stmtQ.isLoading || stmtQ.isFetching) return;
+    if (autoCalculatedSignatureRef.current === periodsSignature) return;
+
+    let cancelled = false;
+    autoCalculatedSignatureRef.current = periodsSignature;
+    setCalcAllRunning(true);
+
+    void calculateAllMetricPeriods(stockId, periods)
+      .then((summary) => {
+        if (summary.failedPeriods > 0 && __DEV__) {
+          console.warn("Automatic metric calculation partially failed", summary);
+        }
+      })
+      .finally(() => {
+        queryClient.invalidateQueries({ queryKey: ["analysis-metrics", stockId] });
+        if (!cancelled) setCalcAllRunning(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [periodsSignature, periods, stockId, queryClient, stmtQ.isLoading, stmtQ.isFetching]);
 
   const rawMetrics = data?.metrics ?? [];
   const statements = stmtQ.data?.statements ?? [];
@@ -208,7 +227,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
         </Card>
       </FadeIn>
 
-      {isLoading ? (
+      {isLoading || (calcAllRunning && categories.length === 0) ? (
         <FAPanelSkeleton />
       ) : categories.length === 0 ? (
         <View style={st.empty}>

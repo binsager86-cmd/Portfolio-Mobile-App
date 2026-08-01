@@ -20,6 +20,11 @@ import {
   type FinancialStatement,
   type LatestPreferredStatementPeriod,
 } from "@/services/api";
+import {
+  buildSyntheticTtmStatement,
+  isAnnualStatement,
+  normalizeQuarter,
+} from "../statementPeriodSelection";
 import { st } from "../styles";
 import { STMNT_META, type PanelWithSymbolProps } from "../types";
 import { formatLineItemValue } from "../utils";
@@ -64,98 +69,6 @@ function calculateYoYPercent(currentValue: number | null | undefined, previousVa
   if (currentValue == null || previousValue == null || previousValue === 0) return null;
   return ((currentValue - previousValue) / previousValue) * 100;
 }
-type StatementLineItem = FinancialStatement["line_items"][number];
-
-function normalizeQuarter(raw: unknown): number | null {
-  if (raw == null) return null;
-  const q = Number(raw);
-  if (!Number.isFinite(q)) return null;
-  const qi = Math.trunc(q);
-  return qi >= 1 && qi <= 4 ? qi : null;
-}
-
-function isQuarterlySource(sourceFile: string | null | undefined): boolean {
-  return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
-}
-
-function isAnnualStatement(statement: FinancialStatement): boolean {
-  const quarter = normalizeQuarter(statement.fiscal_quarter);
-  if (quarter === 4) return true;
-  if (quarter != null) return false;
-  if (isQuarterlySource(statement.source_file)) return false;
-  return true;
-}
-
-function isQuarterlyStatement(statement: FinancialStatement): boolean {
-  return !isAnnualStatement(statement);
-}
-
-function sortLineItems(statement: FinancialStatement): StatementLineItem[] {
-  return [...(statement.line_items ?? [])].sort(
-    (a, b) => (a.order_index ?? 10_000) - (b.order_index ?? 10_000),
-  );
-}
-
-function buildSyntheticTtmStatement(
-  latestQuarter: FinancialStatement | null,
-  annualHistory: FinancialStatement[],
-  quarterlyHistory: FinancialStatement[],
-): FinancialStatement | null {
-  if (!latestQuarter) return null;
-
-  const statementType = String(latestQuarter.statement_type ?? "").toLowerCase();
-  if (statementType !== "income" && statementType !== "cashflow") return null;
-
-  const latestQuarterNum = normalizeQuarter(latestQuarter.fiscal_quarter);
-  if (latestQuarterNum == null || latestQuarterNum === 4) return null;
-
-  const priorAnnual = annualHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1,
-  );
-  if (!priorAnnual) return null;
-
-  const priorSameQuarter = quarterlyHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1
-      && normalizeQuarter(statement.fiscal_quarter) === latestQuarterNum,
-  );
-  if (!priorSameQuarter) return null;
-
-  const annualByCode = new Map<string, StatementLineItem>();
-  const priorByCode = new Map<string, StatementLineItem>();
-  for (const lineItem of sortLineItems(priorAnnual)) {
-    annualByCode.set(lineItem.line_item_code, lineItem);
-  }
-  for (const lineItem of sortLineItems(priorSameQuarter)) {
-    priorByCode.set(lineItem.line_item_code, lineItem);
-  }
-
-  const syntheticLineItems: StatementLineItem[] = [];
-  for (const latestItem of sortLineItems(latestQuarter)) {
-    const annualItem = annualByCode.get(latestItem.line_item_code);
-    const priorQuarterItem = priorByCode.get(latestItem.line_item_code);
-    const annualAmount = annualItem?.amount ?? 0;
-    const priorQuarterAmount = priorQuarterItem?.amount ?? 0;
-    const ttmAmount = annualAmount + latestItem.amount - priorQuarterAmount;
-
-    syntheticLineItems.push({
-      ...latestItem,
-      statement_id: latestQuarter.id,
-      amount: ttmAmount,
-      manually_edited: false,
-    });
-  }
-
-  if (syntheticLineItems.length === 0) return null;
-
-  return {
-    ...latestQuarter,
-    line_items: syntheticLineItems,
-    source_file: latestQuarter.source_file
-      ? `${latestQuarter.source_file}#derived-ttm`
-      : "derived-ttm",
-    notes: "Derived TTM from annual + latest quarter - prior-year same quarter",
-  };
-}
 
 function selectComparisonStatements(
   statements: FinancialStatement[],
@@ -169,7 +82,7 @@ function selectComparisonStatements(
     .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
 
   const annualHistory = normalized.filter((statement) => isAnnualStatement(statement));
-  const quarterlyHistory = normalized.filter((statement) => isQuarterlyStatement(statement));
+  const quarterlyHistory = normalized.filter((statement) => normalizeQuarter(statement.fiscal_quarter) != null);
 
   let latestQuarter: FinancialStatement | null = null;
   const preferredQuarter = normalizeQuarter(latestPreferred?.fiscal_quarter);
@@ -189,7 +102,7 @@ function selectComparisonStatements(
 
   if (periodView === "annual") {
     if (annualHistory.length > 0) return { rows: annualHistory, ttmPeriodEndDate: null };
-    return { rows: normalized, ttmPeriodEndDate: null };
+    return { rows: [], ttmPeriodEndDate: null };
   }
 
   const ttmStatement = buildSyntheticTtmStatement(
@@ -197,11 +110,10 @@ function selectComparisonStatements(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
 
   const combined = [
     ...annualHistory,
-    ...(annualTtmColumn ? [annualTtmColumn] : []),
+    ...(ttmStatement ? [ttmStatement] : []),
   ].sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
 
   const deduped = new Map<string, FinancialStatement>();
@@ -210,10 +122,10 @@ function selectComparisonStatements(
   }
   const rows = [...deduped.values()];
 
-  if (rows.length === 0) return { rows: normalized, ttmPeriodEndDate: null };
+  if (rows.length === 0) return { rows: [], ttmPeriodEndDate: null };
   return {
     rows,
-    ttmPeriodEndDate: annualTtmColumn?.period_end_date ?? null,
+    ttmPeriodEndDate: ttmStatement?.period_end_date ?? null,
   };
 }
 
@@ -238,7 +150,14 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
 
   const periods = useMemo(() =>
     [...comparisonStatements]
-      .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date))
+      .sort((a, b) => {
+        if (periodView === "ttm" && ttmPeriodEndDate != null) {
+          const aIsTtm = a.period_end_date === ttmPeriodEndDate;
+          const bIsTtm = b.period_end_date === ttmPeriodEndDate;
+          if (aIsTtm !== bIsTtm) return aIsTtm ? 1 : -1;
+        }
+        return a.period_end_date.localeCompare(b.period_end_date);
+      })
       .map((s) => {
         const q = normalizeQuarter(s.fiscal_quarter);
         const isTtmPeriod = periodView === "ttm"
