@@ -260,7 +260,7 @@ export function useReadOnlySimulatorSymbolStates(enabled = true) {
 }
 
 export function useReadOnlySimulatorTrace(symbol: string, enabled = true) {
-  const normalized = symbol.toUpperCase();
+  const normalized = symbol.trim().toUpperCase();
   return useQuery({
     queryKey: simulatorReadOnlyKeys.trace(normalized),
     queryFn: async () => {
@@ -273,7 +273,7 @@ export function useReadOnlySimulatorTrace(symbol: string, enabled = true) {
 }
 
 export function useReadOnlySimulatorSymbolEvents(symbol: string, limit = 50, enabled = true) {
-  const normalized = symbol.toUpperCase();
+  const normalized = symbol.trim().toUpperCase();
   return useQuery({
     queryKey: simulatorReadOnlyKeys.events(normalized, limit),
     queryFn: async () => {
@@ -289,7 +289,7 @@ export function useReadOnlySimulatorSymbolEvents(symbol: string, limit = 50, ena
 }
 
 export function useReadOnlySimulatorSymbolCycles(symbol: string, enabled = true) {
-  const normalized = symbol.toUpperCase();
+  const normalized = symbol.trim().toUpperCase();
   return useQuery({
     queryKey: simulatorReadOnlyKeys.cycles(normalized),
     queryFn: async () => {

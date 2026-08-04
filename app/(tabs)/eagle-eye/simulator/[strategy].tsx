@@ -26,21 +26,27 @@ function formatKwd(value: number): string {
   return value.toLocaleString("en-KW", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
-function IntegrityStrip({ integrity }: { integrity?: SimulatorIntegrity }) {
+function IntegrityStrip({ integrity, isLoading, isError }: { integrity?: SimulatorIntegrity; isLoading: boolean; isError: boolean }) {
   const { colors } = useThemeStore();
   const sealed = integrity?.seal_verification.pass === true && (integrity?.guard_trips_count ?? 0) === 0;
   const staleProjection = integrity?.projection_stale === true || integrity?.projection_status === "STALE";
-  const ok = sealed && !staleProjection;
-  const bg = ok ? colors.successBg : staleProjection ? colors.warning + "22" : colors.dangerBg;
-  const border = ok ? colors.success : staleProjection ? colors.warning : colors.danger;
-  const textColor = ok ? colors.successText : staleProjection ? colors.warning : colors.dangerText;
+  const ok = !!integrity && sealed && !staleProjection;
+  const fetchFailed = isError;
+  const warn = staleProjection || fetchFailed;
+  const bg = ok ? colors.successBg : warn ? colors.warning + "22" : colors.dangerBg;
+  const border = ok ? colors.success : warn ? colors.warning : colors.danger;
+  const textColor = ok ? colors.successText : warn ? colors.warning : colors.dangerText;
   return (
     <View style={[styles.integrityStrip, { backgroundColor: bg, borderColor: border }]}>
       <Text style={[styles.integrityText, { color: textColor }]}> 
-        {ok
-          ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · 0 guard trips`
+        {isLoading && !integrity
+          ? "Checking simulator integrity"
           : staleProjection
           ? `Projection stale · ${integrity?.projection_stale_reason ?? "verification mismatch"}`
+          : fetchFailed
+          ? `Integrity feed unavailable · ${integrity ? "showing cached status" : "status unknown"}`
+          : ok
+          ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · ${integrity?.guard_trips_count ?? 0} guard trips`
           : "Simulator integrity warning"}
       </Text>
     </View>
@@ -108,7 +114,8 @@ export default function SimulatorBookDetailScreen() {
   const { data: positions = [], isLoading: positionsLoading, isRefetching, refetch } = useReadOnlySimulatorPositions(book);
   const { data: transactions = [] } = useReadOnlySimulatorTransactions(book, undefined, 25);
   const { data: nav = [] } = useReadOnlySimulatorNav(book, 90);
-  const { data: integrity } = useReadOnlySimulatorIntegrity();
+  const integrityQuery = useReadOnlySimulatorIntegrity();
+  const integrity = integrityQuery.data;
   const onRefresh = useCallback(() => refetch(), [refetch]);
   const latest = nav[nav.length - 1];
 
@@ -119,7 +126,7 @@ export default function SimulatorBookDetailScreen() {
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={accent} />}
     >
       <Pressable onPress={() => router.back()} style={styles.backBtn}><Text style={[styles.backText, { color: accent }]}>Back to simulator</Text></Pressable>
-      <IntegrityStrip integrity={integrity} />
+      <IntegrityStrip integrity={integrity} isLoading={integrityQuery.isLoading} isError={integrityQuery.isError} />
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>{book} Paper Book</Text>
       {book === "WATCHLIST" ? <Text style={[styles.subtitle, { color: colors.textMuted }]}>Shadow book — entries the system vetoed, tracked to measure selectivity.</Text> : null}
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>

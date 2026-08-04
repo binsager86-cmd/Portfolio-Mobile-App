@@ -48,21 +48,27 @@ function Sparkline({ points, color }: { points: SimulatorNavPoint[]; color: stri
   );
 }
 
-function IntegrityStrip({ integrity }: { integrity?: SimulatorIntegrity }) {
+function IntegrityStrip({ integrity, isLoading, isError }: { integrity?: SimulatorIntegrity; isLoading: boolean; isError: boolean }) {
   const { colors } = useThemeStore();
   const sealed = integrity?.seal_verification.pass === true && (integrity?.guard_trips_count ?? 0) === 0;
   const staleProjection = integrity?.projection_stale === true || integrity?.projection_status === "STALE";
-  const ok = sealed && !staleProjection;
-  const message = ok
-    ? `Seals verified · session ${integrity?.last_session_processed ?? "genesis"} · ${integrity?.guard_trips_count ?? 0} guard trips`
+  const ok = !!integrity && sealed && !staleProjection;
+  const fetchFailed = isError;
+  const message = isLoading && !integrity
+    ? "Checking simulator integrity"
     : staleProjection
     ? `Projection stale · ${integrity?.projection_stale_reason ?? "verification mismatch"}`
+    : fetchFailed
+    ? `Integrity feed unavailable · ${integrity ? "showing cached status" : "status unknown"}`
     : integrity
-    ? `Seal warning · ${integrity.seal_verification.failures[0]?.reason ?? `${integrity.guard_trips_count} guard trips`}`
-    : "Checking simulator integrity";
-  const bg = ok ? colors.successBg : staleProjection ? colors.warning + "22" : colors.dangerBg;
-  const border = ok ? colors.success : staleProjection ? colors.warning : colors.danger;
-  const textColor = ok ? colors.successText : staleProjection ? colors.warning : colors.dangerText;
+    ? ok
+      ? `Seals verified · session ${integrity.last_session_processed ?? "genesis"} · ${integrity.guard_trips_count ?? 0} guard trips`
+      : `Seal warning · ${integrity.seal_verification.failures[0]?.reason ?? `${integrity.guard_trips_count} guard trips`}`
+    : "Integrity status unavailable";
+  const warn = staleProjection || fetchFailed;
+  const bg = ok ? colors.successBg : warn ? colors.warning + "22" : colors.dangerBg;
+  const border = ok ? colors.success : warn ? colors.warning : colors.danger;
+  const textColor = ok ? colors.successText : warn ? colors.warning : colors.dangerText;
   return (
     <View style={[styles.integrityStrip, { backgroundColor: bg, borderColor: border }]}>
       <Text style={[styles.integrityText, { color: textColor }]}>{message}</Text>
@@ -119,7 +125,8 @@ export default function SimulatorIndexScreen() {
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
   const { data: portfolios = [], isLoading, isRefetching, refetch } = useReadOnlySimulatorPortfolios();
-  const { data: integrity } = useReadOnlySimulatorIntegrity();
+  const integrityQuery = useReadOnlySimulatorIntegrity();
+  const integrity = integrityQuery.data;
   const onRefresh = useCallback(() => refetch(), [refetch]);
   const byBook = Object.fromEntries(portfolios.map((portfolio) => [portfolio.book, portfolio])) as Partial<Record<SimulatorBook, SimulatorPortfolioSummary>>;
 
@@ -131,7 +138,7 @@ export default function SimulatorIndexScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={colors.accentPrimary} />}
       >
-        <IntegrityStrip integrity={integrity} />
+        <IntegrityStrip integrity={integrity} isLoading={integrityQuery.isLoading} isError={integrityQuery.isError} />
         <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Forward Paper Books</Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>Daily cycle writes the ledger. This screen reads the sealed ledger only.</Text>
         {isLoading ? <ActivityIndicator color={colors.accentPrimary} /> : null}
