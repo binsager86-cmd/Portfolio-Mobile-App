@@ -572,8 +572,8 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Show Advanced Metrics (only if not normal) */}
-        {preferences.expertiseLevel !== "normal" && (
+        {/* Show Advanced Metrics (advanced mode only) */}
+        {preferences.expertiseLevel === "advanced" && (
           <Pressable accessibilityRole="switch" accessibilityLabel={t('settingsScreen.showAdvancedMetrics')} accessibilityState={{ checked: preferences.showAdvancedMetrics }} onPress={() => { haptics.selection(); toggleAdvancedMetrics(); }} style={s.switchRow}>
             <Text style={[s.prefLabel, { color: colors.textSecondary, flex: 1, marginBottom: 0 }]}>
               {t('settingsScreen.showAdvancedMetrics')}

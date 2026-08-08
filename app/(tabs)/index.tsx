@@ -151,6 +151,14 @@ function OverviewScreen() {
   const dividendFocus = useUserPrefsStore((s) => s.preferences.dividendFocus);
   const [showSimulator, setShowSimulator] = useState(false);
   const [profitOpen, setProfitOpen] = useState(false);
+  const canViewHistorical = expertiseLevel !== "normal";
+  const showPerformanceMetrics = expertiseLevel === "advanced";
+
+  useEffect(() => {
+    if (!canViewHistorical && activeTab === "historical") {
+      setActiveTab("dashboard");
+    }
+  }, [activeTab, canViewHistorical]);
 
   // AI Financial Intelligence state
   const [aiCategory, setAiCategory] = useState<number | null>(null);
@@ -736,7 +744,9 @@ function OverviewScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: tokens.spacing.xs }}>
           {([
             { key: "dashboard" as OverviewTab, label: t("historical.tabDashboard"), icon: "th-large" as const },
-            { key: "historical" as OverviewTab, label: t("historical.tabHistorical"), icon: "history" as const },
+            ...(canViewHistorical
+              ? [{ key: "historical" as OverviewTab, label: t("historical.tabHistorical"), icon: "history" as const }]
+              : []),
           ]).map((tab) => {
             const active = activeTab === tab.key;
             return (
@@ -768,7 +778,7 @@ function OverviewScreen() {
       </View>
 
       {/* ── Historical Performance tab ── */}
-      {activeTab === "historical" && (
+      {canViewHistorical && activeTab === "historical" && (
         <HistoricalPerformance
           snapshotData={snapshotData}
           realizedData={realizedData}
@@ -1028,7 +1038,7 @@ function OverviewScreen() {
       )}
 
       {/* ── Row 3: Performance Metrics (TWR / MWRR / Sharpe / Sortino) ── */}
-      {showAdvancedMetrics && (<>
+      {showPerformanceMetrics && showAdvancedMetrics && (<>
       <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
         {t('dashboard.performanceMetrics')}
       </Text>

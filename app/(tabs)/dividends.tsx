@@ -234,8 +234,8 @@ export default function DividendsScreen() {
     { key: "all", label: t("dividends.allDividends") },
     { key: "by-stock", label: t("dividends.byStock") },
     { key: "bonus", label: t("dividends.bonusShares"), minLevel: "intermediate" },
-    { key: "projections", label: t("dividends.projections") },
-    { key: "calculator", label: t("dividends.yieldCalc") },
+    { key: "projections", label: t("dividends.projections"), minLevel: "intermediate" },
+    { key: "calculator", label: t("dividends.yieldCalc"), minLevel: "intermediate" },
   ];
 
   const levelOrder = ["normal", "intermediate", "advanced"] as const;

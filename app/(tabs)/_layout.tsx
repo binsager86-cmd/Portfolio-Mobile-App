@@ -280,7 +280,7 @@ export default function TabLayout() {
             name="trading"
             options={{
               title: t("nav.trading"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("normal") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart-o" color={color} />,
             }}
           />
@@ -288,7 +288,7 @@ export default function TabLayout() {
             name="fundamental-analysis"
             options={{
               title: t("tabs.analysis"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="flask" color={color} />
               ),
@@ -298,7 +298,7 @@ export default function TabLayout() {
             name="trade-signals"
             options={{
               title: t("nav.tradeSignals"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="signal" color={color} />
               ),
@@ -308,7 +308,7 @@ export default function TabLayout() {
             name="eagle-eye"
             options={{
               title: t("nav.eagleEye", "Eagle Eye"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="eye" color={color} />
               ),
@@ -336,7 +336,7 @@ export default function TabLayout() {
             name="alerts"
             options={{
               title: t("nav.alerts"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="bell" color={color} />
               ),
@@ -346,7 +346,7 @@ export default function TabLayout() {
             name="planner"
             options={{
               title: t("nav.planner"),
-              href: isAdmin || !showSidebar ? null : undefined,
+              href: isAdmin || !showSidebar ? null : (tabVisible("intermediate") ? undefined : null),
               tabBarIcon: ({ color }) => (
                 <TabBarIcon name="calculator" color={color} />
               ),
@@ -364,7 +364,7 @@ export default function TabLayout() {
             name="integrity"
             options={{
               title: t("nav.integrity"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : (tabVisible("normal") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="stethoscope" color={color} />,
             }}
           />
@@ -372,7 +372,7 @@ export default function TabLayout() {
             name="backup"
             options={{
               title: t("nav.backup"),
-              href: isAdmin || !showSidebar ? null : (tabVisible("advanced") ? undefined : null),
+              href: isAdmin || !showSidebar ? null : (tabVisible("normal") ? undefined : null),
               tabBarIcon: ({ color }) => <TabBarIcon name="cloud-download" color={color} />,
             }}
           />
