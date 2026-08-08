@@ -64,17 +64,48 @@ function createStorage() {
 
 const THIRTY_MINUTES_MS = 30 * 60_000;
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function shouldRetry(failureCount: number, error: unknown): boolean {
+  // Keep retries bounded so UI stays responsive.
+  if (failureCount >= 2) return false;
+
+  const err = error as {
+    code?: string;
+    message?: string;
+    response?: { status?: number };
+  };
+
+  const status = err?.response?.status;
+  if (typeof status === "number") {
+    return RETRYABLE_STATUS.has(status);
+  }
+
+  const code = (err?.code ?? "").toUpperCase();
+  if (code === "ECONNABORTED" || code === "ERR_NETWORK") return true;
+
+  const msg = (err?.message ?? "").toLowerCase();
+  return msg.includes("network") || msg.includes("timeout") || msg.includes("failed to fetch");
+}
+
+function retryDelay(attempt: number): number {
+  const base = 1000 * 2 ** (attempt - 1);
+  return Math.min(base, 5000);
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: "offlineFirst",
       staleTime: 5 * 60_000,
       gcTime: THIRTY_MINUTES_MS,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
-      retry: 1,
-      retryDelay: 1_000,
+      retry: shouldRetry,
+      retryDelay,
       structuralSharing: true,
+      // Preserve last successful data while background refetch is in-flight.
+      placeholderData: (prev) => prev,
     },
   },
 });

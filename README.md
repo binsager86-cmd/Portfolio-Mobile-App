@@ -65,8 +65,30 @@ dist/
 ```
 
 **Required env vars in DO dashboard:**
-- `EXPO_PUBLIC_API_URL` → your backend URL
+- `EXPO_PUBLIC_API_URL_WEB` → your backend URL (web-only, recommended)
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` → your Google Client ID
+
+### Production Safety Guardrails
+
+- `npm run build:web` now runs a pre-build env validator.
+- The validator blocks loopback/emulator API URLs from shipping to production web.
+- Override only for local-only testing by setting `ALLOW_LOOPBACK_WEB_API=1`.
+
+### Post-Deploy Smoke Test
+
+Run this after deploy to verify critical API reachability:
+
+```bash
+npm run smoke:web:prod
+```
+
+This production command targets the backend API domain and sends your web app domain as Origin for CORS coverage.
+
+Or target a custom domain/base URL:
+
+```bash
+npm run smoke:web -- --base-url https://your-domain.com
+```
 
 ### EAS Build (Native)
 
@@ -118,6 +140,8 @@ services/
 | `npm start` | Start Expo dev server |
 | `npm run web` | Start web dev server |
 | `npm run build:web` | Export static web build |
+| `npm run smoke:web` | Run web API smoke checks against a target base URL |
+| `npm run smoke:web:prod` | Run smoke checks against production domain |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run TypeScript checks |
 | `npm test` | Run tests |

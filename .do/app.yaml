@@ -22,7 +22,7 @@ static_sites:
     catchall_document: index.html
 
     envs:
-      - key: EXPO_PUBLIC_API_URL
+      - key: EXPO_PUBLIC_API_URL_WEB
         value: "https://backend-api-app-hfc2n.ondigitalocean.app"
         scope: BUILD_TIME
       - key: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID

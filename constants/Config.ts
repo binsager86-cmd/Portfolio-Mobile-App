@@ -35,10 +35,52 @@ const ENV_API_URL_IOS =
 const LOCAL_WEB_API = "http://127.0.0.1:8004";
 const LOCAL_ANDROID_EMULATOR_API = "http://10.0.2.2:8004";
 
+function normalizedEnvValue(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isLoopbackOrEmulatorHost(urlValue: string): boolean {
+  try {
+    const parsed = new URL(urlValue);
+    const host = parsed.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "10.0.2.2";
+  } catch {
+    const lower = urlValue.toLowerCase();
+    return (
+      lower.includes("localhost") ||
+      lower.includes("127.0.0.1") ||
+      lower.includes("::1") ||
+      lower.includes("10.0.2.2")
+    );
+  }
+}
+
+function resolveWebApiUrl(isLocalDevWeb: boolean): string {
+  const webEnv = normalizedEnvValue(ENV_API_URL_WEB);
+  const globalEnv = normalizedEnvValue(ENV_API_URL);
+  const configured = webEnv ?? globalEnv;
+
+  if (configured) {
+    // Production web should never target device/emulator loopback hosts.
+    if (!isLocalDevWeb && isLoopbackOrEmulatorHost(configured)) {
+      console.error(
+        "[Config] Ignoring loopback/emulator API URL for production web build:",
+        configured,
+      );
+      return "";
+    }
+    return configured;
+  }
+
+  return isLocalDevWeb ? LOCAL_WEB_API : "";
+}
+
 function isAndroidPhysicalDevice(): boolean {
   if (Platform.OS !== "android") return false;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Device = require("expo-device");
     return Boolean(Device?.isDevice);
   } catch {
@@ -49,7 +91,7 @@ function isAndroidPhysicalDevice(): boolean {
 function inferNativeDevApiUrl(): string | null {
   // Expo Go / dev client usually exposes hostUri like "192.168.1.5:8081".
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Constants = require("expo-constants").default;
     const hostUri: string | undefined =
       Constants?.expoConfig?.hostUri ??
@@ -96,10 +138,11 @@ function resolveAndroidApiUrl(): string {
  * Backend API base URL.
  *
  * Priority:
- *   1. EXPO_PUBLIC_API_URL env var (set in DO / Vercel / EAS / CI)
- *   2. Production web: "" (empty) → relative paths (same domain on DO)
- *   3. Dev web: localhost:8003
- *   4. Dev mobile: LAN IP (must set EXPO_PUBLIC_API_URL)
+ *   1. Android: EXPO_PUBLIC_API_URL_ANDROID (with physical-device safeguards)
+ *   2. Web: EXPO_PUBLIC_API_URL_WEB
+ *   3. iOS: EXPO_PUBLIC_API_URL_IOS
+ *   4. Global fallback: EXPO_PUBLIC_API_URL
+ *   5. Local/platform fallbacks
  */
 const isLocalDev =
   Platform.OS === "web" &&
@@ -107,19 +150,14 @@ const isLocalDev =
   (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
 
 export const API_BASE_URL: string =
-  // Explicit override always wins (EAS build, CI, Vercel, etc.)
-  (ENV_API_URL != null && ENV_API_URL !== "")
-    ? ENV_API_URL
+  Platform.OS === "android"
+    ? resolveAndroidApiUrl()
     : Platform.OS === "web"
-      ? (ENV_API_URL_WEB && ENV_API_URL_WEB !== "")
-        ? ENV_API_URL_WEB
-        : isLocalDev
-          ? LOCAL_WEB_API      // Dev web: localhost backend
-          : ""                 // Production web: relative paths (same domain)
-      : Platform.OS === "android"
-        ? resolveAndroidApiUrl()
-        : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
-          ? ENV_API_URL_IOS
+      ? resolveWebApiUrl(isLocalDev)
+      : (ENV_API_URL_IOS && ENV_API_URL_IOS.trim() !== "")
+        ? ENV_API_URL_IOS.trim()
+        : (ENV_API_URL != null && ENV_API_URL.trim() !== "")
+          ? ENV_API_URL.trim()
           : inferNativeDevApiUrl() ?? LOCAL_WEB_API;
 
 /** How long (ms) to wait before timing out API calls. */
