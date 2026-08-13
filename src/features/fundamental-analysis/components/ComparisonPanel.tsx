@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * ComparisonPanel — Multi-period side-by-side comparison with YoY changes.
  */

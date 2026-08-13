@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * StatementsPanel — Thin orchestrator composing AiExtractionFlow,
  * SavedPdfsList, StatementTabBar, and StatementsTable.

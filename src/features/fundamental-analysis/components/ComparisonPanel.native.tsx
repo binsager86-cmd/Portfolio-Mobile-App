@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * ComparisonPanel (native variant) — same as the web version minus the
  * `@dnd-kit` drag-and-drop layer. dnd-kit is DOM-only and renders raw

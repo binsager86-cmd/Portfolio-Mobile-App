@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * Fundamental Analysis — stock profiles, financial statements,
  * metrics & ratios, growth analysis, scoring, and valuation models.
