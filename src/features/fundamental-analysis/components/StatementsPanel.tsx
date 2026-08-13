@@ -174,7 +174,7 @@ function selectStatementsForDisplay(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,

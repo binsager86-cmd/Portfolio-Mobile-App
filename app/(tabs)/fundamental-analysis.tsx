@@ -254,7 +254,7 @@ function selectStatementsForDisplay(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,
@@ -1459,7 +1459,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       annualHistory,
       quarterlyHistory,
     );
-    const annualTtmColumn = ttmStatement ?? latestQuarter;
+    const annualTtmColumn = ttmStatement;
 
     const combined = [
       ...annualHistory,
