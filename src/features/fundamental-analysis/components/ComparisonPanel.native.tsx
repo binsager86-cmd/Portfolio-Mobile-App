@@ -1,5 +1,5 @@
 /**
- * ComparisonPanel (native variant) — same as the web version minus the
+ * ComparisonPanel (native variant) ظ¤ same as the web version minus the
  * `@dnd-kit` drag-and-drop layer. dnd-kit is DOM-only and renders raw
  * HTML <div> elements, which crash React Native ("View config getter
  * callback for component `div`").
@@ -163,7 +163,7 @@ function selectComparisonStatements(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,
@@ -304,7 +304,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       return row;
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
-    return [{ title: `${typeName} — Period Comparison`, headers, rows }];
+    return [{ title: `${typeName} ظ¤ Period Comparison`, headers, rows }];
   }, [periods, displayRows, typeFilter]);
 
   return (
@@ -466,7 +466,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   );
 }
 
-// ── Comparison row (no drag) ────────────────────────────────────────
+// ظ¤ظ¤ Comparison row (no drag) ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 type CompPeriod = {
   label: string;
   period: string;
@@ -537,14 +537,14 @@ function CompRow({
               color: val != null && val < 0 ? colors.danger : (item.isTotal ? colors.textPrimary : colors.textSecondary),
               fontWeight: item.isTotal ? "700" : "500",
             }]}>
-              {val != null ? formatLineItemValue(item.name, val) : "–"}
+              {val != null ? formatLineItemValue(item.name, val) : "ظô"}
             </Text>
             {i > 0 && (
               <Text style={[st.compCellYoy, {
                 color: yoy == null ? colors.textMuted : yoy >= 0 ? colors.success : colors.danger,
                 fontWeight: "600",
               }]}>
-                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "–"}
+                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "ظô"}
               </Text>
             )}
           </React.Fragment>
@@ -553,3 +553,4 @@ function CompRow({
     </View>
   );
 }
+

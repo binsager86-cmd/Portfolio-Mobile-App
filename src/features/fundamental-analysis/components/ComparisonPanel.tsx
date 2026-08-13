@@ -1,5 +1,5 @@
 /**
- * ComparisonPanel — Multi-period side-by-side comparison with YoY changes.
+ * ComparisonPanel ظ¤ Multi-period side-by-side comparison with YoY changes.
  */
 
 import {
@@ -177,7 +177,7 @@ function selectComparisonStatements(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,
@@ -203,7 +203,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   const [periodView, setPeriodView] = useState<ComparePeriodView>("ttm");
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
 
-  // ── Merge mode state ────────────────────────────────────────────
+  // ظ¤ظ¤ Merge mode state ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
@@ -259,7 +259,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       .map(([code, v]) => ({ code, name: v.name, isTotal: v.isTotal }));
   }, [comparisonStatements]);
 
-  // ── Merge line items mutation ───────────────────────────────────
+  // ظ¤ظ¤ Merge line items mutation ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
   const mergeMut = useMutation({
     mutationFn: ({ keepCode, removeCode }: { keepCode: string; removeCode: string }) =>
       mergeLineItems(stockId, keepCode, removeCode),
@@ -297,7 +297,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
     }
   }, [mergeSelection, allCodes, mergeMut]);
 
-  // ── Drag-and-drop state ─────────────────────────────────────────
+  // ظ¤ظ¤ Drag-and-drop state ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
   const [localOrder, setLocalOrder] = useState<{ code: string; name: string; isTotal: boolean }[] | null>(null);
 
   const allCodesKey = useMemo(() => allCodes.map((r) => r.code).join(","), [allCodes]);
@@ -357,7 +357,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       return row;
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
-    return [{ title: `${typeName} — Period Comparison`, headers, rows }];
+    return [{ title: `${typeName} ظ¤ Period Comparison`, headers, rows }];
   }, [periods, displayRows, typeFilter]);
 
   return (
@@ -529,7 +529,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   );
 }
 
-// ── Sortable comparison row ─────────────────────────────────────────
+// ظ¤ظ¤ Sortable comparison row ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 type CompPeriod = {
   label: string;
   period: string;
@@ -608,7 +608,7 @@ function SortableCompRow({
           touchAction: "none",
         }}
       >
-        <Text style={{ fontSize: 12, color: colors.textMuted }}>⠿</Text>
+        <Text style={{ fontSize: 12, color: colors.textMuted }}>ظب┐</Text>
       </div>
 
       <Text numberOfLines={1} style={[st.compCellName, { color: item.isTotal ? colors.textPrimary : colors.textSecondary, fontWeight: item.isTotal ? "700" : "400" }]}>
@@ -624,14 +624,14 @@ function SortableCompRow({
               color: val != null && val < 0 ? colors.danger : (item.isTotal ? colors.textPrimary : colors.textSecondary),
               fontWeight: item.isTotal ? "700" : "500",
             }]}>
-              {val != null ? formatLineItemValue(item.name, val) : "–"}
+              {val != null ? formatLineItemValue(item.name, val) : "ظô"}
             </Text>
             {i > 0 && (
               <Text style={[st.compCellYoy, {
                 color: yoy == null ? colors.textMuted : yoy >= 0 ? colors.success : colors.danger,
                 fontWeight: "600",
               }]}>
-                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "–"}
+                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "ظô"}
               </Text>
             )}
           </React.Fragment>
@@ -640,3 +640,4 @@ function SortableCompRow({
     </div>
   );
 }
+

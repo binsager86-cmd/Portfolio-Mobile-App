@@ -1,5 +1,5 @@
 /**
- * Fundamental Analysis — stock profiles, financial statements,
+ * Fundamental Analysis ظ¤ stock profiles, financial statements,
  * metrics & ratios, growth analysis, scoring, and valuation models.
  *
  * Premium UI with CFA-grade financial analysis tools.
@@ -68,9 +68,9 @@ import {
 } from "@/src/features/fundamental-analysis/utils";
 import type { ThemePalette } from "@/constants/theme";
 
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 /*  TYPE + CONSTANTS                                                 */
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 
 type SubTab = "stocks" | "statements" | "comparison" | "metrics" | "growth" | "score" | "valuations";
 
@@ -255,7 +255,7 @@ function selectStatementsForDisplay(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,
@@ -278,9 +278,9 @@ function selectStatementsForDisplay(
   };
 }
 
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 /*  REUSABLE MICRO-COMPONENTS                                        */
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 
 /** Pill-shaped filter chip */
 function Chip({
@@ -591,9 +591,9 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
   );
 }
 
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 /*  MAIN SCREEN                                                      */
-/* ────────────────────────────────────────────────────────────────── */
+/* ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 
 export default function FundamentalAnalysisScreen() {
   const { colors } = useThemeStore();
@@ -625,7 +625,7 @@ export default function FundamentalAnalysisScreen() {
 
   return (
     <View style={[st.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* ── Header ─────────────────────────────────────────── */}
+      {/* ظ¤ظ¤ Header ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */}
       <View style={[st.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor }]}>
         <View style={{ flex: 1 }}>
           <View style={[st.rowCenter, { gap: 10 }]}>
@@ -651,7 +651,7 @@ export default function FundamentalAnalysisScreen() {
         </View>
       </View>
 
-      {/* ── Tab row ────────────────────────────────────────── */}
+      {/* ظ¤ظ¤ Tab row ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */}
       <View style={[st.tabContainer, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
           {SUB_TABS.map((t) => {
@@ -686,7 +686,7 @@ export default function FundamentalAnalysisScreen() {
         </ScrollView>
       </View>
 
-      {/* ── Content ────────────────────────────────────────── */}
+      {/* ظ¤ظ¤ Content ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */}
       {tab === "stocks" && <StocksPanel colors={colors} isDesktop={isDesktop} onSelect={handleSelectStock} onAdd={handleSelectNewStock} />}
       {tab === "statements" && selectedStockId && <StatementsPanel stockId={selectedStockId} colors={colors} isDesktop={isDesktop} autoFetch={autoFetch} onAutoFetchDone={() => setAutoFetch(false)} />}
       {tab === "comparison" && selectedStockId && <ComparisonPanel stockId={selectedStockId} stockSymbol={selectedStockSymbol} colors={colors} isDesktop={isDesktop} />}
@@ -698,9 +698,9 @@ export default function FundamentalAnalysisScreen() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  STOCKS PANEL                                                      */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function StocksPanel({
   colors, isDesktop, onSelect, onAdd,
@@ -851,7 +851,7 @@ function StocksPanel({
   );
 }
 
-/* ── Stock Form Modal (unified Add/Edit) ──────────────────────────── */
+/* ظ¤ظ¤ Stock Form Modal (unified Add/Edit) ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */
 
 function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisStock; colors: ThemePalette; onClose: () => void; onAdd?: (stock: AnalysisStock) => void }) {
   const isEdit = !!stock;
@@ -965,7 +965,7 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {/* ── Stock Picker (Add mode) ── */}
+            {/* ظ¤ظ¤ Stock Picker (Add mode) ظ¤ظ¤ */}
             {!isEdit && !selectedEntry && (
               <View style={{ marginBottom: 14 }}>
                 {/* Market toggle */}
@@ -1050,7 +1050,7 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
               </View>
             )}
 
-            {/* ── Selected stock confirmation (Add mode) ── */}
+            {/* ظ¤ظ¤ Selected stock confirmation (Add mode) ظ¤ظ¤ */}
             {!isEdit && selectedEntry && (
               <View style={{ marginBottom: 14 }}>
                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "600", marginBottom: 6, letterSpacing: 0.5 }}>SELECTED STOCK</Text>
@@ -1079,7 +1079,7 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
               </View>
             )}
 
-            {/* ── Editable fields (always show for Edit, show after selection for Add) ── */}
+            {/* ظ¤ظ¤ Editable fields (always show for Edit, show after selection for Add) ظ¤ظ¤ */}
             {(isEdit || selectedEntry) && (
               <>
                 {selectedEntry && (
@@ -1134,9 +1134,9 @@ function StockFormModal({ stock, colors, onClose, onAdd }: { stock?: AnalysisSto
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  STATEMENTS PANEL                                                  */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDone }: { stockId: number; colors: ThemePalette; isDesktop: boolean; autoFetch?: boolean; onAutoFetchDone?: () => void }) {
   const queryClient = useQueryClient();
@@ -1144,7 +1144,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
   const [periodView, setPeriodView] = useState<StatementPeriodView>("annual");
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
 
-  // ── Online fetch state ────────────────────────────────────────────
+  // ظ¤ظ¤ Online fetch state ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
   const [fetchingOnline, setFetchingOnline] = useState(false);
   const [onlineResult, setOnlineResult] = useState<string | null>(null);
 
@@ -1180,7 +1180,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ── Fetch Section ──────────────────────────────────────────── */}
+      {/* ظ¤ظ¤ Fetch Section ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ */}
       <View style={{
         paddingHorizontal: 16, paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: colors.borderColor,
@@ -1280,7 +1280,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
   );
 }
 
-/** Table view of financial statements — years left-to-right, line items as rows */
+/** Table view of financial statements ظ¤ years left-to-right, line items as rows */
 function StatementsTable({
   statements, colors, isDesktop, isFetching, onRefresh, periodView = "annual", ttmPeriodEndDate = null,
 }: {
@@ -1356,7 +1356,7 @@ function StatementsTable({
     <ScrollView refreshControl={<RefreshControl refreshing={isFetching} onRefresh={onRefresh} tintColor={colors.accentPrimary} />}>
       <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 4, paddingBottom: 80 }}>
         <View>
-          {/* ── Header row ── */}
+          {/* ظ¤ظ¤ Header row ظ¤ظ¤ */}
           <View style={{
             flexDirection: "row",
             alignItems: "center",
@@ -1376,7 +1376,7 @@ function StatementsTable({
             ))}
           </View>
 
-          {/* ── Data rows ── */}
+          {/* ظ¤ظ¤ Data rows ظ¤ظ¤ */}
           {allCodes.map((item, rowIdx) => (
             <View
               key={item.code}
@@ -1481,9 +1481,9 @@ function StatementsTable({
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
-/*  COMPARISON PANEL — Multi-Period Side-by-Side                      */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
+/*  COMPARISON PANEL ظ¤ Multi-Period Side-by-Side                      */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const [typeFilter, setTypeFilter] = useState<string>("income");
@@ -1529,7 +1529,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       annualHistory,
       quarterlyHistory,
     );
-    const annualTtmColumn = ttmStatement ?? latestQuarter;
+    const annualTtmColumn = ttmStatement;
 
     const combined = [
       ...annualHistory,
@@ -1608,7 +1608,7 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       return row;
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
-    return [{ title: `${typeName} — Period Comparison`, headers, rows }];
+    return [{ title: `${typeName} ظ¤ Period Comparison`, headers, rows }];
   }, [periods, allCodes, typeFilter]);
 
   return (
@@ -1708,14 +1708,14 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
                             color: val != null && val < 0 ? colors.danger : (isTotal ? colors.textPrimary : colors.textSecondary),
                             fontWeight: isTotal ? "700" : "500",
                           }]}>
-                            {val != null ? formatFeatureLineItemValue(item.name, val) : "–"}
+                            {val != null ? formatFeatureLineItemValue(item.name, val) : "ظô"}
                           </Text>
                           {i > 0 && (
                             <Text style={[st.compCellYoy, {
                               color: yoy == null ? colors.textMuted : yoy >= 0 ? colors.success : colors.danger,
                               fontWeight: "600",
                             }]}>
-                              {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "–"}
+                              {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "ظô"}
                             </Text>
                           )}
                         </React.Fragment>
@@ -1732,9 +1732,9 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  METRICS PANEL                                                     */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
@@ -1942,7 +1942,7 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
                                 color: val != null ? colors.textPrimary : colors.textMuted,
                                 fontWeight: val != null ? "600" : "400",
                               }]}>
-                                {val != null ? formatFeatureMetricValue(name, val) : "–"}
+                                {val != null ? formatFeatureMetricValue(name, val) : "ظô"}
                               </Text>
                             );
                           })}
@@ -1982,9 +1982,9 @@ function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: nu
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  VALUATIONS PANEL                                                  */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId: number; stockSymbol: string; colors: ThemePalette; isDesktop: boolean }) {
   const queryClient = useQueryClient();
@@ -2045,10 +2045,10 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
   }, [valuations]);
 
   const MODEL_INFO: Record<string, { title: string; formula: string; icon: React.ComponentProps<typeof FontAwesome>["name"] }> = {
-    graham:    { title: "Graham Number", formula: "V = √(22.5 × EPS × BVPS)", icon: "university" },
+    graham:    { title: "Graham Number", formula: "V = ظêأ(22.5 ├ù EPS ├ù BVPS)", icon: "university" },
     dcf:       { title: "Two-Stage DCF", formula: "Gordon Growth Terminal Value", icon: "sitemap" },
     ddm:       { title: "Dividend Discount", formula: "Gordon Growth Model", icon: "money" },
-    multiples: { title: "Comparable Multiples", formula: "e.g., P/E × EPS", icon: "balance-scale" },
+    multiples: { title: "Comparable Multiples", formula: "e.g., P/E ├ù EPS", icon: "balance-scale" },
   };
 
   const info = MODEL_INFO[model];
@@ -2199,9 +2199,9 @@ function ValuationsPanel({ stockId, stockSymbol, colors, isDesktop }: { stockId:
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  HELPERS                                                           */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function buildHistoricalMetrics(allMetrics: StockMetric[]) {
   const catMap: Record<string, { nameSet: Set<string>; yearData: Record<number, Record<string, number>> }> = {};
@@ -2253,9 +2253,9 @@ function formatMetricValue(name: string, value: number): string {
   return formatNumber(value);
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  STYLES                                                            */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 const st = StyleSheet.create({
   container: { flex: 1 },
@@ -2617,3 +2617,4 @@ const st = StyleSheet.create({
   /* Field label */
   fieldLabel: { fontSize: 11, fontWeight: "600" as const, marginBottom: 4, letterSpacing: 0.5 },
 });
+

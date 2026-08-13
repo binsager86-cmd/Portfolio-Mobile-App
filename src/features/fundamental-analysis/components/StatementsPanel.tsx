@@ -1,5 +1,5 @@
 /**
- * StatementsPanel — Thin orchestrator composing AiExtractionFlow,
+ * StatementsPanel ظ¤ Thin orchestrator composing AiExtractionFlow,
  * SavedPdfsList, StatementTabBar, and StatementsTable.
  */
 
@@ -34,9 +34,9 @@ import { AiExtractionFlow } from "./AiExtractionFlow";
 import { Chip, StatementTabBar } from "./shared";
 import { StatementsTable } from "./StatementsTable";
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  STATEMENTS PANEL                                                  */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function normalizeQuarter(raw: unknown): number | null {
   if (raw == null) return null;
@@ -174,7 +174,7 @@ function selectStatementsForDisplay(
     annualHistory,
     quarterlyHistory,
   );
-  const annualTtmColumn = ttmStatement ?? latestQuarter;
+  const annualTtmColumn = ttmStatement;
 
   const combined = [
     ...annualHistory,
@@ -301,9 +301,9 @@ export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 /*  SAVED PDFs LIST                                                    */
-/* ═══════════════════════════════════════════════════════════════════ */
+/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
 
 function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: number; colors: ThemePalette }) {
   const queryClient = useQueryClient();
@@ -388,7 +388,7 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
         <View style={{ marginTop: 8, gap: 6 }}>
           {pdfs.length === 0 && (
             <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: "italic", paddingVertical: 8 }}>
-              No saved reports yet. Upload a PDF above — it will be saved here automatically.
+              No saved reports yet. Upload a PDF above ظ¤ it will be saved here automatically.
             </Text>
           )}
           {pdfs.map((pdf) => (
@@ -410,7 +410,7 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
                   {pdf.original_name}
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>
-                  {formatFileSize(pdf.file_size)} · {formatDate(pdf.created_at)}
+                  {formatFileSize(pdf.file_size)} ┬╖ {formatDate(pdf.created_at)}
                 </Text>
               </View>
               <Pressable onPress={() => handleDownload(pdf)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Download ${pdf.original_name}`} style={{ padding: 6 }}>
@@ -426,3 +426,4 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
     </View>
   );
 }
+
