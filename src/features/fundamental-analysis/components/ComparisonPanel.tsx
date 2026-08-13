@@ -640,4 +640,3 @@ function SortableCompRow({
     </div>
   );
 }
-

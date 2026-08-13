@@ -426,4 +426,3 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
     </View>
   );
 }
-

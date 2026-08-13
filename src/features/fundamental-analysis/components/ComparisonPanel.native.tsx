@@ -553,4 +553,3 @@ function CompRow({
     </View>
   );
 }
-

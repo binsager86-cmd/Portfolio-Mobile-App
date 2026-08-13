@@ -2617,4 +2617,3 @@ const st = StyleSheet.create({
   /* Field label */
   fieldLabel: { fontSize: 11, fontWeight: "600" as const, marginBottom: 4, letterSpacing: 0.5 },
 });
-
