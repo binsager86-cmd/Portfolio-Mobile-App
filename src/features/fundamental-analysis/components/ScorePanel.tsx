@@ -53,13 +53,21 @@ export const ScorePanel = React.memo(function ScorePanel({ stockId, stockSymbol,
   const isBeginner = preferences.expertiseLevel === "normal";
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [prefsHydratedForStockId, setPrefsHydratedForStockId] = useState<number | null>(null);
 
   const [localPrefs, setLocalPrefs] = useState<ScoreCategoryPreferences | null>(null);
   React.useEffect(() => {
-    if (categoryPrefsQ.data?.preferences) {
+    if (prefsHydratedForStockId !== stockId && categoryPrefsQ.data?.preferences) {
       setLocalPrefs(categoryPrefsQ.data.preferences);
+      setPrefsHydratedForStockId(stockId);
     }
-  }, [categoryPrefsQ.data?.preferences]);
+  }, [categoryPrefsQ.data?.preferences, prefsHydratedForStockId, stockId]);
+
+  React.useEffect(() => {
+    if (prefsHydratedForStockId !== stockId) {
+      setLocalPrefs(null);
+    }
+  }, [prefsHydratedForStockId, stockId]);
 
   // Recalculate metrics for every period in the uploaded statements,
   // then refetch the score / history so any new statement is reflected.

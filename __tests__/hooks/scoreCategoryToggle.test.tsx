@@ -136,7 +136,7 @@ describe("ScorePanel category toggles", () => {
     jest.clearAllMocks();
   });
 
-  it("toggles Profitability category from checked to unchecked and sends update payload", async () => {
+  it("allows uncheck and re-check for the same category", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -161,6 +161,18 @@ describe("ScorePanel category toggles", () => {
     expect(profitability?.included).toBe(false);
     expect(payload.filter((p) => p.included).length).toBe(6);
 
-    expect(screen.getByLabelText("Include Profitability from score")).toBeTruthy();
+    const includeCheckbox = screen.getByLabelText("Include Profitability from score");
+    expect(includeCheckbox).toBeTruthy();
+
+    fireEvent.press(includeCheckbox);
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledTimes(2);
+    });
+
+    const payload2 = mockMutate.mock.calls[1][0] as Array<{ category_key: string; included: boolean }>;
+    const profitability2 = payload2.find((p) => p.category_key === "profitability");
+    expect(profitability2?.included).toBe(true);
+    expect(screen.getByLabelText("Exclude Profitability from score")).toBeTruthy();
   });
 });
