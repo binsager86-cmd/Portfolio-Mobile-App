@@ -38,6 +38,55 @@ interface Props {
   livePortfolioValue?: number;
 }
 
+interface LineChartSectionProps {
+  title: string;
+  data: ChartDataPoint[];
+  lineColor: string;
+  colors: ReturnType<typeof useThemeStore>["colors"];
+  titleStyle: { color: string; fontSize: number; marginTop?: number };
+  showTopMargin?: boolean;
+  needMoreDataText: string;
+}
+
+function LineChartSection({
+  title,
+  data,
+  lineColor,
+  colors,
+  titleStyle,
+  showTopMargin = false,
+  needMoreDataText,
+}: LineChartSectionProps) {
+  return (
+    <>
+      <Text
+        style={[
+          s.sectionTitle,
+          {
+            ...titleStyle,
+            marginTop: showTopMargin ? tokens.spacing.md : titleStyle.marginTop,
+          },
+        ]}
+      >
+        {title}
+      </Text>
+      {data.length >= 2 ? (
+        <SnapshotLineChart
+          data={data}
+          title=""
+          colors={colors}
+          lineColor={lineColor}
+          height={260}
+        />
+      ) : (
+        <View style={[s.chartPlaceholder, { borderColor: colors.borderColor }]}>
+          <Text style={{ color: colors.textMuted }}>{needMoreDataText}</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
 function getLocalIsoDate(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -104,7 +153,7 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
   // ── Chart data ──────────────────────────────────────────────────
 
   const growthChartData: ChartDataPoint[] = useMemo(
-    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.growth })),
+    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.portfolioValue })),
     [snapshotBackedData],
   );
 
@@ -130,7 +179,8 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
     const totalAppr = snapshotBackedData.reduce((s, d) => s + d.appreciation, 0);
     const totalReal = filteredData.reduce((s, d) => s + d.realizedPnl, 0);
     const latestValue = snapshotBackedData.length > 0 ? snapshotBackedData[snapshotBackedData.length - 1].portfolioValue : 0;
-    const totalGrowth = snapshotBackedData.reduce((s, d) => s + d.growth, 0);
+    const firstValue = snapshotBackedData.length > 0 ? snapshotBackedData[0].portfolioValue : 0;
+    const totalGrowth = snapshotBackedData.length > 0 ? latestValue - firstValue : 0;
     return { totalDiv, totalAppr, totalReal, latestValue, totalGrowth };
   }, [filteredData, snapshotBackedData]);
 
@@ -244,22 +294,14 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
       </View>
 
       {/* ── Chart: Portfolio Growth by Year ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
-        {t("historical.portfolioGrowthChart")}
-      </Text>
-      {growthChartData.length >= 2 ? (
-        <SnapshotLineChart
-          data={growthChartData}
-          title=""
-          colors={colors}
-          lineColor="#3b82f6"
-          height={260}
-        />
-      ) : (
-        <View style={[s.chartPlaceholder, { borderColor: colors.borderColor }]}>
-          <Text style={{ color: colors.textMuted }}>{t("historical.needMoreData")}</Text>
-        </View>
-      )}
+      <LineChartSection
+        title={t("historical.portfolioGrowthChart")}
+        data={growthChartData}
+        colors={colors}
+        lineColor="#3b82f6"
+        titleStyle={{ color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }}
+        needMoreDataText={t("historical.needMoreData")}
+      />
 
       {/* ── Chart: Dividends by Year (bar chart) ── */}
       <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
@@ -267,41 +309,29 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
       </Text>
       <DividendYearlyChart data={dividendBarData} currency="KWD" height={260} />
 
-      {/* ── Chart: Appreciation by Year ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
-        {t("historical.appreciationChart")}
-      </Text>
-      {appreciationChartData.length >= 2 ? (
-        <SnapshotLineChart
-          data={appreciationChartData}
-          title=""
+      {[
+        {
+          title: t("historical.appreciationChart"),
+          data: appreciationChartData,
+          lineColor: colors.accentPrimary,
+        },
+        {
+          title: t("historical.realizedPLChart"),
+          data: realizedChartData,
+          lineColor: colors.warning,
+        },
+      ].map((section) => (
+        <LineChartSection
+          key={section.title}
+          title={section.title}
+          data={section.data}
           colors={colors}
-          lineColor="#8b5cf6"
-          height={260}
+          lineColor={section.lineColor}
+          titleStyle={{ color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }}
+          showTopMargin
+          needMoreDataText={t("historical.needMoreData")}
         />
-      ) : (
-        <View style={[s.chartPlaceholder, { borderColor: colors.borderColor }]}>
-          <Text style={{ color: colors.textMuted }}>{t("historical.needMoreData")}</Text>
-        </View>
-      )}
-
-      {/* ── Chart: Realized P/L by Year ── */}
-      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
-        {t("historical.realizedPLChart")}
-      </Text>
-      {realizedChartData.length >= 2 ? (
-        <SnapshotLineChart
-          data={realizedChartData}
-          title=""
-          colors={colors}
-          lineColor="#f59e0b"
-          height={260}
-        />
-      ) : (
-        <View style={[s.chartPlaceholder, { borderColor: colors.borderColor }]}>
-          <Text style={{ color: colors.textMuted }}>{t("historical.needMoreData")}</Text>
-        </View>
-      )}
+      ))}
     </View>
   );
 }

@@ -143,9 +143,9 @@ export function buildYearlyHistoricalData(args: {
     const yearEnd = sorted[sorted.length - 1];
 
     let yearEndValue = safeNum(yearEnd.portfolio_value);
+    const yearEndAccumulated = safeNum(yearEnd.accumulated_cash);
     const yearStartValue = safeNum(yearStart.portfolio_value);
     const yearStartAccumulated = safeNum(yearStart.accumulated_cash);
-    const yearEndAccumulated = safeNum(yearEnd.accumulated_cash);
 
     // For the current year, use today's live overview value when snapshots lag behind.
     if (
