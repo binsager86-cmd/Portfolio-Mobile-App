@@ -1,5 +1,5 @@
 /**
- * ComparisonPanel ظ¤ Multi-period side-by-side comparison with YoY changes.
+ * ComparisonPanel — Multi-period side-by-side comparison with YoY changes.
  */
 
 import {
@@ -32,169 +32,50 @@ import {
   mergeLineItems,
   reorderLineItems,
   type FinancialStatement,
-  type LatestPreferredStatementPeriod,
 } from "@/services/api";
+import {
+  type ComparePeriodView,
+  normalizeQuarter,
+  selectComparisonStatements,
+} from "../comparisonPeriodSelection";
+import { formatStatementPeriodLabel } from "../periodLabels";
 import { st } from "../styles";
 import { STMNT_META, type PanelWithSymbolProps } from "../types";
 import { formatLineItemValue } from "../utils";
 import { ExportBar, StatementTabBar } from "./shared";
 
-type ComparePeriodView = "annual" | "quarter" | "ttm";
-type ComparisonSelection = {
-  rows: FinancialStatement[];
-  ttmPeriodEndDate: string | null;
+type CompPeriod = {
+  label: string;
+  period: string;
+  fiscalYear: number;
+  fiscalQuarter: number | null;
+  items: Record<string, { id: number; amount: number; name: string; isTotal: boolean }>;
 };
-type StatementLineItem = FinancialStatement["line_items"][number];
 
-function normalizeQuarter(raw: unknown): number | null {
-  if (raw == null) return null;
-  const q = Number(raw);
-  if (!Number.isFinite(q)) return null;
-  const qi = Math.trunc(q);
-  return qi >= 1 && qi <= 4 ? qi : null;
-}
+function getYoYBaseValue(periods: CompPeriod[], periodView: ComparePeriodView, i: number, code: string): number | undefined {
+  if (i <= 0) return undefined;
 
-function isQuarterlySource(sourceFile: string | null | undefined): boolean {
-  return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
-}
+  if (periodView !== "quarter") {
+    return periods[i - 1].items[code]?.amount;
+  }
 
-function isAnnualStatement(statement: FinancialStatement): boolean {
-  const quarter = normalizeQuarter(statement.fiscal_quarter);
-  if (quarter === 4) return true;
-  if (quarter != null) return false;
-  if (isQuarterlySource(statement.source_file)) return false;
-  return true;
-}
+  const current = periods[i];
+  if (current.fiscalQuarter == null) return undefined;
 
-function isQuarterlyStatement(statement: FinancialStatement): boolean {
-  return !isAnnualStatement(statement);
-}
-
-function sortLineItems(statement: FinancialStatement): StatementLineItem[] {
-  return [...(statement.line_items ?? [])].sort(
-    (a, b) => (a.order_index ?? 10_000) - (b.order_index ?? 10_000),
+  const targetYear = current.fiscalYear - 1;
+  const match = periods.find(
+    (p) => p.fiscalYear === targetYear && p.fiscalQuarter === current.fiscalQuarter,
   );
+  return match?.items[code]?.amount;
 }
 
-function buildSyntheticTtmStatement(
-  latestQuarter: FinancialStatement | null,
-  annualHistory: FinancialStatement[],
-  quarterlyHistory: FinancialStatement[],
-): FinancialStatement | null {
-  if (!latestQuarter) return null;
-
-  const statementType = String(latestQuarter.statement_type ?? "").toLowerCase();
-  if (statementType !== "income" && statementType !== "cashflow") return null;
-
-  const latestQuarterNum = normalizeQuarter(latestQuarter.fiscal_quarter);
-  if (latestQuarterNum == null || latestQuarterNum === 4) return null;
-
-  const priorAnnual = annualHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1,
-  );
-  if (!priorAnnual) return null;
-
-  const priorSameQuarter = quarterlyHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1
-      && normalizeQuarter(statement.fiscal_quarter) === latestQuarterNum,
-  );
-  if (!priorSameQuarter) return null;
-
-  const annualByCode = new Map<string, StatementLineItem>();
-  const priorByCode = new Map<string, StatementLineItem>();
-  for (const lineItem of sortLineItems(priorAnnual)) {
-    annualByCode.set(lineItem.line_item_code, lineItem);
-  }
-  for (const lineItem of sortLineItems(priorSameQuarter)) {
-    priorByCode.set(lineItem.line_item_code, lineItem);
-  }
-
-  const syntheticLineItems: StatementLineItem[] = [];
-  for (const latestItem of sortLineItems(latestQuarter)) {
-    const annualItem = annualByCode.get(latestItem.line_item_code);
-    const priorQuarterItem = priorByCode.get(latestItem.line_item_code);
-    const annualAmount = annualItem?.amount ?? 0;
-    const priorQuarterAmount = priorQuarterItem?.amount ?? 0;
-    const ttmAmount = annualAmount + latestItem.amount - priorQuarterAmount;
-
-    syntheticLineItems.push({
-      ...latestItem,
-      statement_id: latestQuarter.id,
-      amount: ttmAmount,
-      manually_edited: false,
-    });
-  }
-
-  if (syntheticLineItems.length === 0) return null;
-
-  return {
-    ...latestQuarter,
-    line_items: syntheticLineItems,
-    source_file: latestQuarter.source_file
-      ? `${latestQuarter.source_file}#derived-ttm`
-      : "derived-ttm",
-    notes: "Derived TTM from annual + latest quarter - prior-year same quarter",
-  };
+function getYoYHeaderLabel(periodView: ComparePeriodView): string {
+  return periodView === "quarter" ? "YoY % (same Q LY)" : "YoY %";
 }
 
-function selectComparisonStatements(
-  statements: FinancialStatement[],
-  latestPreferred: LatestPreferredStatementPeriod | null | undefined,
-  periodView: ComparePeriodView,
-): ComparisonSelection {
-  if (statements.length === 0) return { rows: statements, ttmPeriodEndDate: null };
-
-  const normalized = statements
-    .map((statement) => ({ ...statement, fiscal_quarter: normalizeQuarter(statement.fiscal_quarter) }))
-    .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
-
-  const annualHistory = normalized.filter((statement) => isAnnualStatement(statement));
-  const quarterlyHistory = normalized.filter((statement) => isQuarterlyStatement(statement));
-
-  let latestQuarter: FinancialStatement | null = null;
-  const preferredQuarter = normalizeQuarter(latestPreferred?.fiscal_quarter);
-  if (latestPreferred && preferredQuarter != null) {
-    latestQuarter = quarterlyHistory.find(
-      (statement) => statement.period_end_date === latestPreferred.period_end_date,
-    ) ?? null;
-  }
-  if (!latestQuarter) {
-    latestQuarter = quarterlyHistory[quarterlyHistory.length - 1] ?? null;
-  }
-
-  if (periodView === "quarter") {
-    if (quarterlyHistory.length > 0) return { rows: quarterlyHistory, ttmPeriodEndDate: null };
-    return { rows: normalized, ttmPeriodEndDate: null };
-  }
-
-  if (periodView === "annual") {
-    if (annualHistory.length > 0) return { rows: annualHistory, ttmPeriodEndDate: null };
-    return { rows: normalized, ttmPeriodEndDate: null };
-  }
-
-  const ttmStatement = buildSyntheticTtmStatement(
-    latestQuarter,
-    annualHistory,
-    quarterlyHistory,
-  );
-  const annualTtmColumn = ttmStatement;
-
-  const combined = [
-    ...annualHistory,
-    ...(annualTtmColumn ? [annualTtmColumn] : []),
-  ].sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
-
-  const deduped = new Map<string, FinancialStatement>();
-  for (const statement of combined) {
-    deduped.set(statement.period_end_date, statement);
-  }
-  const rows = [...deduped.values()];
-
-  if (rows.length === 0) return { rows: normalized, ttmPeriodEndDate: null };
-  return {
-    rows,
-    ttmPeriodEndDate: annualTtmColumn?.period_end_date ?? null,
-  };
+function calculateYoYPercent(currentValue: number | null | undefined, previousValue: number | null | undefined): number | null {
+  if (currentValue == null || previousValue == null || previousValue === 0) return null;
+  return ((currentValue - previousValue) / previousValue) * 100;
 }
 
 export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }: PanelWithSymbolProps) {
@@ -203,7 +84,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   const [periodView, setPeriodView] = useState<ComparePeriodView>("ttm");
   const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
 
-  // ظ¤ظ¤ Merge mode state ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+  // ── Merge mode state ────────────────────────────────────────────
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
@@ -226,14 +107,17 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
           && ttmPeriodEndDate != null
           && s.period_end_date === ttmPeriodEndDate
           && q != null;
-        const label = isTtmPeriod
-          ? "TTM"
-          : periodView === "quarter"
-            ? `FY${s.fiscal_year}${q != null ? ` Q${q}` : ""}`
-            : `FY${s.fiscal_year}`;
+        const label = formatStatementPeriodLabel(
+          periodView === "quarter" ? "quarter" : "annual",
+          s.fiscal_year,
+          q,
+          isTtmPeriod,
+        );
         return {
         label,
         period: s.period_end_date,
+        fiscalYear: s.fiscal_year,
+        fiscalQuarter: q,
         items: Object.fromEntries(
           (s.line_items ?? []).map((li) => [li.line_item_code, { id: li.id, amount: li.amount, name: li.line_item_name, isTotal: li.is_total }])
         ),
@@ -259,7 +143,11 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
       .map(([code, v]) => ({ code, name: v.name, isTotal: v.isTotal }));
   }, [comparisonStatements]);
 
-  // ظ¤ظ¤ Merge line items mutation ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+  const handleRecalculate = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  // ── Merge line items mutation ───────────────────────────────────
   const mergeMut = useMutation({
     mutationFn: ({ keepCode, removeCode }: { keepCode: string; removeCode: string }) =>
       mergeLineItems(stockId, keepCode, removeCode),
@@ -297,7 +185,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
     }
   }, [mergeSelection, allCodes, mergeMut]);
 
-  // ظ¤ظ¤ Drag-and-drop state ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+  // ── Drag-and-drop state ─────────────────────────────────────────
   const [localOrder, setLocalOrder] = useState<{ code: string; name: string; isTotal: boolean }[] | null>(null);
 
   const allCodesKey = useMemo(() => allCodes.map((r) => r.code).join(","), [allCodes]);
@@ -341,7 +229,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
     const headers = ["Line Item"];
     for (let i = 0; i < periods.length; i++) {
       headers.push(periods[i].label);
-      if (i > 0) headers.push("YoY %");
+      if (i > 0) headers.push(getYoYHeaderLabel(periodView));
     }
     const rows = displayRows.map((item) => {
       const row: (string | number | null)[] = [item.name];
@@ -349,16 +237,16 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
         const val = periods[i].items[item.code]?.amount;
         row.push(val != null ? formatLineItemValue(item.name, val) : null);
         if (i > 0) {
-          const prevVal = periods[i - 1].items[item.code]?.amount;
-          const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+          const prevVal = getYoYBaseValue(periods, periodView, i, item.code);
+          const yoy = calculateYoYPercent(val, prevVal);
           row.push(yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : null);
         }
       }
       return row;
     });
     const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
-    return [{ title: `${typeName} ظ¤ Period Comparison`, headers, rows }];
-  }, [periods, displayRows, typeFilter]);
+    return [{ title: `${typeName} — Period Comparison`, headers, rows }];
+  }, [periods, displayRows, typeFilter, periodView]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -478,6 +366,27 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
             </Pressable>
 
             <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={handleRecalculate}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh comparison"
+              style={({ pressed }) => [{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                backgroundColor: colors.bgCard,
+                opacity: pressed ? 0.8 : 1,
+                marginRight: 8,
+              }]}
+            >
+              <FontAwesome name="refresh" size={12} color={colors.accentPrimary} />
+              <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700" }}>Refresh</Text>
+            </Pressable>
             <ExportBar
               onExport={async (fmt) => {
                 const { exportExcel, exportCSV, exportPDF } = await import("@/lib/exportAnalysis");
@@ -498,7 +407,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
                 {periods.map((p, i) => (
                   <React.Fragment key={p.period}>
                     <Text style={[st.compCellVal, { color: colors.textPrimary, fontWeight: "800" }]}>{p.label}</Text>
-                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>YoY %</Text>}
+                    {i > 0 && <Text style={[st.compCellYoy, { color: colors.accentPrimary, fontWeight: "700" }]}>{getYoYHeaderLabel(periodView)}</Text>}
                   </React.Fragment>
                 ))}
               </View>
@@ -513,6 +422,7 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
                       item={item}
                       rowIdx={rowIdx}
                       periods={periods}
+                      periodView={periodView}
                       colors={colors}
                       mergeMode={mergeMode}
                       mergeSelected={mergeSelection.includes(item.code)}
@@ -529,21 +439,16 @@ export function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDe
   );
 }
 
-// ظ¤ظ¤ Sortable comparison row ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
-type CompPeriod = {
-  label: string;
-  period: string;
-  items: Record<string, { id: number; amount: number; name: string; isTotal: boolean }>;
-};
-
 function SortableCompRow({
   id, item, rowIdx, periods, colors,
+  periodView,
   mergeMode, mergeSelected, onToggleMerge,
 }: {
   id: string;
   item: { code: string; name: string; isTotal: boolean };
   rowIdx: number;
   periods: CompPeriod[];
+  periodView: ComparePeriodView;
   colors: ThemePalette;
   mergeMode: boolean;
   mergeSelected: boolean;
@@ -608,7 +513,7 @@ function SortableCompRow({
           touchAction: "none",
         }}
       >
-        <Text style={{ fontSize: 12, color: colors.textMuted }}>ظب┐</Text>
+        <Text style={{ fontSize: 12, color: colors.textMuted }}>⠿</Text>
       </div>
 
       <Text numberOfLines={1} style={[st.compCellName, { color: item.isTotal ? colors.textPrimary : colors.textSecondary, fontWeight: item.isTotal ? "700" : "400" }]}>
@@ -616,22 +521,22 @@ function SortableCompRow({
       </Text>
       {periods.map((p, i) => {
         const val = p.items[item.code]?.amount;
-        const prevVal = i > 0 ? periods[i - 1].items[item.code]?.amount : undefined;
-        const yoy = prevVal && prevVal !== 0 && val != null ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+        const prevVal = getYoYBaseValue(periods, periodView, i, item.code);
+        const yoy = calculateYoYPercent(val, prevVal);
         return (
           <React.Fragment key={p.period}>
             <Text style={[st.compCellVal, {
               color: val != null && val < 0 ? colors.danger : (item.isTotal ? colors.textPrimary : colors.textSecondary),
               fontWeight: item.isTotal ? "700" : "500",
             }]}>
-              {val != null ? formatLineItemValue(item.name, val) : "ظô"}
+              {val != null ? formatLineItemValue(item.name, val) : "–"}
             </Text>
             {i > 0 && (
               <Text style={[st.compCellYoy, {
                 color: yoy == null ? colors.textMuted : yoy >= 0 ? colors.success : colors.danger,
                 fontWeight: "600",
               }]}>
-                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "ظô"}
+                {yoy != null ? `${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%` : "–"}
               </Text>
             )}
           </React.Fragment>

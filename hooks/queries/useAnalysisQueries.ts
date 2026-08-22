@@ -62,6 +62,7 @@ export function useStatements(stockId: number, statementType?: string) {
     queryFn: () => getStatements(stockId, statementType),
     enabled: hasValidStockId(stockId),
     staleTime: TAB_DATA_STALE_TIME,
+    refetchOnMount: "always",
   });
 }
 

@@ -1,3 +1,4 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
 /**
  * ValuationsPanel — Run Graham / DCF / DDM / Multiples valuations
  * with detailed result cards (formula breakdowns, projections,

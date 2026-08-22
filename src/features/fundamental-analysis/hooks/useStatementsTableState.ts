@@ -33,6 +33,7 @@ import {
     listStockPdfs,
     logStatementChange,
 } from "@/services/api/analytics";
+import { formatStatementPeriodLabel } from "../periodLabels";
 import { STMNT_META } from "../types";
 import { formatLineItemValue, inferQuarterFromDate } from "../utils";
 import type { PeriodInfo } from "../components/StatementTableRows";
@@ -246,7 +247,7 @@ export function useStatementsTableState(
           && s.period_end_date === ttmPeriodEndDate
           && q != null;
         return {
-          label: isTtmPeriod ? "TTM" : `FY${s.fiscal_year}${q ? ` Q${q}` : ""}`,
+          label: formatStatementPeriodLabel(periodView, s.fiscal_year, q, isTtmPeriod),
           period: s.period_end_date,
           statementId: s.id,
           items: Object.fromEntries(

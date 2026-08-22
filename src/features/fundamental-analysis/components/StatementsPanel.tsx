@@ -1,11 +1,11 @@
 /**
- * StatementsPanel ظ¤ Thin orchestrator composing AiExtractionFlow,
+ * StatementsPanel — Thin orchestrator composing AiExtractionFlow,
  * SavedPdfsList, StatementTabBar, and StatementsTable.
  */
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Platform,
@@ -17,15 +17,15 @@ import {
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";
 import type { ThemePalette } from "@/constants/theme";
-import type {
-  FinancialStatement,
-  LatestPreferredStatementPeriod,
-} from "@/services/api";
 import {
     deleteStockPdf,
     downloadStockPdf,
     type SavedPdf,
 } from "@/services/api/analytics";
+import {
+  selectStatementsForDisplay,
+  type StatementPeriodView,
+} from "../statementPeriodSelection";
 import { useStatementManager } from "../hooks/useStatementManager";
 import { st } from "../styles";
 import type { PanelWithSymbolProps } from "../types";
@@ -34,171 +34,47 @@ import { AiExtractionFlow } from "./AiExtractionFlow";
 import { Chip, StatementTabBar } from "./shared";
 import { StatementsTable } from "./StatementsTable";
 
-/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
+/* ═══════════════════════════════════════════════════════════════════ */
 /*  STATEMENTS PANEL                                                  */
-/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
-
-function normalizeQuarter(raw: unknown): number | null {
-  if (raw == null) return null;
-  const q = Number(raw);
-  if (!Number.isFinite(q)) return null;
-  const qi = Math.trunc(q);
-  return qi >= 1 && qi <= 4 ? qi : null;
-}
-
-function isQuarterlySource(sourceFile: string | null | undefined): boolean {
-  return typeof sourceFile === "string" && sourceFile.toLowerCase().includes("p=quarterly");
-}
-
-function isAnnualStatement(statement: FinancialStatement): boolean {
-  const quarter = normalizeQuarter(statement.fiscal_quarter);
-  if (quarter === 4) return true;
-  if (quarter != null) return false;
-  if (isQuarterlySource(statement.source_file)) return false;
-  // Unknown quarter defaults to annual so fiscal-year rows remain visible.
-  return true;
-}
-
-type StatementPeriodView = "annual" | "quarter";
-
-type StatementDisplaySelection = {
-  rows: FinancialStatement[];
-  ttmPeriodEndDate: string | null;
-};
-
-type StatementLineItem = FinancialStatement["line_items"][number];
-
-function sortLineItems(statement: FinancialStatement): StatementLineItem[] {
-  return [...(statement.line_items ?? [])].sort(
-    (a, b) => (a.order_index ?? 10_000) - (b.order_index ?? 10_000),
-  );
-}
-
-function buildSyntheticTtmStatement(
-  latestQuarter: FinancialStatement | null,
-  annualHistory: FinancialStatement[],
-  quarterlyHistory: FinancialStatement[],
-): FinancialStatement | null {
-  if (!latestQuarter) return null;
-
-  const statementType = String(latestQuarter.statement_type ?? "").toLowerCase();
-  // TTM aggregation is only meaningful for flow statements.
-  if (statementType !== "income" && statementType !== "cashflow") return null;
-
-  const latestQuarterNum = normalizeQuarter(latestQuarter.fiscal_quarter);
-  if (latestQuarterNum == null || latestQuarterNum === 4) return null;
-
-  const priorAnnual = annualHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1,
-  );
-  if (!priorAnnual) return null;
-
-  const priorSameQuarter = quarterlyHistory.find(
-    (statement) => statement.fiscal_year === latestQuarter.fiscal_year - 1
-      && normalizeQuarter(statement.fiscal_quarter) === latestQuarterNum,
-  );
-  if (!priorSameQuarter) return null;
-
-  const annualByCode = new Map<string, StatementLineItem>();
-  const priorByCode = new Map<string, StatementLineItem>();
-  for (const lineItem of sortLineItems(priorAnnual)) {
-    annualByCode.set(lineItem.line_item_code, lineItem);
-  }
-  for (const lineItem of sortLineItems(priorSameQuarter)) {
-    priorByCode.set(lineItem.line_item_code, lineItem);
-  }
-
-  const syntheticLineItems: StatementLineItem[] = [];
-  for (const latestItem of sortLineItems(latestQuarter)) {
-    const annualItem = annualByCode.get(latestItem.line_item_code);
-    const priorQuarterItem = priorByCode.get(latestItem.line_item_code);
-    const annualAmount = annualItem?.amount ?? 0;
-    const priorQuarterAmount = priorQuarterItem?.amount ?? 0;
-    const ttmAmount = annualAmount + latestItem.amount - priorQuarterAmount;
-
-    syntheticLineItems.push({
-      ...latestItem,
-      statement_id: latestQuarter.id,
-      amount: ttmAmount,
-      manually_edited: false,
-    });
-  }
-
-  if (syntheticLineItems.length === 0) return null;
-
-  return {
-    ...latestQuarter,
-    line_items: syntheticLineItems,
-    source_file: latestQuarter.source_file
-      ? `${latestQuarter.source_file}#derived-ttm`
-      : "derived-ttm",
-    notes: "Derived TTM from annual + latest quarter - prior-year same quarter",
-  };
-}
-
-function selectStatementsForDisplay(
-  statements: FinancialStatement[],
-  latestPreferred: LatestPreferredStatementPeriod | null,
-  periodView: StatementPeriodView,
-): StatementDisplaySelection {
-  if (statements.length === 0) return { rows: statements, ttmPeriodEndDate: null };
-
-  const normalized = statements
-    .map((s) => ({ ...s, fiscal_quarter: normalizeQuarter(s.fiscal_quarter) }))
-    .sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
-
-  // Annual rows can be non-December for non-calendar fiscal year-ends.
-  const annualHistory = normalized.filter((s) => isAnnualStatement(s));
-
-  // Quarter view should keep only quarter cadence rows.
-  const quarterlyHistory = normalized.filter((s) => !isAnnualStatement(s));
-
-  let latestQuarter: FinancialStatement | null = null;
-  const preferredQuarter = normalizeQuarter(latestPreferred?.fiscal_quarter);
-  if (latestPreferred && preferredQuarter != null) {
-    latestQuarter = quarterlyHistory.find((s) => s.period_end_date === latestPreferred.period_end_date) ?? null;
-  }
-  if (!latestQuarter) {
-    latestQuarter = quarterlyHistory[quarterlyHistory.length - 1] ?? null;
-  }
-
-  if (periodView === "quarter") {
-    if (quarterlyHistory.length > 0) {
-      return { rows: quarterlyHistory, ttmPeriodEndDate: null };
-    }
-    return { rows: normalized, ttmPeriodEndDate: null };
-  }
-
-  const ttmStatement = buildSyntheticTtmStatement(
-    latestQuarter,
-    annualHistory,
-    quarterlyHistory,
-  );
-  const annualTtmColumn = ttmStatement;
-
-  const combined = [
-    ...annualHistory,
-    ...(annualTtmColumn ? [annualTtmColumn] : []),
-  ].sort((a, b) => a.period_end_date.localeCompare(b.period_end_date));
-
-  const deduped = new Map<number, FinancialStatement>();
-  for (const stmt of combined) deduped.set(stmt.id, stmt);
-  const rows = [...deduped.values()];
-
-  if (rows.length === 0) {
-    return { rows: normalized, ttmPeriodEndDate: null };
-  }
-
-  return {
-    rows,
-    ttmPeriodEndDate: annualTtmColumn?.period_end_date ?? null,
-  };
-}
+/* ═══════════════════════════════════════════════════════════════════ */
 
 export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelWithSymbolProps) {
   const mgr = useStatementManager(stockId);
   const { statements, latestPreferred, isLoading, isFetching, refetch, savedPdfs, typeFilter, setTypeFilter } = mgr;
   const [periodView, setPeriodView] = useState<StatementPeriodView>("annual");
+
+  const typeScopedStatements = useMemo(
+    () => (typeFilter == null ? statements : statements.filter((statement) => statement.statement_type === typeFilter)),
+    [statements, typeFilter],
+  );
+
+  const annualSelection = useMemo(
+    () => selectStatementsForDisplay(typeScopedStatements, latestPreferred, "annual"),
+    [typeScopedStatements, latestPreferred],
+  );
+
+  const quarterSelection = useMemo(
+    () => selectStatementsForDisplay(typeScopedStatements, latestPreferred, "quarter"),
+    [typeScopedStatements, latestPreferred],
+  );
+
+  useEffect(() => {
+    if (
+      typeFilter != null
+      && periodView === "annual"
+      && typeScopedStatements.length > 0
+      && annualSelection.rows.length === 0
+      && quarterSelection.rows.length > 0
+    ) {
+      setPeriodView("quarter");
+    }
+  }, [
+    typeFilter,
+    periodView,
+    typeScopedStatements.length,
+    annualSelection.rows.length,
+    quarterSelection.rows.length,
+  ]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -280,7 +156,7 @@ export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
         </ScrollView>
       ) : (
         (() => {
-          const selection = selectStatementsForDisplay(statements, latestPreferred, periodView);
+          const selection = periodView === "annual" ? annualSelection : quarterSelection;
           return (
             <StatementsTable
               stockId={stockId}
@@ -301,9 +177,9 @@ export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   );
 }
 
-/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
+/* ═══════════════════════════════════════════════════════════════════ */
 /*  SAVED PDFs LIST                                                    */
-/* ظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـظـ */
+/* ═══════════════════════════════════════════════════════════════════ */
 
 function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: number; colors: ThemePalette }) {
   const queryClient = useQueryClient();
@@ -388,7 +264,7 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
         <View style={{ marginTop: 8, gap: 6 }}>
           {pdfs.length === 0 && (
             <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: "italic", paddingVertical: 8 }}>
-              No saved reports yet. Upload a PDF above ظ¤ it will be saved here automatically.
+              No saved reports yet. Upload a PDF above — it will be saved here automatically.
             </Text>
           )}
           {pdfs.map((pdf) => (
@@ -410,7 +286,7 @@ function SavedPdfsList({ pdfs, stockId, colors }: { pdfs: SavedPdf[]; stockId: n
                   {pdf.original_name}
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>
-                  {formatFileSize(pdf.file_size)} ┬╖ {formatDate(pdf.created_at)}
+                  {formatFileSize(pdf.file_size)} · {formatDate(pdf.created_at)}
                 </Text>
               </View>
               <Pressable onPress={() => handleDownload(pdf)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Download ${pdf.original_name}`} style={{ padding: 6 }}>
