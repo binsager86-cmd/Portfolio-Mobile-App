@@ -625,6 +625,15 @@ export type MetricCategoryScores = Record<MetricCategoryScoreKey, number>;
 
 export type MetricCategoryBreakdown = Record<MetricCategoryScoreKey, CategoryBreakdown>;
 
+export type ScoreCategoryPreferences = Record<MetricCategoryScoreKey, boolean>;
+
+export type ScoreCategoryWeights = Record<MetricCategoryScoreKey, number>;
+
+export interface ScoreCategoryPreferenceItem {
+  category_key: MetricCategoryScoreKey;
+  included: boolean;
+}
+
 export interface StockScoreSummary {
   overall_score: number | null;
   fundamental_score: number | null;
@@ -638,6 +647,8 @@ export interface StockScoreSummary {
   sector_name?: string | null;
   metric_category_scores?: MetricCategoryScores;
   metric_category_breakdown?: MetricCategoryBreakdown;
+  metric_category_weights?: ScoreCategoryWeights;
+  metric_category_preferences?: ScoreCategoryPreferences;
   score_breakdown?: ScoreBreakdown;
 }
 

@@ -5,6 +5,9 @@
 import api from "../client";
 import type {
   PeerMultiple,
+  ScoreCategoryPreferenceItem,
+  ScoreCategoryPreferences,
+  ScoreCategoryWeights,
   StockMetric,
   StockScore,
   StockScoreSummary,
@@ -66,6 +69,33 @@ export async function getScoreHistory(stockId: number): Promise<{ scores: StockS
   const { data } = await api.get<{ status: string; data: { scores: StockScore[]; count: number } }>(
     `/api/v1/fundamental/stocks/${stockId}/scores/history`,
   );
+  return data.data;
+}
+
+/** Get score category inclusion preferences and pro-rata weights. */
+export async function getScoreCategoryPreferences(stockId: number): Promise<{
+  preferences: ScoreCategoryPreferences;
+  pro_rata_weights: ScoreCategoryWeights;
+}> {
+  const { data } = await api.get<{
+    status: string;
+    data: { preferences: ScoreCategoryPreferences; pro_rata_weights: ScoreCategoryWeights };
+  }>(`/api/v1/fundamental/stocks/${stockId}/score/category-preferences`);
+  return data.data;
+}
+
+/** Update score category inclusion preferences. */
+export async function updateScoreCategoryPreferences(
+  stockId: number,
+  preferences: ScoreCategoryPreferenceItem[],
+): Promise<{
+  preferences: ScoreCategoryPreferences;
+  pro_rata_weights: ScoreCategoryWeights;
+}> {
+  const { data } = await api.put<{
+    status: string;
+    data: { preferences: ScoreCategoryPreferences; pro_rata_weights: ScoreCategoryWeights };
+  }>(`/api/v1/fundamental/stocks/${stockId}/score/category-preferences`, { preferences });
   return data.data;
 }
 
