@@ -364,6 +364,8 @@ export default React.memo(function SnapshotLineChart({
     };
   }, [activeIdx, geo, data]);
 
+  const safeTitle = typeof title === "string" ? title.trim() : "";
+
   // ── No-data placeholder ─────────────────────────────────────────
 
   if (!data || data.length < 2) {
@@ -390,13 +392,13 @@ export default React.memo(function SnapshotLineChart({
 
   return (
     <View style={[{ width: "100%", marginBottom: tokens.spacing.md }]} onLayout={onLayout}>
-      {title && (
+      {safeTitle.length > 0 ? (
         <Text style={[chartS.title, { color: colors.textSecondary }]}>
-          {title}
+          {safeTitle}
         </Text>
-      )}
+      ) : null}
 
-      {containerWidth > 0 && geo && (
+      {containerWidth > 0 && geo ? (
         <Animated.View
           style={[
             chartS.chartWrap,
@@ -418,7 +420,7 @@ export default React.memo(function SnapshotLineChart({
               width={containerWidth}
               height={height}
               accessibilityRole="image"
-              accessibilityLabel={`${title} chart with ${data.length} data points`}
+              accessibilityLabel={`${safeTitle || "Snapshot"} chart with ${data.length} data points`}
             >
               <Defs>
                 {/* Area gradient (primary top → secondary bottom, fading out) */}
@@ -577,7 +579,7 @@ export default React.memo(function SnapshotLineChart({
             )}
           </View>
         </Animated.View>
-      )}
+      ) : null}
     </View>
   );
 }, (prev, next) => {
