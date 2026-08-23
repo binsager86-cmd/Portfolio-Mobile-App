@@ -1428,6 +1428,7 @@
     "failedToDeleteUser": "Failed to delete user",
     "total": "Total",
     "growth": "Growth",
+    "dailyChange": "Daily",
     "lastLoginHeader": "Last Login",
     "stocksHeader": "Stocks",
     "cashHeader": "Cash",

@@ -1396,6 +1396,7 @@
     "failedToDeleteUser": "فشل في حذف المستخدم",
     "total": "الإجمالي",
     "growth": "النمو",
+    "dailyChange": "اليومي",
     "lastLoginHeader": "آخر دخول",
     "stocksHeader": "الأسهم",
     "cashHeader": "النقد",
