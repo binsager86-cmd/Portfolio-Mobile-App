@@ -285,7 +285,9 @@ function OverviewScreen() {
   const { data: riskData } = useRiskMetrics(customRfRate, !!data && customRfRate != null);
 
   const { data: holdingsResp } = useHoldings();
-  const { data: marketSummary } = useMarketSummary();
+  // Overview may consume Market data already loaded by the Market tab, but
+  // must not start a Market request during sign-in or dashboard startup.
+  const { data: marketSummary } = useMarketSummary(false);
 
   const holdingsRows = useMemo<OverviewHoldingRow[]>(() => {
     const items = holdingsResp?.holdings ?? [];

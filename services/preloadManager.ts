@@ -6,16 +6,12 @@ import { OfflineCache } from "@/services/offlineCache";
 const CRITICAL_KEYS: Array<readonly [string, string]> = [
   ["portfolio", "overview"],
   ["portfolio", "holdings"],
-  ["market", "overview"],
   ["news", "feed"],
 ];
 
 const PREWARM_INTERVAL_MS = 30 * 60 * 1000;
 
 function endpointForKey(key: readonly [string, string]): string {
-  if (key[0] === "market" && key[1] === "overview") {
-    return "/api/v1/market/summary";
-  }
   if (key[0] === "news" && key[1] === "feed") {
     return "/api/v1/news/feed?limit=20";
   }

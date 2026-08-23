@@ -32,7 +32,6 @@ import { initSentry } from "@/lib/sentry";
 import { prewarmCriticalQueries, startBackgroundPrewarm } from "@/services/preloadManager";
 import { getHoldings, getOverview, getStockList } from "@/services/api";
 import { useAuthStore } from "@/services/authStore";
-import { marketApi } from "@/services/market/marketApi";
 import { newsApi } from "@/services/news/newsApi";
 import { registerPushToken } from "@/services/notifications/pushTokenService";
 import { useThemeStore } from "@/services/themeStore";
@@ -288,11 +287,6 @@ function RootLayoutNav() {
       prefetchIfStale({
         queryKey: ["news", "feed", {}],
         queryFn: () => newsApi.getFeed({ limit: 15 }),
-        staleTime: 5 * 60_000,
-      });
-      prefetchIfStale({
-        queryKey: ["market", "summary"],
-        queryFn: () => marketApi.getSummary(),
         staleTime: 5 * 60_000,
       });
     }

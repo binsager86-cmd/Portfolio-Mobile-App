@@ -7,6 +7,29 @@ import { getToken } from "@/services/tokenStorage";
 
 const MARKET_API = `${API_BASE_URL}/api/v1/market`;
 
+function noStoreFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, cache: "no-store" });
+}
+
+async function triggerBackgroundRefresh(headers: Record<string, string>): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1000);
+  try {
+    await noStoreFetch(
+      `${MARKET_API}/overview?live=true&include_quotes=false&_=${Date.now()}`,
+      { headers, signal: controller.signal },
+    );
+  } catch {
+    // The server refresh continues independently; the current snapshot remains usable.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -72,7 +95,7 @@ export interface MarketData {
 export const marketApi = {
   async getSummary(): Promise<MarketData> {
     const headers = await authHeaders();
-    const res = await fetch(`${MARKET_API}/summary`, { headers });
+    const res = await noStoreFetch(`${MARKET_API}/overview?include_quotes=false&_=${Date.now()}`, { headers });
     if (!res.ok) throw new Error(`Market API error: ${res.status}`);
     const json = await res.json();
     return json.data;
@@ -80,22 +103,24 @@ export const marketApi = {
 
   async refresh(): Promise<MarketData> {
     const headers = await authHeaders();
-    // Prefer non-blocking refresh: returns the latest snapshot immediately
-    // while backend refreshes in the background.
-    const overviewRes = await fetch(`${MARKET_API}/overview?live=true&include_quotes=false`, { headers });
-    if (overviewRes.ok) {
-      const json = await overviewRes.json();
-      return json.data;
-    }
+    const current = await this.getSummary();
+    const currentFetchedAt = current?._fetched_at ?? 0;
 
-    // Backward-compatible fallback for deployments without /overview.
-    if (overviewRes.status !== 404) {
-      throw new Error(`Market refresh error: ${overviewRes.status}`);
-    }
+    // Do not make the button wait for the full TickerChart universe refresh.
+    // Trigger it independently, then immediately return the current snapshot.
+    void triggerBackgroundRefresh(headers);
 
-    const res = await fetch(`${MARKET_API}/refresh`, { headers });
-    if (!res.ok) throw new Error(`Market refresh error: ${res.status}`);
-    const json = await res.json();
-    return json.data;
+    // The first response is intentionally cached. Poll only the fast read path
+    // for a short bounded window so the UI picks up the new snapshot without
+    // ever waiting on the live provider request.
+    const deadline = Date.now() + 15000;
+    let latest = current;
+    while (Date.now() < deadline) {
+      await sleep(500);
+      const candidate = await this.getSummary();
+      latest = candidate;
+      if ((candidate?._fetched_at ?? 0) > currentFetchedAt) return candidate;
+    }
+    return latest;
   },
 };
