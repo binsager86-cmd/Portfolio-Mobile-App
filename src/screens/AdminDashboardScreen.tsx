@@ -192,6 +192,8 @@ function UserTableRow({
 }) {
   const growthColor = user.growth_value >= 0 ? "#27ae60" : "#e74c3c";
   const growthSign = user.growth_value >= 0 ? "+" : "";
+  const dailyColor = user.daily_change >= 0 ? "#27ae60" : "#e74c3c";
+  const dailySign = user.daily_change >= 0 ? "+" : "";
 
   if (isPhone) {
     return (
@@ -227,6 +229,9 @@ function UserTableRow({
             </Text>
             <Text style={{ color: growthColor, fontSize: fonts.caption, fontWeight: "600", marginTop: 2 }}>
               {growthSign}{fmtInt(user.growth_value)}
+            </Text>
+            <Text style={{ color: dailyColor, fontSize: 11, fontWeight: "600", marginTop: 1 }}>
+              {dailySign}{fmtInt(user.daily_change)} {t("adminPanel.dailyChange")}
             </Text>
           </View>
         </View>
@@ -281,6 +286,9 @@ function UserTableRow({
       </Text>
       <Text style={[st.tableCell, { flex: 0.8, color: growthColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
         {growthSign}{fmtInt(user.growth_value)}
+      </Text>
+      <Text style={[st.tableCell, { flex: 0.8, color: dailyColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
+        {dailySign}{fmtInt(user.daily_change)}
       </Text>
     </Pressable>
   );
@@ -590,6 +598,7 @@ function AdminDashboardScreen() {
                 { label: t("adminPanel.cashHeader"), flex: 0.8, align: "center" },
                 { label: t("adminPanel.total"), flex: 1, align: "center" },
                 { label: t("adminPanel.growth"), flex: 0.8, align: "center" },
+                { label: t("adminPanel.dailyChange"), flex: 0.8, align: "center" },
               ]}
             />
           )}
