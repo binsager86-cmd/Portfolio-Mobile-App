@@ -189,7 +189,6 @@ function OverviewScreen() {
   const handleAiAnalyze = useCallback((prompt: string) => {
     setAiResult(null);
     aiMutation.mutate(prompt);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiMutation.mutate]);
 
   // First-time setup wizard — only for genuinely new users with no data.
