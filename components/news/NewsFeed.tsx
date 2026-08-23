@@ -101,6 +101,9 @@ export const NewsFeed = React.memo(function NewsFeed({
   }, [holdingsResp?.holdings, symbol]);
 
   const categoryFilter = activeCategory === "all" ? undefined : [activeCategory] as NewsCategory[];
+  // Filter server-side (not just client-side after fetch) so pagination reflects
+  // the actual filtered result set instead of the full unfiltered market feed.
+  const symbolsFilter = (portfolioOnly || !!symbol) && userSymbols.length > 0 ? userSymbols : undefined;
 
   // ── Live feed query (cursor-based infinite scroll) ──
   const {
@@ -114,6 +117,7 @@ export const NewsFeed = React.memo(function NewsFeed({
     isFetchingNextPage,
   } = useNewsFeed({
     categories: categoryFilter,
+    symbols: symbolsFilter,
     lang,
   });
 
@@ -126,6 +130,7 @@ export const NewsFeed = React.memo(function NewsFeed({
     isFetchingNextPage: isFetchingNextHistory,
   } = useNewsHistoryInfinite({
     categories: categoryFilter,
+    symbols: symbolsFilter,
     lang,
     enabled: !maxItems && hasNextPage === false,
   });
