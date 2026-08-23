@@ -18,11 +18,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import DividendYearlyChart from "@/components/charts/DividendYearlyChart";
 import SnapshotLineChart, { type ChartDataPoint } from "@/components/charts/SnapshotLineChart";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { useAllDeposits } from "@/hooks/queries/useDepositQueries";
 import { useAllDividends } from "@/hooks/queries/useDividendQueries";
 import { useResponsive } from "@/hooks/useResponsive";
+import type { ThemePalette } from "@/constants/theme";
 import { formatCurrency, formatSignedCurrency } from "@/lib/currency";
 import {
   buildYearlyHistoricalData,
+  formatPeriodYearLabel,
+  getPeriodYearKey,
+  type PeriodMode,
   type YearlyPerformanceDataPoint,
 } from "@/lib/historicalPerformanceData";
 import type { RealizedProfitDetail, SnapshotRecord } from "@/services/api";
@@ -42,7 +47,7 @@ interface LineChartSectionProps {
   title: string;
   data: ChartDataPoint[];
   lineColor: string;
-  colors: ReturnType<typeof useThemeStore>["colors"];
+  colors: ThemePalette;
   titleStyle: { color: string; fontSize: number; marginTop?: number };
   showTopMargin?: boolean;
   needMoreDataText: string;
@@ -100,9 +105,11 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
   const { colors } = useThemeStore();
   const { t } = useTranslation();
   const { isPhone, spacing, fonts } = useResponsive();
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("calendar");
 
   // Fetch all dividends (need per-record dates)
   const { data: allDivData } = useAllDividends();
+  const { data: allDepositsData } = useAllDeposits();
 
   const todayIso = getLocalIsoDate(new Date());
 
@@ -115,8 +122,9 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
       realizedDetails: realizedData?.details ?? [],
       livePortfolioValue,
       liveAsOfDate: todayIso,
+      periodMode,
     });
-  }, [snapshotData?.snapshots, allDivData?.dividends, realizedData?.details, livePortfolioValue, todayIso]);
+  }, [snapshotData?.snapshots, allDivData?.dividends, realizedData?.details, livePortfolioValue, todayIso, periodMode]);
 
   // ── Year filter ─────────────────────────────────────────────────
 
@@ -139,6 +147,10 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
   };
 
   const clearFilter = () => setSelectedYears(new Set());
+  const switchPeriodMode = (mode: PeriodMode) => {
+    setPeriodMode(mode);
+    setSelectedYears(new Set());
+  };
 
   const filteredData = useMemo(() => {
     if (isAllSelected) return yearlyData;
@@ -153,23 +165,40 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
   // ── Chart data ──────────────────────────────────────────────────
 
   const growthChartData: ChartDataPoint[] = useMemo(
-    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.portfolioValue })),
-    [snapshotBackedData],
+    () => snapshotBackedData.map((d) => ({ label: formatPeriodYearLabel(d.year, periodMode), value: d.portfolioValue })),
+    [snapshotBackedData, periodMode],
   );
 
   const dividendBarData = useMemo(
-    () => filteredData.map((d) => ({ year: d.year, amount: d.dividends })),
-    [filteredData],
+    () => filteredData.map((d) => ({ year: formatPeriodYearLabel(d.year, periodMode), amount: d.dividends })),
+    [filteredData, periodMode],
   );
 
+  const depositBarData = useMemo(() => {
+    const yearSet = new Set(filteredData.map((d) => d.year));
+    const totals = new Map<string, number>();
+
+    for (const row of allDepositsData ?? []) {
+      const year = getPeriodYearKey(row.deposit_date ?? "", periodMode);
+      if (!year || !yearSet.has(year)) continue;
+      const amount = Number(row.amount) || 0;
+      const signed = (row.source ?? "deposit") === "withdrawal" ? -amount : amount;
+      totals.set(year, (totals.get(year) ?? 0) + signed);
+    }
+
+    return Array.from(yearSet)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((year) => ({ year: formatPeriodYearLabel(year, periodMode), amount: totals.get(year) ?? 0 }));
+  }, [filteredData, allDepositsData, periodMode]);
+
   const appreciationChartData: ChartDataPoint[] = useMemo(
-    () => snapshotBackedData.map((d) => ({ label: d.year, value: d.appreciation })),
-    [snapshotBackedData],
+    () => snapshotBackedData.map((d) => ({ label: formatPeriodYearLabel(d.year, periodMode), value: d.appreciation })),
+    [snapshotBackedData, periodMode],
   );
 
   const realizedChartData: ChartDataPoint[] = useMemo(
-    () => filteredData.map((d) => ({ label: d.year, value: d.realizedPnl })),
-    [filteredData],
+    () => filteredData.map((d) => ({ label: formatPeriodYearLabel(d.year, periodMode), value: d.realizedPnl })),
+    [filteredData, periodMode],
   );
 
   // ── Summary metrics ─────────────────────────────────────────────
@@ -205,6 +234,41 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
       <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13) }]}>
         {t("historical.filterYears")}
       </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.filterRow}
+        style={{ marginBottom: tokens.spacing.sm }}
+      >
+        {([
+          { mode: "calendar" as PeriodMode, label: t("historical.periodDecDec", "Dec - Dec") },
+          { mode: "fiscal-apr" as PeriodMode, label: t("historical.periodFiscalApr", "Fiscal Apr-Apr") },
+        ]).map((item) => {
+          const active = periodMode === item.mode;
+          return (
+            <Pressable
+              key={item.mode}
+              onPress={() => switchPeriodMode(item.mode)}
+              style={[
+                s.filterChip,
+                {
+                  backgroundColor: active ? colors.accentPrimary + "18" : colors.bgCard,
+                  borderColor: active ? colors.accentPrimary : colors.borderColor,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  s.filterChipText,
+                  { color: active ? colors.accentPrimary : colors.textSecondary },
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -250,12 +314,17 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
                   { color: active ? colors.accentPrimary : colors.textSecondary },
                 ]}
               >
-                {year}
+                {formatPeriodYearLabel(year, periodMode)}
               </Text>
             </Pressable>
           );
         })}
       </ScrollView>
+      <Text style={[s.helperText, { color: colors.textMuted, fontSize: Math.max(fonts.caption - 1, 11) }]}>
+        {periodMode === "calendar"
+          ? t("historical.periodHelperCalendar", "Calendar mode: Jan 1 to Dec 31.")
+          : t("historical.periodHelperFiscalApr", "Fiscal Apr-Apr mode: May 1 to Apr 30. Example: FY2023 covers 2022-05-01 to 2023-04-30.")}
+      </Text>
 
       {/* ── Summary Cards ── */}
       <View style={[s.grid, { gap: spacing.gridGap, marginBottom: spacing.sectionGap }]}>
@@ -308,6 +377,20 @@ export function HistoricalPerformance({ snapshotData, realizedData, livePortfoli
         {t("historical.dividendsByYear")}
       </Text>
       <DividendYearlyChart data={dividendBarData} currency="KWD" height={260} />
+
+      {/* ── Chart: Deposits by Year (bar chart) ── */}
+      <Text style={[s.sectionTitle, { color: colors.textSecondary, fontSize: Math.max(fonts.caption, 13), marginTop: tokens.spacing.md }]}>
+        {t("historical.depositsByYear", "Deposits by Year")}
+      </Text>
+      <DividendYearlyChart
+        data={depositBarData}
+        currency="KWD"
+        height={260}
+        title={t("historical.depositsByYear", "Deposits by Year")}
+        barTopColor={colors.warning}
+        barBottomColor={colors.accentSecondary ?? colors.accentPrimary}
+        activeValueColor={colors.warning}
+      />
 
       {[
         {
@@ -390,6 +473,11 @@ const s = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: "center",
+  },
+  helperText: {
+    marginTop: -6,
+    marginBottom: 14,
+    lineHeight: 16,
   },
 });
 /* eslint-enable custom-styles/no-hardcoded-styles */

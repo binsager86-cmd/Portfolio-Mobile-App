@@ -8,11 +8,14 @@ export interface YearlyPerformanceDataPoint {
   year: string;
   portfolioValue: number;
   growth: number;
+  deposits: number;
   dividends: number;
   appreciation: number;
   realizedPnl: number;
   hasSnapshot: boolean;
 }
+
+export type PeriodMode = "calendar" | "fiscal-apr";
 
 function safeNum(value: unknown): number {
   if (typeof value === "number") {
@@ -27,6 +30,31 @@ function safeNum(value: unknown): number {
 
 function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function parseIsoDateParts(dateIso: string): { year: number; month: number } | null {
+  if (typeof dateIso !== "string" || dateIso.length < 10) return null;
+  const year = Number(dateIso.slice(0, 4));
+  const month = Number(dateIso.slice(5, 7));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+/**
+ * Returns period key year for a date.
+ * - calendar: YYYY
+ * - fiscal-apr: fiscal year ending year (FY2023 = 2022-05-01..2023-04-30)
+ */
+export function getPeriodYearKey(dateIso: string, periodMode: PeriodMode = "calendar"): string | null {
+  const parts = parseIsoDateParts(dateIso);
+  if (!parts) return null;
+  if (periodMode === "calendar") return String(parts.year);
+  return String(parts.month >= 5 ? parts.year + 1 : parts.year);
+}
+
+export function formatPeriodYearLabel(yearKey: string, periodMode: PeriodMode = "calendar"): string {
+  if (periodMode === "calendar") return yearKey;
+  return `FY${yearKey}`;
 }
 
 export function dedupeSnapshotsByDate(
@@ -61,10 +89,12 @@ export function dedupeSnapshotsByDate(
 
 function groupSnapshotsByYear(
   snapshots: SnapshotRecord[],
+  periodMode: PeriodMode,
 ): Map<string, SnapshotRecord[]> {
   const grouped = new Map<string, SnapshotRecord[]>();
   for (const snap of snapshots) {
-    const year = snap.snapshot_date.slice(0, 4);
+    const year = getPeriodYearKey(snap.snapshot_date, periodMode);
+    if (!year) continue;
     const arr = grouped.get(year) ?? [];
     arr.push(snap);
     grouped.set(year, arr);
@@ -78,9 +108,11 @@ export function buildYearlyHistoricalData(args: {
   realizedDetails: RealizedProfitDetail[];
   livePortfolioValue?: number;
   liveAsOfDate?: string;
+  periodMode?: PeriodMode;
 }): YearlyPerformanceDataPoint[] {
+  const periodMode = args.periodMode ?? "calendar";
   const snapshots = dedupeSnapshotsByDate(args.snapshots);
-  const byYear = groupSnapshotsByYear(snapshots);
+  const byYear = groupSnapshotsByYear(snapshots, periodMode);
   const hasLiveValue =
     typeof args.livePortfolioValue === "number" &&
     Number.isFinite(args.livePortfolioValue);
@@ -92,13 +124,15 @@ export function buildYearlyHistoricalData(args: {
 
   const divByYear = new Map<string, number>();
   for (const div of args.dividends) {
-    const year = div.txn_date.slice(0, 4);
+    const year = getPeriodYearKey(div.txn_date, periodMode);
+    if (!year) continue;
     divByYear.set(year, round3((divByYear.get(year) ?? 0) + safeNum(div.cash_dividend_kwd)));
   }
 
   const realizedByYear = new Map<string, number>();
   for (const row of args.realizedDetails) {
-    const year = row.txn_date.slice(0, 4);
+    const year = getPeriodYearKey(row.txn_date, periodMode);
+    if (!year) continue;
     const netPnlKwd =
       safeNum(row.net_pnl_kwd) ||
       (safeNum(row.realized_pnl_kwd) + safeNum(row.dividends_allocated_kwd));
@@ -111,7 +145,7 @@ export function buildYearlyHistoricalData(args: {
     ...realizedByYear.keys(),
   ]);
 
-  const years = Array.from(allYears).sort();
+  const years = Array.from(allYears).sort((a, b) => Number(a) - Number(b));
   if (!years.length) return [];
 
   let hasPrevSnapshotYear = false;
@@ -128,6 +162,7 @@ export function buildYearlyHistoricalData(args: {
         year,
         portfolioValue: 0,
         growth: 0,
+        deposits: 0,
         dividends,
         appreciation: 0,
         realizedPnl,
@@ -151,7 +186,7 @@ export function buildYearlyHistoricalData(args: {
     if (
       hasLiveValue &&
       liveAsOfDate &&
-      liveAsOfDate.slice(0, 4) === year &&
+      getPeriodYearKey(liveAsOfDate, periodMode) === year &&
       liveAsOfDate >= yearEnd.snapshot_date
     ) {
       yearEndValue = liveValue;
@@ -172,6 +207,7 @@ export function buildYearlyHistoricalData(args: {
       year,
       portfolioValue: round3(yearEndValue),
       growth: round3(growth),
+      deposits: round3(netDepositsThisYear),
       dividends: round3(dividends),
       appreciation: round3(appreciation),
       realizedPnl: round3(realizedPnl),
