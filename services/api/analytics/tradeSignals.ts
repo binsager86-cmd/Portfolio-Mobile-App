@@ -143,15 +143,46 @@ export interface KuwaitSignalTPMethodsAll {
   tp3_confluence: number | null;
 }
 
+export interface KuwaitSignalScenarioLevels {
+  direction: "LONG" | "SHORT" | "NEUTRAL";
+  entry_zone_fils: [number | null, number | null] | null;
+  stop_loss_fils: number | null;
+  tp1_fils: number | null;
+  tp2_fils: number | null;
+  tp3_fils: number | null;
+  risk_reward_ratio: number | null;
+  assumptions?: Record<string, boolean>;
+}
+
 export interface KuwaitSignalExecution {
-  entry_zone_fils: [number | null, number | null];
+  actionable?: boolean;
+  direction?: "LONG" | "SHORT" | "NEUTRAL";
+  entry_zone_fils: [number | null, number | null] | null;
   stop_loss_fils: number | null;
   tp1_fils: number | null;
   tp2_fils: number | null;
   tp3_fils: number | null;
   tp_methods: KuwaitSignalTPMethodsAll | null;
   tick_alignment: string;
-  preferred_order_type: string;
+  preferred_order_type: string | null;
+  scenario_levels?: KuwaitSignalScenarioLevels | null;
+  target_metrics?: Record<string, {
+    price: number;
+    methods: Record<string, number | null> | null;
+    confidence: number | null;
+    distance_fils: number;
+    gross_rr: number;
+    net_rr: number | null;
+  }> | null;
+  costs?: {
+    commission_rate_each_leg: number;
+    slippage_rate_each_leg: number;
+    spread_pct_estimate: number;
+    entry_cost_fils: number;
+    stop_exit_cost_fils: number;
+    gap_risk_fils: number;
+    net_risk_fils: number;
+  } | null;
 }
 
 export interface KuwaitSignalRisk {
@@ -160,6 +191,13 @@ export interface KuwaitSignalRisk {
   position_size_percent: number | null;
   cvar_95_fils: number | null;
   liquidity_adjustment_factor: number | null;
+  risk_pct_of_equity?: number | null;
+  position_value_pct_of_equity?: number | null;
+  position_value_kwd?: number | null;
+  maximum_loss_kwd?: number | null;
+  liquidity_cap?: number | null;
+  cash_cap?: number | null;
+  portfolio_heat_cap?: number | null;
 }
 
 export interface KuwaitSignalProbabilities {
@@ -168,7 +206,13 @@ export interface KuwaitSignalProbabilities {
   p_tp3_before_sl: number | null;
   confidence_interval_95: [number, number] | null;
   expected_return_r_multiple: number | null;
-  calibration_method: string;
+  calibration_method: string | null;
+  probability_status?: "UNVALIDATED" | "CALIBRATED" | "STALE" | "INSUFFICIENT_SAMPLE";
+  sample_size?: number;
+  calibrated_as_of?: string | null;
+  brier_score?: number | null;
+  log_loss?: number | null;
+  calibration_curve?: unknown;
 }
 
 export interface KuwaitSignalSubScores {
@@ -209,6 +253,18 @@ export interface KuwaitSignalConfluence {
   rich_sr: KuwaitRichSR | null;
   /** Volume profile summary */
   volume_profile: KuwaitVolumeProfile | null;
+  gate_audit?: {
+    data_quality: boolean;
+    directional_agreement: boolean;
+    entry_trigger: boolean;
+    structure_stop: boolean;
+    profitable_target: boolean;
+    minimum_net_rr: boolean;
+    liquidity: boolean;
+    probability_calibrated: boolean;
+    stale_signal: boolean;
+    passed: boolean;
+  } | null;
 }
 
 export type SRLevelStrength = "very_strong" | "strong" | "moderate" | "weak";
@@ -259,16 +315,36 @@ export interface KuwaitAccumulationState {
 
 export interface KuwaitEntryTrigger {
   action: "ENTER" | "WATCH" | "HOLD";
-  trigger: "pullback" | "breakout" | "accumulation_only" | "none";
+  trigger: "pullback" | "breakout" | "accumulation_only" | "breakdown" | "failed_rally" | "distribution" | "none";
   pullback: KuwaitEntryTriggerDetector;
   breakout: KuwaitEntryTriggerDetector;
   accumulation: KuwaitAccumulationState;
+  short_breakdown?: KuwaitEntryTriggerDetector;
+  failed_rally?: KuwaitEntryTriggerDetector;
+  distribution?: KuwaitAccumulationState;
 }
 
 export interface KuwaitSignal {
   timestamp: string;
   stock_code: string;
   segment: string;
+  direction?: "LONG" | "SHORT" | "NEUTRAL";
+  direction_score?: number;
+  setup_quality_score?: number;
+  timing_score?: number;
+  data_quality_score?: number;
+  expected_value_r?: number | null;
+  recommendation?:
+    | "STRONG_BUY"
+    | "BUY"
+    | "WATCH_LONG"
+    | "HOLD"
+    | "WATCH_SHORT"
+    | "SELL"
+    | "AVOID"
+    | "INSUFFICIENT_DATA";
+  actionable?: boolean;
+  /** @deprecated Use direction + recommendation + actionable instead. */
   signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL";
   setup_type: string;
   execution: KuwaitSignalExecution;

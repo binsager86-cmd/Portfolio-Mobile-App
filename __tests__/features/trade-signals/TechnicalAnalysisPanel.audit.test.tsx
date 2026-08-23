@@ -56,6 +56,8 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
     signal: "BUY",
     setup_type: "TREND_FOLLOWING",
     execution: {
+      actionable: true,
+      direction: "LONG",
       entry_zone_fils: [460, 465],
       stop_loss_fils: 450,
       tp1_fils: 475,
@@ -64,6 +66,15 @@ function makeSignal(overrides: Partial<KuwaitSignal> = {}): KuwaitSignal {
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
       tp_methods: null,
+      scenario_levels: {
+        direction: "LONG",
+        entry_zone_fils: [460, 465],
+        stop_loss_fils: 450,
+        tp1_fils: 475,
+        tp2_fils: 495,
+        tp3_fils: 510,
+        risk_reward_ratio: 2,
+      },
     },
     risk_metrics: {
       risk_per_share_fils: 12.5,
@@ -132,14 +143,25 @@ function makeNeutralSignal(): KuwaitSignal {
   return makeSignal({
     signal: "NEUTRAL",
     execution: {
+      actionable: false,
+      direction: "NEUTRAL",
       entry_zone_fils: [null, null],
       stop_loss_fils: null,
       tp1_fils: null,
       tp2_fils: null,
       tp3_fils: null,
       tick_alignment: "N/A",
-      preferred_order_type: "NONE",
+      preferred_order_type: null,
       tp_methods: null,
+      scenario_levels: {
+        direction: "NEUTRAL",
+        entry_zone_fils: [null, null],
+        stop_loss_fils: null,
+        tp1_fils: null,
+        tp2_fils: null,
+        tp3_fils: null,
+        risk_reward_ratio: null,
+      },
     },
     risk_metrics: {
       risk_per_share_fils: null,
@@ -163,6 +185,8 @@ function makeSellSignal(): KuwaitSignal {
   return makeSignal({
     signal: "SELL",
     execution: {
+      actionable: true,
+      direction: "SHORT",
       entry_zone_fils: [455, 460],
       stop_loss_fils: 470,        // SL is ABOVE entry for SELL
       tp1_fils: 445,              // TP is BELOW entry for SELL
@@ -171,6 +195,15 @@ function makeSellSignal(): KuwaitSignal {
       tick_alignment: "OK",
       preferred_order_type: "LIMIT",
       tp_methods: null,
+      scenario_levels: {
+        direction: "SHORT",
+        entry_zone_fils: [455, 460],
+        stop_loss_fils: 470,
+        tp1_fils: 445,
+        tp2_fils: 430,
+        tp3_fils: 415,
+        risk_reward_ratio: 2,
+      },
     },
   });
 }
@@ -208,7 +241,7 @@ describe("fmtFils helper", () => {
   it("shows — for null stop loss", () => {
     renderWithSignal(makeSignal({ execution: { ...makeSignal().execution, stop_loss_fils: null } }));
     // Stop Loss row should show —
-    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
 
@@ -344,9 +377,9 @@ describe("Probability badge confidence labels", () => {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("NEUTRAL signal — hidden sections", () => {
-  it("does NOT render the Price Map section", () => {
+  it("renders the Price Map section for diagnostics", () => {
     renderWithSignal(makeNeutralSignal());
-    expect(screen.queryByText(/Price Map/)).toBeNull();
+    expect(screen.getByText(/Price Map/)).toBeTruthy();
   });
 
   it("does NOT render the Trade Plan section", () => {
