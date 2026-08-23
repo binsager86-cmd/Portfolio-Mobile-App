@@ -557,7 +557,7 @@ function StockPicker({
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.listWrap}>
-      {topContent}
+        {topContent ? <View style={styles.topContentWrap}>{topContent}</View> : null}
       
       {/* Quick Scan Section */}
       <View style={[styles.quickScanBox, { backgroundColor: colors.accentPrimary + "10", borderColor: colors.accentPrimary + "40" }]}>
