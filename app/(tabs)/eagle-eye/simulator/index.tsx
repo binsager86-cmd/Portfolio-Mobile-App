@@ -1,5 +1,6 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
+import { hasSimulatorIntegrityIssue, isSimulatorFeatureEnabled } from "@/constants/Config";
 import {
   useReadOnlySimulatorIntegrity,
   useReadOnlySimulatorNav,
@@ -62,7 +63,7 @@ function IntegrityStrip({ integrity, isLoading, isError }: { integrity?: Simulat
     ? `Integrity feed unavailable · ${integrity ? "showing cached status" : "status unknown"}`
     : integrity
     ? ok
-      ? `Seals verified · session ${integrity.last_session_processed ?? "genesis"} · ${integrity.guard_trips_count ?? 0} guard trips`
+      ? `FRESH · seals verified · session ${integrity.last_session_processed ?? "genesis"} · ${integrity.guard_trips_count ?? 0} guard trips`
       : `Seal warning · ${integrity.seal_verification.failures[0]?.reason ?? `${integrity.guard_trips_count} guard trips`}`
     : "Integrity status unavailable";
   const warn = staleProjection || fetchFailed;
@@ -124,11 +125,26 @@ export default function SimulatorIndexScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
+  const simulatorEnabled = isSimulatorFeatureEnabled();
   const { data: portfolios = [], isLoading, isRefetching, refetch } = useReadOnlySimulatorPortfolios();
   const integrityQuery = useReadOnlySimulatorIntegrity();
   const integrity = integrityQuery.data;
+  const simulatorBlocked = !simulatorEnabled;
+  const simulatorUnavailable = simulatorEnabled && (integrityQuery.isError || hasSimulatorIntegrityIssue(integrity));
   const onRefresh = useCallback(() => refetch(), [refetch]);
   const byBook = Object.fromEntries(portfolios.map((portfolio) => [portfolio.book, portfolio])) as Partial<Record<SimulatorBook, SimulatorPortfolioSummary>>;
+
+  if (simulatorBlocked) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+        <EagleEyeTopTabs />
+        <View style={[styles.blockState, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Simulator disabled</Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>EXPO_PUBLIC_ENABLE_SIMULATOR is off. This simulator surface is gated to the local sealed-ledger environment only.</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
@@ -139,6 +155,12 @@ export default function SimulatorIndexScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={colors.accentPrimary} />}
       >
         <IntegrityStrip integrity={integrity} isLoading={integrityQuery.isLoading} isError={integrityQuery.isError} />
+        {simulatorUnavailable ? (
+          <View style={[styles.errorPanel, { backgroundColor: colors.dangerBg, borderColor: colors.danger }]}>
+            <Text style={[styles.emptyTitle, { color: colors.dangerText }]}>Simulator unavailable</Text>
+            <Text style={[styles.emptyText, { color: colors.dangerText }]}>The simulator API is unreachable or the projection is stale. No empty genesis book is shown while the sealed-ledger feed is down.</Text>
+          </View>
+        ) : null}
         <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Forward Paper Books</Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>Daily cycle writes the ledger. This screen reads the sealed ledger only.</Text>
         {isLoading ? <ActivityIndicator color={colors.accentPrimary} /> : null}
@@ -171,6 +193,8 @@ const styles = StyleSheet.create({
   tapText: { fontSize: 11, fontWeight: "600" },
   sparklineBlank: { width: 120, height: 36 },
   emptyPanel: { borderWidth: 1, borderRadius: 8, padding: 14, gap: 4 },
+  errorPanel: { borderWidth: 1, borderRadius: 8, padding: 14, gap: 4 },
   emptyTitle: { fontSize: 15, fontWeight: "800" },
   emptyText: { fontSize: 12, lineHeight: 18 },
+  blockState: { flex: 1, margin: 16, padding: 24, borderWidth: 1, borderRadius: 12, justifyContent: "center" },
 });
