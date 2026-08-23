@@ -864,6 +864,7 @@ export interface AdminUser {
   total_value: number;
   portfolio_value: number;
   growth_value: number;
+  daily_change: number;
   transaction_count: number;
 }
 
