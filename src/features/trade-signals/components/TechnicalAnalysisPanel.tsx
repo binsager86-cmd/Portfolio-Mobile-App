@@ -213,13 +213,31 @@ function ScoreBar({
 }
 
 // ── Signal badge ──────────────────────────────────────────────────────
-function SignalBadge({ signal }: { signal: "STRONG_BUY" | "BUY" | "SELL" | "NEUTRAL" }) {
+function SignalBadge({
+  recommendation,
+  actionable,
+}: {
+  recommendation:
+    | "STRONG_BUY"
+    | "BUY"
+    | "WATCH_LONG"
+    | "HOLD"
+    | "WATCH_SHORT"
+    | "SELL"
+    | "AVOID"
+    | "INSUFFICIENT_DATA";
+  actionable: boolean;
+}) {
   const config = {
     STRONG_BUY: { bg: "#16a34a30", color: "#16a34a", text: "⭐ STRONG BUY" },
-    BUY:        { bg: "#22c55e18", color: "#22c55e", text: "BUY SIGNAL" },
-    SELL:       { bg: "#ef444418", color: "#ef4444", text: "SELL SIGNAL" },
-    NEUTRAL:    { bg: "#94a3b818", color: "#94a3b8", text: "NO SIGNAL" },
-  }[signal];
+    BUY: { bg: "#22c55e18", color: "#22c55e", text: actionable ? "BUY (ACTIONABLE)" : "BUY" },
+    WATCH_LONG: { bg: "#3b82f61a", color: "#3b82f6", text: "WATCH LONG" },
+    HOLD: { bg: "#94a3b818", color: "#94a3b8", text: "HOLD" },
+    WATCH_SHORT: { bg: "#f59e0b18", color: "#f59e0b", text: "WATCH SHORT" },
+    SELL: { bg: "#ef444418", color: "#ef4444", text: actionable ? "SELL (ACTIONABLE)" : "SELL" },
+    AVOID: { bg: "#dc262618", color: "#dc2626", text: "AVOID" },
+    INSUFFICIENT_DATA: { bg: "#64748b18", color: "#64748b", text: "INSUFFICIENT DATA" },
+  }[recommendation];
   return (
     <View style={[styles.badge, { backgroundColor: config.bg }]}>
       <Text style={[styles.badgeText, { color: config.color }]}>{config.text}</Text>
@@ -356,6 +374,7 @@ function PriceLadder({
   const e = signal.execution;
   const c = signal.confluence_details;
   const direction = signal.signal;
+  const entryZone = e.entry_zone_fils ?? [null, null];
 
   // Build levels list
   const levels: LadderLevel[] = [];
@@ -375,7 +394,9 @@ function PriceLadder({
     levels.push({
       price: e.tp3_fils,
       label: "Aggressive Target (TP3)",
-      sublabel: "Maximum upside target — bonus if momentum continues strong",
+      sublabel: direction === "SELL"
+        ? "Extended downside target — only if selling pressure continues"
+        : "Extended profit target — only if momentum continues strong",
       type: "tp3",
     });
   }
@@ -412,16 +433,16 @@ function PriceLadder({
 
   // Entry zone (use midpoint label, show range in sublabel)
   const entryMid =
-    e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
-      ? (e.entry_zone_fils[0] + e.entry_zone_fils[1]) / 2
+    entryZone[0] != null && entryZone[1] != null
+      ? (entryZone[0] + entryZone[1]) / 2
       : null;
   if (entryMid != null) {
     levels.push({
       price: entryMid,
       label: (direction === "BUY" || direction === "STRONG_BUY") ? "Buy Zone (Entry)" : direction === "SELL" ? "Sell Zone (Entry)" : "Entry Zone",
       sublabel:
-        e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
-          ? `Place your order between ${e.entry_zone_fils[0]?.toFixed(1)} – ${e.entry_zone_fils[1]?.toFixed(1)} fils`
+        entryZone[0] != null && entryZone[1] != null
+          ? `Place your order between ${entryZone[0]?.toFixed(1)} – ${entryZone[1]?.toFixed(1)} fils`
           : "Your suggested entry price",
       type: "entry",
     });
@@ -665,7 +686,7 @@ export function TechnicalAnalysisPanel({ colors }: { colors: ThemePalette }) {
             Pick a stock to get started
           </Text>
           <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
-            The engine analyses trend, momentum, buying pressure, key price levels, and risk — then gives you a clear BUY, SELL, or NO SIGNAL recommendation.
+            The engine separates direction, setup quality, timing, and data quality, then gives a recommendation with clear actionability.
           </Text>
         </View>
       )}
@@ -681,11 +702,34 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
   const p = signal.probabilities;
   const raw = c.raw_sub_scores as KuwaitSignalSubScores;
   const adj = c.sub_scores as KuwaitSignalSubScores;
+  const entryZone = e.entry_zone_fils ?? [null, null];
+
+  const executionActionable = Boolean(e.actionable ?? signal.actionable);
+  const hasScenarioDiagnostics = Boolean(
+    e.scenario_levels
+    || (c.support_levels?.length ?? 0) > 0
+    || (c.resistance_levels?.length ?? 0) > 0
+    || c.vwap != null
+  );
+  const showPriceMap = executionActionable || hasScenarioDiagnostics;
+  const showTradePlan = executionActionable;
+  const showProbabilities = executionActionable;
+  const showPositionSizing = executionActionable;
 
   const entryMid =
-    e.entry_zone_fils[0] != null && e.entry_zone_fils[1] != null
-      ? (e.entry_zone_fils[0] + e.entry_zone_fils[1]) / 2
+    entryZone[0] != null && entryZone[1] != null
+      ? (entryZone[0] + entryZone[1]) / 2
       : null;
+
+  const recommendation = signal.recommendation ?? (
+    signal.signal === "STRONG_BUY"
+      ? "STRONG_BUY"
+      : signal.signal === "BUY"
+        ? "BUY"
+        : signal.signal === "SELL"
+          ? "SELL"
+          : "HOLD"
+  );
 
   return (
     <>
@@ -701,9 +745,9 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           </Text>
         </View>
         <View style={styles.signalHeaderRight}>
-          <SignalBadge signal={signal.signal} />
+          <SignalBadge recommendation={recommendation} actionable={executionActionable} />
           <View style={{ alignItems: "flex-end", marginTop: 6 }}>
-            <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Overall Score</Text>
+            <Text style={[{ fontSize: 11, color: colors.textMuted }]}>Confluence Score</Text>
             <Text style={[styles.scoreCircleText, {
               color: c.total_score >= 70 ? "#22c55e" : c.total_score >= 50 ? "#f59e0b" : "#ef4444",
             }]}>
@@ -714,16 +758,49 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
         </View>
       </View>
 
+      <View
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+      >
+        <Row label="Recommendation" value={recommendation.replace(/_/g, " ")} colors={colors} />
+        <Row label="Direction" value={`${signal.direction ?? "NEUTRAL"} (${signal.direction_score ?? 0})`} colors={colors} />
+        <Row label="Setup Quality" value={`${signal.setup_quality_score ?? 0}/100`} colors={colors} />
+        <Row label="Timing" value={`${signal.timing_score ?? 0}/100`} colors={colors} />
+        <Row label="Data Quality" value={`${(signal.data_quality_score ?? 0).toFixed(1)}/100`} colors={colors} />
+        <Row label="Actionable Trade" value={executionActionable ? "Yes" : "No"} colors={colors} />
+        {!executionActionable && (
+          <Text style={[styles.rowHint, { color: colors.textMuted, marginTop: 4 }]}>No order plan is active for this signal.</Text>
+        )}
+      </View>
+
+      {p.probability_status !== "CALIBRATED" && (
+        <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: "#f59e0b" }]}>
+          <Text style={[styles.cardTitle, { color: "#f59e0b" }]}>Probability Status</Text>
+          <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>Heuristic — not calibrated. Statistical confidence is unavailable.</Text>
+        </View>
+      )}
+
+      {c.gate_audit && !c.gate_audit.passed && (
+        <SectionCard title="Blocked Gates" subtitle="The signal is diagnostic only until all required gates pass." colors={colors}>
+          {Object.entries(c.gate_audit)
+            .filter(([key, passed]) => key !== "passed" && passed === false)
+            .map(([key]) => (
+              <Row key={key} label={key.replace(/_/g, " ")} value="Not passed" valueColor="#ef4444" colors={colors} />
+            ))}
+        </SectionCard>
+      )}
+
       {/* ── Entry Trigger ──────────────────────────────────────── */}
       {signal.entry_trigger && (
         <EntryTriggerCard trigger={signal.entry_trigger} colors={colors} />
       )}
 
       {/* ── PRICE MAP (S/R ladder) ───────────────────────────── */}
-      <PriceLadder signal={signal} colors={colors} />
+      {showPriceMap && (
+        <PriceLadder signal={signal} colors={colors} />
+      )}
 
       {/* ── Execution levels ─────────────────────────────────── */}
-      {(signal.signal === "BUY" || signal.signal === "STRONG_BUY" || signal.signal === "SELL") && (
+      {showTradePlan && (
         <SectionCard
           title="📋 Your Trade Plan"
           subtitle="Exactly where to buy, where to exit if wrong, and where to take profits"
@@ -733,8 +810,8 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
             label="Buy Between"
             hint="Place a limit order in this price range"
             value={
-              e.entry_zone_fils[0] != null
-                ? `${e.entry_zone_fils[0]?.toFixed(1)} – ${e.entry_zone_fils[1]?.toFixed(1)} fils`
+              entryZone[0] != null
+                ? `${entryZone[0]?.toFixed(1)} – ${entryZone[1]?.toFixed(1)} fils`
                 : "—"
             }
             valueColor="#3b82f6"
@@ -788,20 +865,26 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
           <Row
             label="Order Type"
             hint="Use a limit order so you get the exact price you want"
-            value={e.preferred_order_type === "LIMIT" ? "Limit Order (Recommended)" : e.preferred_order_type}
+            value={e.preferred_order_type === "LIMIT" ? "Limit Order (Recommended)" : e.preferred_order_type ?? "—"}
             colors={colors}
           />
         </SectionCard>
       )}
 
       {/* ── Win chances ──────────────────────────────────────── */}
-      <SectionCard
-        title="🎲 Probability — What Are the Chances?"
-        subtitle="How likely is this trade to work? Calibrated from a score-to-outcome model with regime adjustment."
-        colors={colors}
-      >
-        <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
-      </SectionCard>
+      {showProbabilities && (
+        <SectionCard
+          title="🎲 Probability — What Are the Chances?"
+          subtitle={
+            p.probability_status === "CALIBRATED"
+              ? `Calibrated from ${p.sample_size ?? 0} point-in-time outcomes.`
+              : "Heuristic — not calibrated. Statistical confidence is unavailable."
+          }
+          colors={colors}
+        >
+          <WinChancesBlock p={p} riskPerShare={r.risk_per_share_fils} entryMid={entryMid} colors={colors} />
+        </SectionCard>
+      )}
 
       {/* ── Rich S/R Map ─────────────────────────────────────── */}
       {signal.confluence_details.rich_sr && (
@@ -999,62 +1082,66 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       </SectionCard>
 
       {/* ── Position sizing ───────────────────────────────────── */}
-      <SectionCard
-        title="💰 Risk & Position Sizing"
-        subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
-        colors={colors}
-      >
-        <Row
-          label="Suggested Position Size"
-          hint="Percentage of your total account to allocate to this trade"
-          value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
+      {showPositionSizing && (
+        <SectionCard
+          title="💰 How Much to Invest"
+          subtitle="Based on a 2% account risk rule — never risk more than you can afford to lose"
           colors={colors}
-        />
-        <Row
-          label="Profit vs Risk Ratio"
-          hint="For every 1 fil you risk, you could potentially make this much"
-          value={
-            r.risk_reward_ratio != null
-              ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
-              : "—"
-          }
-          valueColor={
-            (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
-              : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
-              : "#ef4444"
-          }
-          colors={colors}
-        />
-        <Row
-          label="Max Loss per Share"
-          hint="If stop loss is hit, this is how many fils you lose per share"
-          value={fmtFils(r.risk_per_share_fils)}
-          valueColor="#ef444499"
-          colors={colors}
-        />
-        <Row
-          label="Worst-Case Daily Loss"
-          hint="Statistical worst single day loss — happens in about 5% of cases"
-          value={fmtFils(r.cvar_95_fils)}
-          valueColor="#ef444499"
-          colors={colors}
-        />
-        <Row
-          label="Ease of Trading (Liquidity)"
-          hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
-          value={
-            r.liquidity_adjustment_factor != null
-              ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
-              : "—"
-          }
-          valueColor={
-            (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
-              : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
-              : "#ef4444"
-          }
-          colors={colors}
-        />
-      </SectionCard>
+        >
+          <Row
+            label="Suggested Position Size"
+            hint="Percentage of your total account to allocate to this trade"
+            value={r.position_size_percent != null ? `${r.position_size_percent.toFixed(2)}% of your account` : "—"}
+            colors={colors}
+          />
+          <Row
+            label="Profit vs Risk Ratio"
+            hint={signal.signal === "SELL"
+              ? "For every 1 fil at risk, this is the potential downside capture"
+              : "For every 1 fil you risk, this is the potential profit"}
+            value={
+              r.risk_reward_ratio != null
+                ? `1 : ${r.risk_reward_ratio.toFixed(2)}  ${r.risk_reward_ratio >= 2 ? "✓ Good" : r.risk_reward_ratio >= 1.5 ? "Acceptable" : "Low"}`
+                : "—"
+            }
+            valueColor={
+              (r.risk_reward_ratio ?? 0) >= 2 ? "#22c55e"
+                : (r.risk_reward_ratio ?? 0) >= 1.5 ? "#f59e0b"
+                : "#ef4444"
+            }
+            colors={colors}
+          />
+          <Row
+            label="Max Loss per Share"
+            hint="If stop loss is hit, this is how many fils you lose per share"
+            value={fmtFils(r.risk_per_share_fils)}
+            valueColor="#ef444499"
+            colors={colors}
+          />
+          <Row
+            label="Worst-Case Daily Loss"
+            hint="Statistical worst single day loss — happens in about 5% of cases"
+            value={fmtFils(r.cvar_95_fils)}
+            valueColor="#ef444499"
+            colors={colors}
+          />
+          <Row
+            label="Ease of Trading (Liquidity)"
+            hint="1.0 = fully liquid. Lower means harder to buy/sell quickly."
+            value={
+              r.liquidity_adjustment_factor != null
+                ? `${(r.liquidity_adjustment_factor * 100).toFixed(0)}%  ${r.liquidity_adjustment_factor >= 0.95 ? "✓ Easy to trade" : r.liquidity_adjustment_factor >= 0.7 ? "Manageable" : "⚠️ Low liquidity"}`
+                : "—"
+            }
+            valueColor={
+              (r.liquidity_adjustment_factor ?? 0) >= 0.95 ? "#22c55e"
+                : (r.liquidity_adjustment_factor ?? 0) >= 0.7 ? "#f59e0b"
+                : "#ef4444"
+            }
+            colors={colors}
+          />
+        </SectionCard>
+      )}
 
       {/* ── Alerts ───────────────────────────────────────────── */}
       {signal.alerts.length > 0 && (
@@ -1090,7 +1177,7 @@ function SignalOutput({ signal, colors }: { signal: KuwaitSignal; colors: ThemeP
       {/* ── Footer ───────────────────────────────────────────── */}
       <View style={[styles.meta, { borderTopColor: colors.borderColor }]}>
         <Text style={[styles.metaText, { color: colors.textMuted }]}>
-          Model v{signal.metadata.model_version}  ·  Data as of {signal.metadata.data_as_of}
+          Model v{signal.metadata.model_version}  ·  Signal {signal.timestamp}  ·  Data {signal.metadata.data_as_of}
         </Text>
         <Text style={[styles.metaText, { color: colors.textMuted, marginTop: 3 }]}>
           ⚠️ This is for educational purposes only — not financial advice.
