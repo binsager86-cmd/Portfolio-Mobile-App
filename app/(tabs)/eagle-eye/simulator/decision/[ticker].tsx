@@ -1,6 +1,7 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
-import { useReadOnlySimulatorTrace } from "@/hooks/useSimulatorReadOnly";
+import { hasSimulatorIntegrityIssue, isSimulatorFeatureEnabled } from "@/constants/Config";
+import { useReadOnlySimulatorIntegrity, useReadOnlySimulatorTrace } from "@/hooks/useSimulatorReadOnly";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -16,14 +17,30 @@ export default function DecisionDetailScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
-  const { data: trace, isLoading, isError, refetch } = useReadOnlySimulatorTrace(ticker, !!ticker);
+  const simulatorEnabled = isSimulatorFeatureEnabled();
+  const integrityQuery = useReadOnlySimulatorIntegrity(simulatorEnabled);
+  const { data: trace, isLoading, isError, refetch } = useReadOnlySimulatorTrace(ticker, !!ticker && simulatorEnabled);
 
   const state = trace?.state ?? null;
   const cycles = trace?.cycles ?? [];
   const events = trace?.events ?? [];
+  const simulatorBlocked = !simulatorEnabled;
+  const simulatorUnavailable = simulatorEnabled && (integrityQuery.isError || hasSimulatorIntegrityIssue(integrityQuery.data));
 
   const thesis = useMemo(() => buildThesis(state, events.length), [state, events.length]);
   const gates = jsonValues(state?.gates).slice(0, 9);
+
+  if (simulatorBlocked) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+        <EagleEyeTopTabs />
+        <View style={[styles.blockState, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>Simulator disabled</Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>EXPO_PUBLIC_ENABLE_SIMULATOR is off. The local sealed-ledger simulator remains the only permitted environment.</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
@@ -42,6 +59,12 @@ export default function DecisionDetailScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}>
+          {simulatorUnavailable ? (
+            <View style={[styles.blockState, { backgroundColor: colors.dangerBg, borderColor: colors.danger }]}>
+              <Text style={[styles.heroTitle, { color: colors.dangerText }]}>Simulator unavailable</Text>
+              <Text style={[styles.emptyText, { color: colors.dangerText }]}>The simulator endpoint is unreachable or stale; the decision view will not present a false empty book.</Text>
+            </View>
+          ) : null}
           <View style={[styles.hero, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <View style={styles.heroHeader}>
               <View>
@@ -206,6 +229,7 @@ function EmptyCard({ message }: { message: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  blockState: { flex: 1, margin: 16, padding: 24, borderWidth: 1, borderRadius: 12, justifyContent: "center" },
   content: { padding: 14, gap: 14 },
   loadingState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 20 },
   retryBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10 },

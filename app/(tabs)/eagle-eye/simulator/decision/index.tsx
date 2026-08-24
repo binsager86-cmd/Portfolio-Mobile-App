@@ -1,6 +1,8 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
+import { hasSimulatorIntegrityIssue, isSimulatorFeatureEnabled } from "@/constants/Config";
 import {
+  useReadOnlySimulatorIntegrity,
   useReadOnlySimulatorScannerColumns,
   useReadOnlySimulatorSymbolStates,
   type SimulatorBook,
@@ -34,8 +36,10 @@ export default function DecisionScannerScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
-  const { data: states = {}, isLoading } = useReadOnlySimulatorSymbolStates();
-  const { data: columnsData } = useReadOnlySimulatorScannerColumns();
+  const simulatorEnabled = isSimulatorFeatureEnabled();
+  const integrityQuery = useReadOnlySimulatorIntegrity();
+  const { data: states = {}, isLoading } = useReadOnlySimulatorSymbolStates(simulatorEnabled);
+  const { data: columnsData } = useReadOnlySimulatorScannerColumns(simulatorEnabled);
   const [bookFilter, setBookFilter] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [tierFilter, setTierFilter] = useState<string | null>(null);
@@ -45,6 +49,20 @@ export default function DecisionScannerScreen() {
   const books = useMemo(() => uniqueValues(rows, "book").filter(Boolean) as SimulatorBook[], [rows]);
   const lifecycles = useMemo(() => uniqueValues(rows, "lifecycle"), [rows]);
   const tiers = useMemo(() => uniqueValues(rows, "tier"), [rows]);
+  const simulatorBlocked = !simulatorEnabled;
+  const simulatorUnavailable = simulatorEnabled && (integrityQuery.isError || hasSimulatorIntegrityIssue(integrityQuery.data));
+
+  if (simulatorBlocked) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
+        <EagleEyeTopTabs />
+        <View style={[styles.blockState, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Simulator disabled</Text>
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>EXPO_PUBLIC_ENABLE_SIMULATOR is off. V2 decision surfaces remain hidden in production.</Text>
+        </View>
+      </View>
+    );
+  }
 
   const filtered = rows.filter((row) => {
     const bookOk = !bookFilter || row.book === bookFilter;
@@ -58,6 +76,12 @@ export default function DecisionScannerScreen() {
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
       <EagleEyeTopTabs />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}>
+        {simulatorUnavailable ? (
+          <View style={[styles.blockState, { backgroundColor: colors.dangerBg, borderColor: colors.danger }]}>
+            <Text style={[styles.title, { color: colors.dangerText }]}>Simulator unavailable</Text>
+            <Text style={[styles.subtitle, { color: colors.dangerText }]}>The simulator projection is unreachable or stale. The UI will not show data until the sealed-ledger feed recovers.</Text>
+          </View>
+        ) : null}
         <View style={[styles.hero, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           <View style={styles.heroRow}>
             <View>
@@ -74,20 +98,20 @@ export default function DecisionScannerScreen() {
           </View>
 
           <View style={styles.filterRow}>
-            {renderChip(colors, "All books", !bookFilter, () => setBookFilter(null))}
-            {books.map((book) => renderChip(colors, book, bookFilter === book, () => setBookFilter((current) => (current === book ? null : book))))}
+            {renderChip(colors, "All books", !bookFilter, () => setBookFilter(null), "book-all")}
+            {books.map((book) => renderChip(colors, book, bookFilter === book, () => setBookFilter((current) => (current === book ? null : book)), `book-${book}`))}
           </View>
           <View style={styles.filterRow}>
-            {renderChip(colors, "All states", !stateFilter, () => setStateFilter(null))}
-            {lifecycles.map((value) => renderChip(colors, value, stateFilter === value, () => setStateFilter((current) => (current === value ? null : value))))}
+            {renderChip(colors, "All states", !stateFilter, () => setStateFilter(null), "state-all")}
+            {lifecycles.map((value) => renderChip(colors, value, stateFilter === value, () => setStateFilter((current) => (current === value ? null : value)), `state-${value}`))}
           </View>
           <View style={styles.filterRow}>
-            {renderChip(colors, "All tiers", !tierFilter, () => setTierFilter(null))}
-            {tiers.map((value) => renderChip(colors, value, tierFilter === value, () => setTierFilter((current) => (current === value ? null : value))))}
+            {renderChip(colors, "All tiers", !tierFilter, () => setTierFilter(null), "tier-all")}
+            {tiers.map((value) => renderChip(colors, value, tierFilter === value, () => setTierFilter((current) => (current === value ? null : value)), `tier-${value}`))}
           </View>
           <View style={styles.filterRow}>
-            {renderChip(colors, "Confirmed today", chipFilter === "confirmed_today", () => setChipFilter((current) => (current === "confirmed_today" ? null : "confirmed_today")))}
-            {renderChip(colors, "Vetoed today", chipFilter === "vetoed_today", () => setChipFilter((current) => (current === "vetoed_today" ? null : "vetoed_today")))}
+            {renderChip(colors, "Confirmed today", chipFilter === "confirmed_today", () => setChipFilter((current) => (current === "confirmed_today" ? null : "confirmed_today")), "chip-confirmed")}
+            {renderChip(colors, "Vetoed today", chipFilter === "vetoed_today", () => setChipFilter((current) => (current === "vetoed_today" ? null : "vetoed_today")), "chip-vetoed")}
           </View>
         </View>
 
@@ -153,9 +177,10 @@ function Cell({ text, color, bold = false }: { text: string; color: string; bold
   return <Text style={[styles.cell, { color, fontWeight: bold ? "800" : "600" }]} numberOfLines={1}>{text}</Text>;
 }
 
-function renderChip(colors: ThemePalette, label: string, active: boolean, onPress: () => void) {
+function renderChip(colors: ThemePalette, label: string, active: boolean, onPress: () => void, key?: string) {
   return (
     <Pressable
+      key={key ?? label}
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
@@ -173,6 +198,7 @@ function renderChip(colors: ThemePalette, label: string, active: boolean, onPres
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  blockState: { flex: 1, margin: 16, padding: 24, borderWidth: 1, borderRadius: 12, justifyContent: "center" },
   content: { padding: 14, gap: 14 },
   hero: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 10 },
   heroRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
