@@ -1,5 +1,10 @@
+import { isSimulatorFeatureEnabled } from "@/constants/Config";
 import api from "@/services/api/client";
 import { useQuery } from "@tanstack/react-query";
+
+function simulatorGateEnabled(enabled = true): boolean {
+  return isSimulatorFeatureEnabled() && enabled;
+}
 
 export type SimulatorBook = "BUY" | "WATCHLIST";
 
@@ -56,6 +61,8 @@ export interface SimulatorTransaction {
 export interface SimulatorDecision {
   id: number;
   symbol: string;
+  canonical_symbol?: string;
+  segment_symbol?: string;
   decision_session: string;
   kind: string;
   reason: string;
@@ -70,6 +77,8 @@ export interface SimulatorDecision {
 
 export interface SimulatorSymbolState {
   symbol: string;
+  canonical_symbol?: string;
+  segment_symbol?: string;
   book?: SimulatorBook | null;
   lifecycle: string;
   tier: string;
@@ -101,6 +110,8 @@ export interface SimulatorScannerChip {
 export interface SimulatorSymbolEvent {
   id: number;
   symbol: string;
+  canonical_symbol?: string;
+  segment_symbol?: string;
   decision_session: string;
   created_at: string;
   kind: string;
@@ -191,7 +202,7 @@ export function useReadOnlySimulatorPortfolios(enabled = true) {
       return data.portfolios;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -203,7 +214,7 @@ export function useReadOnlySimulatorNav(book: SimulatorBook, days = 60, enabled 
       return data.series;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -215,7 +226,7 @@ export function useReadOnlySimulatorPositions(book: SimulatorBook, enabled = tru
       return data.positions;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -229,7 +240,7 @@ export function useReadOnlySimulatorTransactions(book?: SimulatorBook, symbol?: 
       return data.transactions;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -243,7 +254,7 @@ export function useReadOnlySimulatorDecisions(symbol?: string, limit = 50, enabl
       return data.decisions;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -255,7 +266,7 @@ export function useReadOnlySimulatorSymbolStates(enabled = true) {
       return data.symbols;
     },
     staleTime: 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -268,7 +279,7 @@ export function useReadOnlySimulatorTrace(symbol: string, enabled = true) {
       return data;
     },
     staleTime: 30_000,
-    enabled: enabled && !!normalized,
+    enabled: simulatorGateEnabled(enabled && !!normalized),
   });
 }
 
@@ -284,7 +295,7 @@ export function useReadOnlySimulatorSymbolEvents(symbol: string, limit = 50, ena
       return data.events;
     },
     staleTime: 30_000,
-    enabled: enabled && !!normalized,
+    enabled: simulatorGateEnabled(enabled && !!normalized),
   });
 }
 
@@ -299,7 +310,7 @@ export function useReadOnlySimulatorSymbolCycles(symbol: string, enabled = true)
       return data.cycles;
     },
     staleTime: 30_000,
-    enabled: enabled && !!normalized,
+    enabled: simulatorGateEnabled(enabled && !!normalized),
   });
 }
 
@@ -311,7 +322,7 @@ export function useReadOnlySimulatorScannerColumns(enabled = true) {
       return data;
     },
     staleTime: 5 * 60_000,
-    enabled,
+    enabled: simulatorGateEnabled(enabled),
   });
 }
 
@@ -325,4 +336,17 @@ export function useReadOnlySimulatorIntegrity(enabled = true) {
     staleTime: 0,
     enabled,
   });
+}
+
+export function findSimulatorState(states: Record<string, SimulatorSymbolState> | undefined, ticker: string): SimulatorSymbolState | undefined {
+  const normalized = ticker.toUpperCase().trim();
+  if (!normalized) return undefined;
+  const byCanonical = Object.values(states ?? {}).filter((state) => (state.canonical_symbol ?? state.symbol) === normalized);
+  if (byCanonical.length > 0) {
+    return byCanonical.sort((left, right) => String(right.session ?? "").localeCompare(String(left.session ?? "")))[0];
+  }
+  // Fallback only: canonical_symbol should always be present from the projection contract.
+  return states?.[normalized] ?? Object.values(states ?? {})
+    .filter((state) => state.symbol === normalized || state.symbol.startsWith(`${normalized}__`))
+    .sort((left, right) => String(right.session ?? "").localeCompare(String(left.session ?? "")))[0];
 }
