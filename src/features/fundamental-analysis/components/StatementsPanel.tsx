@@ -5,7 +5,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Platform,
@@ -42,6 +42,39 @@ export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
   const mgr = useStatementManager(stockId);
   const { statements, latestPreferred, isLoading, isFetching, refetch, savedPdfs, typeFilter, setTypeFilter } = mgr;
   const [periodView, setPeriodView] = useState<StatementPeriodView>("annual");
+
+  const typeScopedStatements = useMemo(
+    () => (typeFilter == null ? statements : statements.filter((statement) => statement.statement_type === typeFilter)),
+    [statements, typeFilter],
+  );
+
+  const annualSelection = useMemo(
+    () => selectStatementsForDisplay(typeScopedStatements, latestPreferred, "annual"),
+    [typeScopedStatements, latestPreferred],
+  );
+
+  const quarterSelection = useMemo(
+    () => selectStatementsForDisplay(typeScopedStatements, latestPreferred, "quarter"),
+    [typeScopedStatements, latestPreferred],
+  );
+
+  useEffect(() => {
+    if (
+      typeFilter != null
+      && periodView === "annual"
+      && typeScopedStatements.length > 0
+      && annualSelection.rows.length === 0
+      && quarterSelection.rows.length > 0
+    ) {
+      setPeriodView("quarter");
+    }
+  }, [
+    typeFilter,
+    periodView,
+    typeScopedStatements.length,
+    annualSelection.rows.length,
+    quarterSelection.rows.length,
+  ]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -123,7 +156,7 @@ export function StatementsPanel({ stockId, stockSymbol, colors, isDesktop }: Pan
         </ScrollView>
       ) : (
         (() => {
-          const selection = selectStatementsForDisplay(statements, latestPreferred, periodView);
+          const selection = periodView === "annual" ? annualSelection : quarterSelection;
           return (
             <StatementsTable
               stockId={stockId}

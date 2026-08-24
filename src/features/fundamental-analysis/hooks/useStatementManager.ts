@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
 
 import { showErrorAlert } from "@/lib/errorHandling";
@@ -22,6 +22,16 @@ import { useFinancialStatements, type GeminiModel } from "./useFinancialStatemen
 
 import { useStatements } from "@/hooks/queries";
 import { STMNT_META } from "../types";
+
+function normalizeStatementType(raw: unknown): string {
+  const v = String(raw ?? "").trim().toLowerCase();
+  const compact = v.replace(/[^a-z0-9]+/g, "");
+  if (compact.includes("income") || compact.includes("incomestatement") || compact.includes("profitandloss") || compact === "pandl") return "income";
+  if (compact.includes("balancesheet") || compact.includes("financialposition") || compact === "balance") return "balance";
+  if (compact.includes("cashflow") || compact.includes("statementofcashflows") || compact === "cf") return "cashflow";
+  if (compact.includes("equity") || compact.includes("statementofequity") || compact.includes("changesinequity")) return "equity";
+  return v;
+}
 
 // ── Public interface ────────────────────────────────────────────────
 
@@ -85,9 +95,27 @@ export function useStatementManager(stockId: number): StatementManagerState {
   const [selectedModel, setSelectedModel] = useState<GeminiModel>("gemini-2.5-flash");
 
   // Statements query
-  const { data, isLoading, refetch, isFetching } = useStatements(stockId, typeFilter);
-  const statements = data?.statements ?? [];
+  const { data, isLoading, refetch, isFetching } = useStatements(stockId);
+  const statements = useMemo(
+    () => (data?.statements ?? []).map((statement) => ({
+      ...statement,
+      statement_type: normalizeStatementType(statement.statement_type),
+    })),
+    [data?.statements],
+  );
   const latestPreferred = data?.latest_preferred ?? null;
+
+  const selectedTypeCount = useMemo(
+    () => (typeFilter == null ? statements.length : statements.filter((statement) => statement.statement_type === typeFilter).length),
+    [statements, typeFilter],
+  );
+
+  useEffect(() => {
+    // If the selected statement type has no rows, fall back to "All" so users still see available data.
+    if (typeFilter != null && !isLoading && !isFetching && data && selectedTypeCount === 0) {
+      setTypeFilter(undefined);
+    }
+  }, [typeFilter, isLoading, isFetching, data, selectedTypeCount]);
 
   // Upload pipeline
   const {

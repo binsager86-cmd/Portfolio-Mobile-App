@@ -5,6 +5,16 @@
 import api from "../client";
 import type { AnalysisStock, FinancialStatement, LatestPreferredStatementPeriod } from "../types";
 
+function normalizeStatementType(raw: unknown): string {
+  const v = String(raw ?? "").trim().toLowerCase();
+  const compact = v.replace(/[^a-z0-9]+/g, "");
+  if (compact.includes("income") || compact.includes("incomestatement") || compact.includes("profitandloss") || compact === "pandl") return "income";
+  if (compact.includes("balancesheet") || compact.includes("financialposition") || compact === "balance") return "balance";
+  if (compact.includes("cashflow") || compact.includes("statementofcashflows") || compact === "cf") return "cashflow";
+  if (compact.includes("equity") || compact.includes("statementofequity") || compact.includes("changesinequity")) return "equity";
+  return v;
+}
+
 // ── Analysis Stocks ─────────────────────────────────────────────────
 
 /** List analysis stocks. */
@@ -85,7 +95,15 @@ export async function getStatements(
     `/api/v1/fundamental/stocks/${stockId}/statements`,
     { params: statementType ? { statement_type: statementType } : undefined },
   );
-  return data.data;
+  const statements = (data.data.statements ?? []).map((statement) => ({
+    ...statement,
+    statement_type: normalizeStatementType(statement.statement_type),
+  }));
+
+  return {
+    ...data.data,
+    statements,
+  };
 }
 
 /** Create / upsert a financial statement with optional line items. */

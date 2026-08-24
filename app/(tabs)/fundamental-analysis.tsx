@@ -130,9 +130,11 @@ type ComparisonPeriod = {
 
 function normalizeStatementType(raw: unknown): string {
   const v = String(raw ?? "").trim().toLowerCase();
-  if (v === "income_statement" || v === "incomestatement") return "income";
-  if (v === "balance_sheet" || v === "balancesheet") return "balance";
-  if (v === "cash_flow_statement" || v === "cashflow_statement" || v === "cashflowstatement") return "cashflow";
+  const compact = v.replace(/[^a-z0-9]+/g, "");
+  if (compact.includes("income") || compact.includes("incomestatement") || compact.includes("profitandloss") || compact === "pandl") return "income";
+  if (compact.includes("balancesheet") || compact.includes("financialposition") || compact === "balance") return "balance";
+  if (compact.includes("cashflow") || compact.includes("statementofcashflows") || compact === "cf") return "cashflow";
+  if (compact.includes("equity") || compact.includes("statementofequity") || compact.includes("changesinequity")) return "equity";
   return v;
 }
 
@@ -1124,10 +1126,33 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
     [normalizedStatements, typeFilter],
   );
   const latestPreferred = data?.latest_preferred ?? null;
-  const selection = useMemo(
-    () => selectStatementsForDisplay(scopedStatements, latestPreferred, periodView),
-    [scopedStatements, latestPreferred, periodView],
+  const annualSelection = useMemo(
+    () => selectStatementsForDisplay(scopedStatements, latestPreferred, "annual"),
+    [scopedStatements, latestPreferred],
   );
+  const quarterSelection = useMemo(
+    () => selectStatementsForDisplay(scopedStatements, latestPreferred, "quarter"),
+    [scopedStatements, latestPreferred],
+  );
+  const selection = periodView === "annual" ? annualSelection : quarterSelection;
+
+  useEffect(() => {
+    if (
+      typeFilter
+      && periodView === "annual"
+      && scopedStatements.length > 0
+      && annualSelection.rows.length === 0
+      && quarterSelection.rows.length > 0
+    ) {
+      setPeriodView("quarter");
+    }
+  }, [
+    typeFilter,
+    periodView,
+    scopedStatements.length,
+    annualSelection.rows.length,
+    quarterSelection.rows.length,
+  ]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -1212,7 +1237,7 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
       </View>
 
       {/* Type filter tabs */}
-      <StatementTabBar value={typeFilter} onChange={(v) => setTypeFilter(v ?? "income")} colors={colors} showAll={false} />
+      <StatementTabBar value={typeFilter} onChange={setTypeFilter} colors={colors} showAll={true} />
 
       {isLoading ? (
         <LoadingScreen />
