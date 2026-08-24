@@ -11,6 +11,7 @@
 import { ConfluenceBar } from "@/components/eagle-eye/ConfluenceBar";
 import { EagleEyeChart } from "@/components/eagle-eye/EagleEyeChart";
 import { RatingBadge } from "@/components/eagle-eye/RatingBadge";
+import { isSimulatorFeatureEnabled } from "@/constants/Config";
 import { SafetyConfirmModal } from "@/components/eagle-eye/SafetyConfirmModal";
 import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
@@ -19,7 +20,7 @@ import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
 import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
 import { useEagleEyeStock } from "@/hooks/useEagleEye";
-import { useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
+import { findSimulatorState, useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -50,9 +51,16 @@ export default function EagleEyeDetailScreen() {
 
   const t = isDnaRoute ? "" : (ticker ?? "").toUpperCase().trim();
 
+  const simulatorFeatureEnabled = isSimulatorFeatureEnabled();
   const { data, isLoading, isError, refetch } = useEagleEyeStock(t, 0, !isDnaRoute);
-  const { data: simulatorStates } = useReadOnlySimulatorSymbolStates(!isDnaRoute);
+  const { data: simulatorStates } = useReadOnlySimulatorSymbolStates(!isDnaRoute && simulatorFeatureEnabled);
   const analysis = data?.data;
+  const simulatorState = simulatorFeatureEnabled ? findSimulatorState(simulatorStates, analysis?.ticker ?? t) : undefined;
+  const gateCards = getGateCards(simulatorState).slice(0, 9);
+  const evidencePanels = getEvidencePanels(simulatorState);
+  const systemIndices = getSystemIndices(simulatorState);
+  const v2Confidence = simulatorState?.confidence;
+  const spikeConfidence = analysis?.confidence;
 
   // Safety modal — auto-show when requires_confirmation
   const [safetyVisible, setSafetyVisible] = useState(false);
@@ -190,9 +198,24 @@ export default function EagleEyeDetailScreen() {
                 )}
               </View>
               <Text style={[styles.heroConfidence, { color: colors.accentPrimary }]}>
-                {analysis.confidence.toFixed(0)}% confidence
+                {v2Confidence != null
+                  ? `V2 confidence ${v2Confidence.toFixed(0)}%`
+                  : `Spike confidence ${analysis.confidence.toFixed(0)}%`}
               </Text>
-              <SimulatorStateBadge state={simulatorStates?.[analysis.ticker]} />
+              {v2Confidence != null && spikeConfidence != null ? (
+                <Text style={[styles.heroSubConfidence, { color: colors.textMuted }]}>
+                  {`Spike confidence ${spikeConfidence.toFixed(0)}%`}
+                </Text>
+              ) : null}
+              <View style={styles.sourceRow}>
+                <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
+                  {`Decision: ${v2Confidence != null ? "V2 canonical" : "Spike"}`}
+                </Text>
+                <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
+                  {`State: ${simulatorState?.source ?? "none"}`}
+                </Text>
+              </View>
+              <SimulatorStateBadge state={simulatorState} />
             </View>
           </View>
 
@@ -234,6 +257,117 @@ export default function EagleEyeDetailScreen() {
             <TradePlanCard data={analysis} />
           </View>
         )}
+
+        {/* ── Simulator gates surfaced inline on stock detail ─────────────── */}
+        {simulatorState ? (
+          <View style={styles.section}>
+            <SectionTitle title="Decision Gates" colors={colors} />
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+              ]}
+            >
+              <View style={styles.simMetricsRow}>
+                <MetricChip label="Lifecycle" value={simulatorState.lifecycle ?? "NEUTRAL"} />
+                <MetricChip label="Tier" value={simulatorState.tier ?? "NONE"} />
+                <MetricChip
+                  label="Gates Passing"
+                  value={simulatorState.gates_passing != null ? `${simulatorState.gates_passing}/${systemIndices.gateTotal}` : "—"}
+                />
+                <MetricChip
+                  label="Confidence"
+                  value={simulatorState.confidence != null ? `${simulatorState.confidence.toFixed(0)}%` : "—"}
+                />
+              </View>
+
+              <View style={[styles.systemCalcCard, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}> 
+                <Text style={[styles.systemCalcTitle, { color: colors.textPrimary }]}>System calculation indices</Text>
+                <Text style={[styles.systemCalcText, { color: colors.textSecondary }]}>
+                  {`Gate pass ratio: ${systemIndices.gatePassing}/${systemIndices.gateTotal} (${systemIndices.passRate.toFixed(0)}%).`}
+                </Text>
+                <Text style={[styles.systemCalcText, { color: colors.textSecondary }]}>
+                  {`Confidence index: ${systemIndices.confidenceIndex.toFixed(0)} / 100.`}
+                </Text>
+                <Text style={[styles.systemCalcText, { color: colors.textSecondary }]}>
+                  {`Tier penalty: ${systemIndices.tierPenalty.toFixed(0)} points (${simulatorState.tier ?? "NONE"}).`}
+                </Text>
+                <Text style={[styles.systemCalcTextStrong, { color: colors.accentPrimary }]}>
+                  {`Composite readiness index: ${systemIndices.compositeIndex.toFixed(0)} / 100 → ${systemIndices.decisionLabel}`}
+                </Text>
+              </View>
+
+              {gateCards.length > 0 ? (
+                <View style={styles.gateGrid}>
+                  {gateCards.map((gate, index) => (
+                    <View
+                      key={`${index}-${gate.name}`}
+                      style={[
+                        styles.gateCard,
+                        {
+                          backgroundColor: colors.bgSecondary,
+                          borderColor: gate.passed ? colors.success : colors.borderColor,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.gateName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {gate.name}
+                      </Text>
+                      <Text style={[styles.gateMeta, { color: colors.textMuted }]} numberOfLines={2}>
+                        {gate.value} vs {gate.threshold}
+                      </Text>
+                      <Text style={[styles.gateExplain, { color: colors.textSecondary }]} numberOfLines={3}>
+                        {gate.explanation}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.gateState,
+                          { color: gate.passed ? colors.success : colors.danger },
+                        ]}
+                      >
+                        {gate.passed ? "PASS" : "BLOCK"}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.inlineEmpty, { color: colors.textMuted }]}>
+                  No gate payload is projected for this stock yet.
+                </Text>
+              )}
+
+              {evidencePanels.some((panel) => panel.items.length > 0) ? (
+                <View style={styles.evidenceStack}>
+                  {evidencePanels.map((panel) => (
+                    <View
+                      key={panel.title}
+                      style={[
+                        styles.evidenceCard,
+                        { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor },
+                      ]}
+                    >
+                      <Text style={[styles.evidenceTitle, { color: colors.textPrimary }]}>
+                        {panel.title}
+                      </Text>
+                      {panel.items.length === 0 ? (
+                        <Text style={[styles.inlineEmpty, { color: colors.textMuted }]}>No projected evidence.</Text>
+                      ) : (
+                        panel.items.slice(0, 5).map(([key, raw]) => (
+                          <View key={`${panel.title}-${key}`} style={styles.evidenceRow}>
+                            <Text style={[styles.evidenceKey, { color: colors.textMuted }]}>{key}</Text>
+                            <Text style={[styles.evidenceValue, { color: colors.textPrimary }]} numberOfLines={2}>
+                              {formatEvidenceValue(raw)}
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
         {/* ── ML Signal Card (SHADOW roster stocks only) ────────────────────── */}
         <View style={styles.section}>
@@ -364,6 +498,91 @@ function SimulatorStateBadge({ state }: { state?: SimulatorSymbolState }) {
   );
 }
 
+function MetricChip({ label, value }: { label: string; value: string }) {
+  const { colors } = useThemeStore();
+  return (
+    <View style={[styles.metricChip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
+      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+function getGateCards(state?: SimulatorSymbolState) {
+  const gates = Array.isArray(state?.gates) ? state.gates : [];
+  return gates.map((gate, index) => ({
+    name: readGateText(gate.name ?? gate.key ?? gate.signal ?? gate.label) ?? `Gate ${index + 1}`,
+    value: readGateText(gate.value ?? gate.current ?? gate.observed) ?? "—",
+    threshold: readGateText(gate.threshold ?? gate.target ?? gate.limit) ?? "—",
+    passed: Boolean(gate.pass ?? gate.passed ?? gate.ok ?? gate.fired),
+    explanation: gateExplanation(readGateText(gate.name ?? gate.key ?? gate.signal ?? gate.label), index),
+  }));
+}
+
+function gateExplanation(gateName: string | null, index: number): string {
+  const key = String(gateName ?? "").toUpperCase();
+  if (key.includes("LIFECYCLE")) return "Checks whether structure is in a decision-eligible lifecycle state.";
+  if (key.includes("CONFIRM")) return "Requires confirmation before entry-grade decisions are allowed.";
+  if (key.includes("VETO") || key.includes("AVOID")) return "Veto and avoid checks can block entries even when other gates pass.";
+  if (key.includes("INTENT")) return "Validates that candidate intent conditions are armed for action.";
+  if (key.includes("POSITION")) return "Protects against duplicate entries while a position is already open.";
+  return `Gate ${index + 1} validates one rule in the V2 decision engine.`;
+}
+
+function getSystemIndices(state?: SimulatorSymbolState) {
+  const gateTotal = Array.isArray(state?.gates) && state?.gates?.length ? state.gates.length : 9;
+  const gatePassing = Number.isFinite(state?.gates_passing as number) ? Number(state?.gates_passing) : 0;
+  const passRate = gateTotal > 0 ? (gatePassing / gateTotal) * 100 : 0;
+  const confidenceIndex = Number.isFinite(state?.confidence as number) ? Number(state?.confidence) : passRate;
+  const tier = String(state?.tier ?? "").toUpperCase();
+  const tierPenalty = tier.includes("AVOID_HARD") ? 35 : tier.includes("AVOID_SOFT") || tier.includes("VETOED") ? 18 : 0;
+  const compositeIndex = Math.max(0, Math.min(100, passRate * 0.6 + confidenceIndex * 0.4 - tierPenalty));
+  const decisionLabel = compositeIndex >= 70 ? "BUY BIAS" : compositeIndex >= 45 ? "WATCHLIST" : "DEFENSIVE / AVOID";
+  return {
+    gateTotal,
+    gatePassing,
+    passRate,
+    confidenceIndex,
+    tierPenalty,
+    compositeIndex,
+    decisionLabel,
+  };
+}
+
+function getEvidencePanels(state?: SimulatorSymbolState) {
+  return [
+    { title: "Soft conditions", items: evidenceEntries(state?.soft_conditions) },
+    { title: "Hard refs", items: evidenceEntries(state?.hard_refs) },
+    { title: "Base", items: evidenceEntries(state?.base) },
+    { title: "Entry paths", items: evidenceEntries(state?.entry_paths) },
+    { title: "Exit watch", items: evidenceEntries(state?.exit_watch) },
+  ];
+}
+
+function evidenceEntries(value: unknown): Array<[string, unknown]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>);
+}
+
+function readGateText(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value.toString() : null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return null;
+}
+
+function formatEvidenceValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value.toString() : "—";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (value == null) return "—";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function getSimulatorStatePalette(
   lifecycle: string,
   tier: string,
@@ -452,6 +671,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  heroSubConfidence: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  sourceRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  sourceBadge: {
+    fontSize: 10,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   simStateBadge: {
     maxWidth: 210,
     borderWidth: 1,
@@ -462,6 +698,111 @@ const styles = StyleSheet.create({
   simStateText: {
     fontSize: 10,
     fontWeight: "800",
+  },
+  simMetricsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: UITokens.spacing.sm,
+  },
+  metricChip: {
+    minWidth: 120,
+    flexGrow: 1,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 3,
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  gateGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: UITokens.spacing.sm,
+    marginTop: UITokens.spacing.sm,
+  },
+  gateCard: {
+    width: "31%",
+    minWidth: 110,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.md,
+    padding: UITokens.spacing.sm,
+    gap: 4,
+  },
+  gateName: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  gateMeta: {
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  gateExplain: {
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  gateState: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  systemCalcCard: {
+    marginTop: UITokens.spacing.sm,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.md,
+    padding: UITokens.spacing.sm,
+    gap: 4,
+  },
+  systemCalcTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  systemCalcText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  systemCalcTextStrong: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  evidenceStack: {
+    gap: UITokens.spacing.sm,
+    marginTop: UITokens.spacing.sm,
+  },
+  evidenceCard: {
+    borderWidth: 1,
+    borderRadius: UITokens.radius.md,
+    padding: UITokens.spacing.sm,
+    gap: 6,
+  },
+  evidenceTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  evidenceRow: {
+    gap: 2,
+  },
+  evidenceKey: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  evidenceValue: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  inlineEmpty: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   thesis: {
     fontSize: 14,

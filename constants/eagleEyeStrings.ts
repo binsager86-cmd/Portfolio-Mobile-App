@@ -400,6 +400,9 @@ export const EE = {
   setupSummaryTitle: "Setup Summary",
   setupCountLine: (ticker: string, count: number) =>
     `${ticker} has shown this pattern ${count} time${count === 1 ? "" : "s"} in the history we checked.`,
+  episodeCountLine: (raw: number, distinct: number) =>
+    `${raw} raw setup${raw === 1 ? "" : "s"} \u2192 ${distinct} distinct episode${distinct === 1 ? "" : "s"} (overlapping windows on the same move are merged so hit rates aren't inflated).`,
+  signalLiftLine: (lift: number) => `${lift.toFixed(1)}x lift`,
   scoreExplainTitle: "Why this score and recommendation?",
   scoreExplainBody:
     "This combines live signal conditions with this stock's own Behavioral DNA history, so you can see exactly what influenced the current score and call.",

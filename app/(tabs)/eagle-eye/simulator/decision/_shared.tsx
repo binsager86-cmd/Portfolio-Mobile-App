@@ -45,6 +45,20 @@ export function jsonValues(value: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
+/** Single canonical parser for gate objects (`{name, value, threshold, pass}`
+ * from FlowConfirmationEngine) — used everywhere a gate list is rendered so
+ * the format stays "name · value vs threshold · PASS/BLOCK" consistently. */
+export function parseGateEvidence(
+  gate: Record<string, unknown>,
+  index: number,
+): { name: string; value: string; threshold: string; passed: boolean } {
+  const name = readText(gate.name ?? gate.gate ?? gate.id) ?? `gate_${index + 1}`;
+  const value = readText(gate.value ?? gate.current ?? gate.observed) ?? "—";
+  const threshold = readText(gate.threshold ?? gate.target ?? gate.limit) ?? "—";
+  const passed = Boolean(gate.pass ?? gate.passed ?? gate.ok ?? gate.fired);
+  return { name, value, threshold, passed };
+}
+
 function valueBounds(values: Array<number | null | undefined>): [number, number] {
   const numbers = values.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
   if (numbers.length === 0) return [0, 1];
@@ -104,7 +118,12 @@ export function DecisionTraceChart({
   const exitPrice = readNumber(cycle?.exit_price);
   const peakPrice = entryPrice != null ? entryPrice * (1 + (cycle?.peak_mfe ?? 0) / 100) : null;
 
-  const gateRows = jsonValues(state?.gates).slice(0, 9);
+  const gateRows: Array<[string, unknown]> = jsonValues(state?.gates)
+    .slice(0, 9)
+    .map((gate, index) => {
+      const { name, value, threshold, passed } = parseGateEvidence(gate, index);
+      return [name, `${value} vs ${threshold} · ${passed ? "PASS" : "BLOCK"}`];
+    });
   const entrySummary = jsonEntries(entryPaths).slice(0, 3);
   const exitSummary = jsonEntries(exitWatch).slice(0, 3);
 
@@ -316,3 +335,9 @@ export const styles = StyleSheet.create({
     lineHeight: 17,
   },
 });
+
+// Expo Router treats files under app/ as potential routes.
+// This no-op default export avoids route registration warnings for shared helpers.
+export default function DecisionSharedModule() {
+  return null;
+}

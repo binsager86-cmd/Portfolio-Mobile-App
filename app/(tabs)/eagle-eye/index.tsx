@@ -19,7 +19,9 @@ import {
   computeRR,
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
-import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { isSimulatorFeatureEnabled } from "@/constants/Config";
+import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLEligibilityDetails, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { findSimulatorState, useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -93,6 +95,7 @@ type SortField =
   | "avgvol"
   | "latvol"
   | "conf"
+  | "v2gates"
   | "rr"
   | "price"
   | "entry"
@@ -100,10 +103,21 @@ type SortField =
   | "bvps"
   | "pe";
 type SortDir = "asc" | "desc";
+type ViewMode = "v2" | "spike";
 type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
 type StatusFilter = (typeof STATUS_FILTER_ORDER)[number];
 type LoadingMode = "idle" | "loading" | "refresh" | "warming_up";
-type ScannerListItem = { kind: "col_header" } | { kind: "stock"; stock: RatedStock };
+type ScannerStock = RatedStock & {
+  spike_rating: string;
+  spike_confidence: number;
+  v2_confidence: number | null;
+  state_source: string;
+  v2_state?: SimulatorSymbolState;
+  v2_decision: string;
+  v2_gate_text: string;
+  v2_mismatch: boolean;
+};
+type ScannerListItem = { kind: "col_header" } | { kind: "stock"; stock: ScannerStock };
 
 const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   rating: "Rating",
@@ -112,7 +126,8 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   volume: "Volume",
   avgvol: "Avg Volume",
   latvol: "Latest Volume",
-  conf: "Confidence",
+  conf: "Spike Confidence",
+  v2gates: "V2 Gates",
   rr: "Risk/Reward",
   price: "Current Price",
   entry: "Entry",
@@ -120,6 +135,19 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   bvps: "BVPS",
   pe: "P/E",
 };
+
+function mapV2Decision(state?: SimulatorSymbolState): string | null {
+  if (!state) return null;
+  const tier = String(state.tier ?? "").toUpperCase();
+  const lifecycle = String(state.lifecycle ?? "").toUpperCase();
+  const gatesPassing = Number.isFinite(state.gates_passing as number) ? Number(state.gates_passing) : null;
+  if (tier.includes("AVOID_HARD")) return "AVOID";
+  if (tier.includes("AVOID_SOFT") || tier.includes("VETOED")) return "WATCHLIST";
+  if (lifecycle === "MARKUP_ACTIVE" && (gatesPassing == null || gatesPassing >= 3)) return "BUY";
+  if (lifecycle === "BASE_VALID") return "WATCHLIST";
+  if (lifecycle === "NEUTRAL") return "NEUTRAL";
+  return "HOLD";
+}
 
 function getUpdatedAgo(ts: number): string {
   if (!ts) return "";
@@ -141,16 +169,19 @@ export default function EagleEyeScannerScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   const [highVolumeOnly, setHighVolumeOnly] = useState(false);
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
-  const [sortBy, setSortBy] = useState<SortField>("conf");
+  const [viewMode, setViewMode] = useState<ViewMode>("v2");
+  const [sortBy, setSortBy] = useState<SortField>("v2gates");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
   const isTableView = isWeb && viewportWidth >= 768;
 
+  const simulatorEnabled = isSimulatorFeatureEnabled();
   const fetchEnabled = true;
 
   const { data, isLoading, isRefetching, refetch, isError, dataUpdatedAt } =
     useEagleEyeScanner(undefined, fetchEnabled);
+  const { data: simulatorStates } = useReadOnlySimulatorSymbolStates(simulatorEnabled && fetchEnabled);
   const isWarmingUp = data?.status === "warming_up";
 
   const loadingMode: LoadingMode = useMemo(() => {
@@ -243,6 +274,7 @@ export default function EagleEyeScannerScreen() {
   const { data: regimeData } = useEagleEyeRegime(regimeEnabled);
   const { data: mlBandsData } = useMLBands(fetchEnabled);
   const { data: mlDisplayState } = useMLDisplayState(fetchEnabled);
+  const { data: eligibilityDetails } = useMLEligibilityDetails(fetchEnabled);
   const eeRefresh = useEagleEyeRefresh();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
   const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -269,7 +301,7 @@ export default function EagleEyeScannerScreen() {
     };
   }, []);
 
-  const stocks: RatedStock[] = useMemo(() => {
+  const stocks: ScannerStock[] = useMemo(() => {
     // Build ML band lookup map (ticker → band item)
     const mlMap: Record<string, { band: string | null; color: string | null; emoji: string | null; short_label: string | null; as_of?: string | null }> = {};
     if (mlBandsData?.enabled && mlBandsData.bands) {
@@ -279,10 +311,33 @@ export default function EagleEyeScannerScreen() {
         }
       }
     }
-    let list = (data?.stocks ?? []).map((s) => ({
+    const baseList = (data?.stocks ?? []).map((s) => ({
       ...s,
       ml_band: mlMap[s.ticker] ?? null,
     }));
+
+    let list: ScannerStock[] = baseList.map((stock) => {
+      const v2State = findSimulatorState(simulatorStates, stock.ticker);
+      const v2Decision = mapV2Decision(v2State) ?? stock.rating;
+      const spikeRating = String(stock.rating ?? "NEUTRAL");
+      const displayedRating = viewMode === "v2" ? v2Decision : spikeRating;
+      const v2Confidence = Number.isFinite(v2State?.confidence as number) ? Number(v2State?.confidence) : null;
+      return {
+        ...stock,
+        rating: displayedRating,
+        spike_rating: spikeRating,
+        spike_confidence: Number(stock.confidence ?? 0),
+        v2_confidence: v2Confidence,
+        state_source: String(v2State?.source ?? "none"),
+        v2_state: v2State,
+        v2_decision: v2Decision,
+        v2_gate_text:
+          v2State?.gates_passing != null
+            ? `${v2State.gates_passing}/${Array.isArray(v2State.gates) && v2State.gates.length > 0 ? v2State.gates.length : 9}`
+            : "—",
+        v2_mismatch: String(stock.rating ?? "").toUpperCase() !== String(v2Decision ?? "").toUpperCase(),
+      } satisfies ScannerStock;
+    });
     // Confidence filter — client-side so chip changes never trigger a new API call
     if (minConfidence > 0) {
       list = list.filter((s) => s.confidence >= minConfidence);
@@ -337,7 +392,11 @@ export default function EagleEyeScannerScreen() {
         numberOrNegInf(stock.volume_context?.relative_volume ?? null);
 
       let diff: number;
-      if (sortBy === "rating") {
+      const tierRank = (value: string | null | undefined) => String(value || "NONE").toUpperCase() === "NONE" ? 1 : 0;
+      if (sortBy === "v2gates") {
+        diff = (tierRank(a.v2_state?.tier) - tierRank(b.v2_state?.tier)) * 1000
+          + numberOrNegInf(b.v2_state?.gates_passing) - numberOrNegInf(a.v2_state?.gates_passing);
+      } else if (sortBy === "rating") {
         diff = ratingWeight(b.rating) - ratingWeight(a.rating);
       } else if (sortBy === "ticker") {
         diff = b.ticker.localeCompare(a.ticker);
@@ -380,8 +439,71 @@ export default function EagleEyeScannerScreen() {
     stageFilter,
     sortBy,
     sortDir,
+    viewMode,
     mlBandsData,
+    simulatorStates,
   ]);
+
+  const evaluatedCount = stocks.length;
+  const coverageTotal = 139;
+  const notEvaluatedCount = Math.max(0, coverageTotal - evaluatedCount);
+  const showCoverageReasons = useCallback(() => {
+    const grouped = new Map<string, number>();
+    for (const item of eligibilityDetails?.details ?? []) {
+      if (item.eligible) continue;
+      const reason = String(item.reason || "UNKNOWN").split(":")[0];
+      grouped.set(reason, (grouped.get(reason) ?? 0) + 1);
+    }
+    const reasonText = Array.from(grouped.entries()).map(([reason, count]) => `${reason}: ${count}`).join("\n") || "No ineligible reason rows returned.";
+    Alert.alert("Not evaluated by reason", `${reasonText}\n\nSource: ML eligibility detail rows.`);
+  }, [eligibilityDetails]);
+
+  const discrepancyRows = useMemo(() => {
+    return stocks
+      .filter((stock) => {
+        const confidenceGap = stock.v2_confidence != null
+          ? Math.abs(stock.spike_confidence - stock.v2_confidence)
+          : 0;
+        return stock.v2_mismatch || confidenceGap >= 15;
+      })
+      .slice(0, 8);
+  }, [stocks]);
+
+  // Market posture strip — a whole-market tally from the V2 projection, independent of
+  // the user's current search/rating filters (so it stays "the fastest read" of the
+  // market even while the table below is filtered down to a subset).
+  const postureSummary = useMemo(() => {
+    const counts = { buy: 0, watchlist: 0, neutral: 0, avoid: 0, divergent: 0 };
+    const gateBuckets = { "0-2": 0, "3-5": 0, "6-8": 0, "9": 0 };
+    for (const stock of data?.stocks ?? []) {
+      const v2State = findSimulatorState(simulatorStates, stock.ticker);
+      const v2Call = mapV2Decision(v2State) ?? stock.rating;
+      switch (String(v2Call).toUpperCase()) {
+        case "BUY":
+          counts.buy += 1;
+          break;
+        case "WATCHLIST":
+          counts.watchlist += 1;
+          break;
+        case "AVOID":
+          counts.avoid += 1;
+          break;
+        default:
+          counts.neutral += 1;
+      }
+      if (String(stock.rating ?? "").toUpperCase() !== String(v2Call ?? "").toUpperCase()) {
+        counts.divergent += 1;
+      }
+      const gp = Number.isFinite(v2State?.gates_passing as number) ? Number(v2State?.gates_passing) : null;
+      if (gp != null) {
+        if (gp <= 2) gateBuckets["0-2"] += 1;
+        else if (gp <= 5) gateBuckets["3-5"] += 1;
+        else if (gp <= 8) gateBuckets["6-8"] += 1;
+        else gateBuckets["9"] += 1;
+      }
+    }
+    return { counts, gateBuckets };
+  }, [data, simulatorStates]);
 
   const listData = useMemo<ScannerListItem[]>(() => {
     if (stocks.length === 0) {
@@ -547,6 +669,12 @@ export default function EagleEyeScannerScreen() {
                 {`Stage${sortArrow("stage")}`}
               </Text>
             </Pressable>
+            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.v2Decision }]}> 
+              <Text style={[styles.colHeaderCell, { color: colors.textMuted }]}>V2 Decision</Text>
+            </View>
+            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.v2Gates }]}> 
+              <Text style={[styles.colHeaderCell, { color: sortBy === "v2gates" ? colors.accentPrimary : colors.textMuted, textAlign: "right" }]}>V2 Gates{sortArrow("v2gates")}</Text>
+            </View>
             <Pressable
               onPress={() => toggleSort("volume")}
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.volume }]}
@@ -735,7 +863,7 @@ export default function EagleEyeScannerScreen() {
                   },
                 ]}
               >
-                {`Conf${sortArrow("conf")}`}
+                {`SPIKE CONF${sortArrow("conf")}`}
               </Text>
             </Pressable>
           </>
@@ -776,7 +904,7 @@ export default function EagleEyeScannerScreen() {
                   },
                 ]}
               >
-                {`CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
+                {`SPIKE CONF${sortBy === "conf" ? (sortDir === "desc" ? " ▼" : " ▲") : ""}`}
               </Text>
             </Pressable>
             {mlBandsData?.enabled ? (
@@ -815,6 +943,11 @@ export default function EagleEyeScannerScreen() {
       return (
         <StockRow
           item={item.stock}
+          simulatorState={item.stock.v2_state}
+          v2Decision={item.stock.v2_decision}
+          v2GateText={item.stock.v2_gate_text}
+          spikeRating={item.stock.spike_rating}
+          decisionMismatch={item.stock.v2_mismatch}
           isFirst={index === 1}
           variant={isTableView ? "table" : "default"}
         />
@@ -1097,6 +1230,33 @@ export default function EagleEyeScannerScreen() {
           </View>
 
           <View style={styles.headerRight}>
+            <View style={styles.modeToggleRow}>
+              <Pressable
+                onPress={() => setViewMode("v2")}
+                style={[
+                  styles.modeToggle,
+                  {
+                    backgroundColor: viewMode === "v2" ? colors.accentPrimary : colors.bgCard,
+                    borderColor: viewMode === "v2" ? colors.accentPrimary : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text style={[styles.modeToggleText, { color: viewMode === "v2" ? colors.bgPrimary : colors.textPrimary }]}>V2 Canonical</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setViewMode("spike")}
+                style={[
+                  styles.modeToggle,
+                  {
+                    backgroundColor: viewMode === "spike" ? colors.warning : colors.bgCard,
+                    borderColor: viewMode === "spike" ? colors.warning : colors.borderColor,
+                  },
+                ]}
+              >
+                <Text style={[styles.modeToggleText, { color: viewMode === "spike" ? colors.bgPrimary : colors.textPrimary }]}>Spike Research</Text>
+              </Pressable>
+            </View>
+
             {regime ? (
               <View
                 style={[
@@ -1214,9 +1374,51 @@ export default function EagleEyeScannerScreen() {
                   <View style={styles.previewHeaderRow}>
                     <View style={styles.previewHeaderCopy}>
                       <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>SCANNER TABLE</Text>
-                      <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}>
+                      <Text style={[styles.previewSubtitle, { color: colors.textMuted }]}> 
                         {`${stocks.length} records • sorted by ${SORT_LABEL_BY_FIELD[sortBy]} (${sortDir.toUpperCase()})`}
                       </Text>
+                      <Pressable onPress={showCoverageReasons} accessibilityRole="button">
+                        <Text style={[styles.previewSubtitle, { color: colors.accentPrimary }]}>
+                          {`${evaluatedCount} of ${coverageTotal} · ${notEvaluatedCount} not evaluated`}
+                        </Text>
+                      </Pressable>
+                      <View style={styles.previewToggleRow}>
+                        <Pressable
+                          onPress={() => setViewMode("v2")}
+                          style={[
+                            styles.modeToggle,
+                            {
+                              backgroundColor: viewMode === "v2" ? colors.accentPrimary : colors.bgCard,
+                              borderColor: viewMode === "v2" ? colors.accentPrimary : colors.borderColor,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.modeToggleText, { color: viewMode === "v2" ? colors.bgPrimary : colors.textPrimary }]}>V2 Canonical</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setViewMode("spike")}
+                          style={[
+                            styles.modeToggle,
+                            {
+                              backgroundColor: viewMode === "spike" ? colors.warning : colors.bgCard,
+                              borderColor: viewMode === "spike" ? colors.warning : colors.borderColor,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.modeToggleText, { color: viewMode === "spike" ? colors.bgPrimary : colors.textPrimary }]}>Spike Research</Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.sourceBadgeRow}>
+                        <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
+                          {`Decision source: ${viewMode === "v2" ? "V2 canonical" : "Spike research"}`}
+                        </Text>
+                        <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
+                          State source: V2 symbols/state
+                        </Text>
+                        <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
+                          Confidence column: Spike
+                        </Text>
+                      </View>
                     </View>
 
                     <Pressable
@@ -1246,6 +1448,35 @@ export default function EagleEyeScannerScreen() {
                 >
                   <View style={styles.filterPanelHeader}>
                     <View>
+
+                    <View style={[styles.postureStrip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
+                      <Text style={[styles.postureText, { color: colors.textPrimary }]}>
+                        {`V2 today: ${postureSummary.counts.buy} buy · ${postureSummary.counts.watchlist} watchlist · ${postureSummary.counts.neutral} neutral · ${postureSummary.counts.avoid} avoid · ${postureSummary.counts.divergent} divergent`}
+                      </Text>
+                      <Text style={[styles.postureSubtext, { color: colors.textMuted }]}>
+                        {`Gates: 0-2 (${postureSummary.gateBuckets["0-2"]}) · 3-5 (${postureSummary.gateBuckets["3-5"]}) · 6-8 (${postureSummary.gateBuckets["6-8"]}) · 9 (${postureSummary.gateBuckets["9"]})`}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.auditPanel, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}> 
+                      <Text style={[styles.auditTitle, { color: colors.textPrimary }]}>Discrepancy audit</Text>
+                      <Text style={[styles.auditSubtitle, { color: colors.textMuted }]}>
+                        {`${discrepancyRows.length} flagged symbols (decision mismatch or confidence gap >= 15 points)`}
+                      </Text>
+                      {discrepancyRows.length === 0 ? (
+                        <Text style={[styles.auditEmpty, { color: colors.success }]}>No material discrepancy detected.</Text>
+                      ) : (
+                        discrepancyRows.map((row) => {
+                          const gap = row.v2_confidence != null ? Math.abs(row.spike_confidence - row.v2_confidence) : null;
+                          return (
+                            <Text key={`audit-${row.ticker}`} style={[styles.auditRow, { color: colors.textSecondary }]}>
+                              {`${row.ticker}: spike=${row.spike_rating}, v2=${row.v2_decision}, gap=${gap != null ? gap.toFixed(0) : "n/a"}, source=${row.state_source}`}
+                            </Text>
+                          );
+                        })
+                      )}
+                    </View>
+
                       <Text style={[styles.filterPanelTitle, { color: colors.textPrimary }]}>FILTER SCANNER</Text>
                       <Text style={[styles.filterPanelSubtitle, { color: colors.textMuted }]}>Find stocks by ticker, confidence, rating, status, volume, and stage.</Text>
                     </View>
@@ -1354,6 +1585,24 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: "700" },
   updatedText: { fontSize: 11, marginTop: 1 },
   headerRight: { alignItems: "flex-end", gap: 4 },
+  modeToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  modeToggle: {
+    borderWidth: 1,
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  modeToggleText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
   regimeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1451,6 +1700,25 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 2,
   },
+  sourceBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  previewToggleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  sourceBadge: {
+    fontSize: 10,
+    borderWidth: 1,
+    borderRadius: UITokens.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1471,6 +1739,44 @@ const styles = StyleSheet.create({
     marginHorizontal: UITokens.spacing.md,
     marginBottom: 10,
     gap: 10,
+  },
+  auditPanel: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginHorizontal: UITokens.spacing.md,
+    marginBottom: 10,
+    gap: 4,
+  },
+  postureStrip: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginHorizontal: UITokens.spacing.md,
+    marginBottom: 10,
+    gap: 3,
+  },
+  postureText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  postureSubtext: {
+    fontSize: 11,
+  },
+  auditTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  auditSubtitle: {
+    fontSize: 11,
+  },
+  auditEmpty: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  auditRow: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   filterPanelHeader: {
     flexDirection: "row",

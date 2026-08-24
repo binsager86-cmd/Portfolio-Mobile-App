@@ -72,6 +72,21 @@ export interface MLDisplayStateResponse {
   disabled_reason: string | null;
 }
 
+export interface MLEligibilityDetail {
+  ticker: string;
+  eligible: boolean;
+  reason: string;
+  n_moves: number;
+  n_days: number;
+  liquidity_tier: string;
+  watch_only: boolean;
+}
+
+export interface MLEligibilityDetailsResponse {
+  status: string;
+  details: MLEligibilityDetail[];
+}
+
 export interface MLMethodologySection {
   heading: string;
   body: string;
@@ -198,6 +213,7 @@ export interface SignalReliabilityStat {
   avg_lead_days?: number | null;
   false_positive_rate?: number | null;
   discriminative_power?: number | null;
+  lift?: number | null;
 }
 
 export interface DnaWindowProfile {
@@ -208,6 +224,7 @@ export interface DnaWindowProfile {
   confidence_tier: "ESTABLISHED" | "BUILDING" | "EARLY" | "TOO_THIN" | string;
   confidence_label: string;
   percentages_visible: boolean;
+  raw_setup_count?: number | null;
   threshold_profiles: ThresholdProfile[];
 }
 
@@ -351,6 +368,7 @@ export const eagleEyeKeys = {
   regime: () => [...eagleEyeKeys.all, "regime"] as const,
   mlDisplayState: () => [...eagleEyeKeys.all, "ml-display-state"] as const,
   mlBands: () => [...eagleEyeKeys.all, "ml-bands"] as const,
+  mlEligibilityDetails: () => [...eagleEyeKeys.all, "ml-eligibility-details"] as const,
   mlBandForTicker: (ticker: string) => [...eagleEyeKeys.all, "ml-band", ticker.toUpperCase()] as const,
   mlMethodology: () => [...eagleEyeKeys.all, "ml-methodology"] as const,
 } as const;
@@ -862,6 +880,15 @@ export function useMLDisplayState(enabled = true) {
     retry: 1,
     enabled,
     placeholderData: (prev) => prev,
+  });
+}
+
+export function useMLEligibilityDetails(enabled = true) {
+  return useQuery<MLEligibilityDetailsResponse>({
+    queryKey: eagleEyeKeys.mlEligibilityDetails(),
+    queryFn: async () => (await api.get<MLEligibilityDetailsResponse>("/api/v1/eagle-eye/ml/eligibility-details")).data,
+    staleTime: 10 * 60_000,
+    enabled,
   });
 }
 

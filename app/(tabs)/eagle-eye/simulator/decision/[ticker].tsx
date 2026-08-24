@@ -9,7 +9,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DecisionTraceChart, formatKwd, jsonEntries, jsonValues, readText } from "./_shared";
+import { DecisionTraceChart, formatKwd, jsonEntries, jsonValues, parseGateEvidence } from "./_shared";
 
 export default function DecisionDetailScreen() {
   const params = useLocalSearchParams<{ ticker: string }>();
@@ -95,7 +95,7 @@ export default function DecisionDetailScreen() {
             {gates.length === 0 ? (
               <EmptyCard message="No gate payload was projected for this symbol." />
             ) : (
-              gates.map((gate, index) => <GateCard key={`${index}-${String(gate.name ?? gate.key ?? index)}`} gate={gate} />)
+              gates.map((gate, index) => <GateCard key={`${index}-${String(gate.name ?? gate.key ?? index)}`} gate={gate} index={index} />)
             )}
           </View>
 
@@ -169,17 +169,14 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>;
 }
 
-function GateCard({ gate }: { gate: Record<string, unknown> }) {
+function GateCard({ gate, index }: { gate: Record<string, unknown>; index: number }) {
   const { colors } = useThemeStore();
-  const name = readText(gate.name ?? gate.key ?? gate.signal ?? gate.label) ?? "Gate";
-  const value = readText(gate.value ?? gate.current ?? gate.observed);
-  const threshold = readText(gate.threshold ?? gate.target ?? gate.limit);
-  const passed = Boolean(gate.pass ?? gate.passed ?? gate.ok ?? gate.fired);
+  const { name, value, threshold, passed } = parseGateEvidence(gate, index);
   return (
     <View style={[styles.gateCard, { backgroundColor: colors.bgCard, borderColor: passed ? colors.success : colors.borderColor }]}>
       <Text style={[styles.gateName, { color: colors.textPrimary }]} numberOfLines={1}>{name}</Text>
       <Text style={[styles.gateMeta, { color: colors.textMuted }]} numberOfLines={1}>
-        {value ?? "—"} vs {threshold ?? "—"}
+        {value} vs {threshold}
       </Text>
       <Text style={[styles.gateState, { color: passed ? colors.success : colors.danger }]}>{passed ? "PASS" : "BLOCK"}</Text>
     </View>

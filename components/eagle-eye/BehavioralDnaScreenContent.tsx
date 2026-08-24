@@ -300,6 +300,7 @@ export function BehavioralDnaScreenContent({
     () => selectedProfile?.setup_count ?? dna.total_events_analyzed ?? 0,
     [selectedProfile, dna.total_events_analyzed],
   );
+  const rawSetupCount = selectedProfile?.raw_setup_count ?? null;
   const confidenceFloor = selectedProfile?.confidence_floor ?? dna.confidence_floor ?? 5;
   const hasPercentages = selectedProfile?.percentages_visible ?? displayedProfiles.length > 0;
   const avgGainAll = displayedProfiles[0]?.avg_gain_all_pct ?? dna.threshold_profiles?.[0]?.avg_gain_all_pct ?? null;
@@ -315,10 +316,22 @@ export function BehavioralDnaScreenContent({
     () => getConfidenceState(selectedProfile?.confidence_tier, colors),
     [selectedProfile, colors],
   );
-  const setupSignals = dna.setup_signals ?? [];
+  // D1 fix: a signal present in ~100% of setups by construction (it was part of
+  // the setup-matching criteria, or is simply an "uptrend" condition) carries no
+  // discriminative information. Suppress anything above this prevalence from the
+  // "pattern matched now" chips and rank the survivors by lift instead.
+  const PREVALENCE_SUPPRESS_PCT = 90;
+  const informativeSignalStats = useMemo(
+    () =>
+      (dna.signal_stats ?? [])
+        .filter((stat) => (stat.presence_pct ?? 0) <= PREVALENCE_SUPPRESS_PCT)
+        .sort((left, right) => (right.lift ?? 0) - (left.lift ?? 0)),
+    [dna.signal_stats],
+  );
+  const patternMatchedChips = useMemo(() => informativeSignalStats.slice(0, 6), [informativeSignalStats]);
   const matchedSetupSignals = useMemo(
-    () => setupSignals.map((signal) => signalLabel(signal)).slice(0, 4),
-    [setupSignals],
+    () => patternMatchedChips.map((stat) => signalLabel(stat.signal)).slice(0, 4),
+    [patternMatchedChips],
   );
   const liveFiredSignals = useMemo(
     () =>
@@ -432,6 +445,9 @@ export function BehavioralDnaScreenContent({
       <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}> 
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{EE.setupSummaryTitle}</Text>
         <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.setupCountLine(ticker, totalSetups)}</Text>
+        {rawSetupCount != null && rawSetupCount > totalSetups && (
+          <Text style={[styles.helperText, { color: colors.textMuted }]}>{EE.episodeCountLine(rawSetupCount, totalSetups)}</Text>
+        )}
         <Text style={[styles.helperText, { color: colors.textSecondary }]}>{EE.dnaSelectedWindowNote(selectedWindow)}</Text>
 
         <View style={styles.summaryGrid}>
@@ -489,19 +505,22 @@ export function BehavioralDnaScreenContent({
           )}
         </View>
 
-        {setupSignals.length > 0 && (
+        {patternMatchedChips.length > 0 && (
           <>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{EE.patternMatchedNow}</Text>
             <View style={styles.chipWrap}>
-              {setupSignals.map((signal) => (
+              {patternMatchedChips.map((stat) => (
                 <View
-                  key={signal}
+                  key={stat.signal}
                   style={[
                     styles.signalChip,
                     { backgroundColor: colors.bgCardHover, borderColor: colors.borderColor },
                   ]}
                 >
-                  <Text style={[styles.signalChipText, { color: colors.textSecondary }]}>{signalLabel(signal)}</Text>
+                  <Text style={[styles.signalChipText, { color: colors.textSecondary }]}>
+                    {signalLabel(stat.signal)}
+                    {stat.lift != null ? ` \u00b7 ${EE.signalLiftLine(stat.lift)}` : ""}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -819,7 +838,10 @@ function SignalFrequencyRow({
           ]}
         />
       </View>
-      <Text style={[styles.metricSupportLine, { color: colors.textSecondary }]}>{EE.signalSeenLine(presencePct, signalStat.fired_count, totalSetups)}</Text>
+      <Text style={[styles.metricSupportLine, { color: colors.textSecondary }]}>
+        {EE.signalSeenLine(presencePct, signalStat.fired_count, totalSetups)}
+        {signalStat.lift != null ? ` \u00b7 ${EE.signalLiftLine(signalStat.lift)}` : ""}
+      </Text>
     </View>
   );
 }

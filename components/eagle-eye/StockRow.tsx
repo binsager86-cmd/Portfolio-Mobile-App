@@ -13,9 +13,11 @@ import { getRatingColors } from "@/constants/eagleEyeColors";
 import { cleanCompanyName } from "@/constants/eagleEyeStrings";
 import { useThemeStore } from "@/services/themeStore";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useCallback } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import type { PressableStateCallbackType } from "react-native";
 import type { RatedStock } from "@/hooks/useEagleEye";
+import type { SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { RatingBadge } from "./RatingBadge";
 import { StageTag } from "./StageTag";
 import { MLBandBadge } from "./MLBandBadge";
@@ -35,14 +37,47 @@ export const STOCK_TABLE_COL_WIDTHS = {
   pe: 76,
   rr: 72,
   confidence: 78,
+  v2Decision: 102,
+  v2Gates: 86,
 } as const;
 
 type StockRowVariant = "default" | "table";
 
 interface StockRowProps {
   item: RatedStock;
+  simulatorState?: SimulatorSymbolState;
+  v2Decision?: string;
+  v2GateText?: string;
+  spikeRating?: string;
+  decisionMismatch?: boolean;
   isFirst?: boolean;
   variant?: StockRowVariant;
+}
+
+/** Best-effort description of the soft condition / gate currently blocking V2, for the divergence tap detail. */
+function describeBlockingReason(state?: SimulatorSymbolState): string {
+  if (!state) return "No V2 state available.";
+  const tier = String(state.tier ?? "").toUpperCase();
+  const gates = Array.isArray(state.gates) ? state.gates : [];
+  const failedGate = gates.find((g) => (g as Record<string, unknown>)?.passed === false) as
+    | Record<string, unknown>
+    | undefined;
+  if (failedGate) {
+    const name = String(failedGate.name ?? failedGate.gate ?? failedGate.id ?? "gate");
+    const detail = failedGate.reason ?? failedGate.detail ?? failedGate.status;
+    return detail ? "Blocked by " + name + ": " + String(detail) : "Blocked by " + name + " (not passing)";
+  }
+  const softConditions = state.soft_conditions as Record<string, unknown> | null | undefined;
+  if (softConditions) {
+    const armed = Object.entries(softConditions).find(
+      ([, v]) => v === true || (typeof v === "object" && v && (v as Record<string, unknown>).armed === true)
+    );
+    if (armed) return "Soft condition armed: " + armed[0];
+  }
+  if (tier.includes("AVOID_HARD")) return "Hard avoid tier — a disqualifying gate is failing.";
+  if (tier.includes("AVOID_SOFT") || tier.includes("VETOED")) return "Soft avoid/veto tier — a cautionary condition is armed.";
+  if (state.gates_passing != null) return String(state.gates_passing) + " of " + String(gates.length || 9) + " gates passing — no specific block recorded.";
+  return "No blocking condition recorded.";
 }
 
 interface StockRowSkeletonProps {
@@ -71,7 +106,16 @@ export function computeRR(item: RatedStock): number | null {
   return null;
 }
 
-export const StockRow = React.memo(function StockRow({ item, isFirst = false, variant = "default" }: StockRowProps) {
+export const StockRow = React.memo(function StockRow({
+  item,
+  simulatorState,
+  v2Decision,
+  v2GateText,
+  spikeRating,
+  decisionMismatch,
+  isFirst = false,
+  variant = "default",
+}: StockRowProps) {
   const { colors } = useThemeStore();
   const router = useRouter();
   const isTable = variant === "table";
@@ -111,6 +155,16 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
     return { label: `Mid ${rvText}`, color: colors.textSecondary };
   }, [item.volume_context, colors.textMuted, colors.success, colors.textSecondary]);
 
+  const showDivergenceDetail = useCallback(() => {
+    const spikeCall = spikeRating ?? item.rating ?? "—";
+    const v2Call = v2Decision ?? "—";
+    const reason = describeBlockingReason(simulatorState);
+    Alert.alert(
+      `${item.ticker} — Spike vs V2`,
+      `Spike: ${spikeCall}\nV2: ${v2Call}\n\n${reason}`
+    );
+  }, [item.ticker, item.rating, spikeRating, v2Decision, simulatorState]);
+
   if (isTable) {
     return (
       <Pressable
@@ -121,7 +175,7 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
           })
         }
         android_ripple={{ color: colors.bgCardHover }}
-        style={({ pressed, hovered }: any) => [
+        style={({ pressed, hovered }: PressableStateCallbackType) => [
           styles.tableRow,
           {
             backgroundColor: pressed || hovered ? colors.bgCardHover : colors.bgCard,
@@ -146,6 +200,33 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
 
         <View style={styles.tableCellStage}>
           <StageTag stage={item.stage} size="sm" />
+        </View>
+
+        <View style={styles.tableCellV2Decision}>
+          <Text style={[styles.tableNumText, { color: decisionMismatch ? colors.warning : colors.textPrimary }]} numberOfLines={1}>
+            {v2Decision ?? "—"}
+          </Text>
+          <Text style={[styles.tableSourceText, { color: colors.textMuted }]} numberOfLines={1}>
+            {simulatorState?.source === "day_zero_inventory" ? "Day-zero" : simulatorState?.source === "decision_log" ? "Decision log" : "—"}
+          </Text>
+          {decisionMismatch ? (
+            <Text
+              onPress={showDivergenceDetail}
+              suppressHighlighting
+              accessibilityRole="button"
+              accessibilityLabel={`${item.ticker} divergence detail`}
+              style={[styles.tableSourceText, styles.divergenceChip, { color: colors.warning }]}
+              numberOfLines={1}
+            >
+              DIVERGENCE ⓘ
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.tableCellV2Gates}>
+          <Text style={[styles.tableNumText, { color: colors.textPrimary }]} numberOfLines={1}>
+            {v2GateText ?? "—"}
+          </Text>
         </View>
 
         <View style={styles.tableCellVolume}>
@@ -243,7 +324,7 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
         })
       }
       android_ripple={{ color: colors.bgCardHover }}
-      style={({ pressed, hovered }: any) => [
+      style={({ pressed, hovered }: PressableStateCallbackType) => [
         styles.row,
         {
           backgroundColor:
@@ -338,6 +419,14 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
           );
         })()}
 
+        <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
+          {`V2 ${v2Decision ?? "—"} · gates ${v2GateText ?? "—"}`}
+          {simulatorState?.lifecycle ? ` · ${simulatorState.lifecycle}` : ""}
+          {simulatorState?.tier ? `/${simulatorState.tier}` : ""}
+          {simulatorState?.source ? ` · src:${simulatorState.source === "day_zero_inventory" ? "DZ" : "DL"}` : ""}
+          {decisionMismatch ? " · mismatch corrected" : ""}
+        </Text>
+
         <View style={styles.confLine}>
           <View
             style={[
@@ -353,7 +442,7 @@ export const StockRow = React.memo(function StockRow({ item, isFirst = false, va
             <View
               style={[
                 styles.barFill,
-                { width: `${confPct}%` as any, backgroundColor: confColor },
+                { width: `${confPct}%`, backgroundColor: confColor },
               ]}
             />
           </View>
@@ -501,6 +590,15 @@ const styles = StyleSheet.create({
     width: STOCK_TABLE_COL_WIDTHS.volume,
     paddingRight: 6,
   },
+  tableCellV2Decision: {
+    width: STOCK_TABLE_COL_WIDTHS.v2Decision,
+    paddingRight: 6,
+  },
+  tableCellV2Gates: {
+    width: STOCK_TABLE_COL_WIDTHS.v2Gates,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
   tableCellCurrent: {
     width: STOCK_TABLE_COL_WIDTHS.current,
     alignItems: "flex-end",
@@ -564,6 +662,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
+  },
+  tableSourceText: {
+    fontSize: 9,
+    fontWeight: "700",
+    marginTop: 1,
+  },
+  divergenceChip: {
+    textDecorationLine: "underline",
   },
   badgeCol: {
     width: 84,
