@@ -497,9 +497,26 @@ function OverviewScreen() {
     const totalDividends = data.total_dividends ?? 0;
     const totalProfit = realizedPnl + unrealizedPnl + totalDividends;
 
-    // Daily movement — LIVE from backend (matches Streamlit: live_value - prev_snapshot)
-    const dailyMovement = data.daily_movement ?? 0;
-    const dailyMovementPct = data.daily_movement_pct ?? 0;
+    // Sum the same live row movements shown in Holdings Snapshot. The
+    // overview and holdings requests can complete at different times, so
+    // using the overview aggregate here can combine mismatched valuations.
+    const movementTotals = holdingsRows.reduce(
+      (totals, row) => {
+        if (row.totalValueChange == null || row.prevClose == null || row.quantity <= 0) {
+          return totals;
+        }
+        return {
+          movement: totals.movement + row.totalValueChange,
+          previousValue: totals.previousValue + row.quantity * row.prevClose,
+        };
+      },
+      { movement: 0, previousValue: 0 },
+    );
+    const hasLiveMovement = holdingsRows.length > 0 && movementTotals.previousValue > 0;
+    const dailyMovement = hasLiveMovement ? movementTotals.movement : (data.daily_movement ?? 0);
+    const dailyMovementPct = hasLiveMovement
+      ? (movementTotals.movement / movementTotals.previousValue) * 100
+      : (data.daily_movement_pct ?? 0);
 
     // CAGR — from backend (CFA: V_start = first deposit, V_end = live value, t = years since first deposit)
     const cagr = data.cagr_percent ?? 0;
@@ -553,7 +570,7 @@ function OverviewScreen() {
     };
   // snapshotData is intentionally excluded — it is not used in this memo.
   // It is only used in chartData below.
-  }, [data, realizedData]);
+  }, [data, holdingsRows, realizedData]);
 
   const chartData = useMemo(
     () =>
