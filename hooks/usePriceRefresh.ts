@@ -52,15 +52,15 @@ export function usePriceRefresh() {
       if (__DEV__) console.warn("Price update failed:", e);
     }
 
-    // Manual refresh should actively refetch all matching queries,
-    // including inactive ones, to prevent stale data on tab switches.
+    // Refresh visible screens immediately. Inactive tabs will refetch when
+    // they become active, avoiding a long spinner for hidden dashboard work.
     const priceKeySet = new Set<string>(PRICE_DEPENDENT_QUERY_KEYS);
     await queryClient.invalidateQueries({
       predicate: (q) => {
         const head = q.queryKey[0];
         return typeof head === "string" && priceKeySet.has(head);
       },
-      refetchType: "all",
+      refetchType: "active",
     });
 
     // Fire push notification for the daily price update
