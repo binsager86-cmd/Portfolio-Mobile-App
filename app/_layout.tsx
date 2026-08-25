@@ -17,6 +17,7 @@ import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { DevWorktreeBanner } from "@/components/ui/DevWorktreeBanner";
 import { NetworkBanner } from "@/components/ui/NetworkBanner";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { useAuthCacheSync } from "@/hooks/useAuthCacheSync";
@@ -353,6 +354,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="(auth)" options={{ headerShown: false }} />
                 <Stack.Screen name="modal" options={{ presentation: "modal" }} />
               </Stack>
+              <DevWorktreeBanner />
             </ToastProvider>
           </AppErrorBoundary>
         </ThemeProvider>
