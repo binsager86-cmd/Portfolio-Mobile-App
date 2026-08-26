@@ -7,7 +7,7 @@
  *   - EAS:    set in eas.json per build profile
  *
  * Development:
- *   Web → 127.0.0.1:8004
+ *   Web → 127.0.0.1:8005
  *   Mobile (physical device) → LAN IP
  */
 
@@ -30,10 +30,70 @@ const ENV_API_URL_IOS =
   // @ts-ignore — Expo injects process.env.EXPO_PUBLIC_* at build time
   typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL_IOS : undefined;
 
+const ENV_ENABLE_SIMULATOR =
+  // @ts-ignore — Expo injects process.env.EXPO_PUBLIC_* at build time
+  typeof process !== "undefined" ? process.env.EXPO_PUBLIC_ENABLE_SIMULATOR : undefined;
+
+export function isSimulatorFeatureEnabled(): boolean {
+  const raw = (ENV_ENABLE_SIMULATOR ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+export const SIMULATOR_UI_ENABLED = isSimulatorFeatureEnabled();
+
+export function hasSimulatorIntegrityIssue(integrity?: { projection_stale?: boolean; projection_status?: string; seal_verification?: { pass?: boolean } }): boolean {
+  if (!integrity) return true;
+  const stale = integrity.projection_stale === true || integrity.projection_status === "STALE";
+  const sealFailure = integrity.seal_verification?.pass !== true;
+  return stale || sealFailure;
+}
+
 // ── Local dev fallbacks ─────────────────────────────────────────────
 // Change LAN IP if testing on a physical device over Wi-Fi
-const LOCAL_WEB_API = "http://127.0.0.1:8004";
-const LOCAL_ANDROID_EMULATOR_API = "http://10.0.2.2:8004";
+const LOCAL_WEB_API = "http://127.0.0.1:8005";
+const LOCAL_ANDROID_EMULATOR_API = "http://10.0.2.2:8005";
+
+function normalizedEnvValue(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isLoopbackOrEmulatorHost(urlValue: string): boolean {
+  try {
+    const parsed = new URL(urlValue);
+    const host = parsed.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "10.0.2.2";
+  } catch {
+    const lower = urlValue.toLowerCase();
+    return (
+      lower.includes("localhost") ||
+      lower.includes("127.0.0.1") ||
+      lower.includes("::1") ||
+      lower.includes("10.0.2.2")
+    );
+  }
+}
+
+function resolveWebApiUrl(isLocalDevWeb: boolean): string {
+  const webEnv = normalizedEnvValue(ENV_API_URL_WEB);
+  const globalEnv = normalizedEnvValue(ENV_API_URL);
+  const configured = webEnv ?? globalEnv;
+
+  if (configured) {
+    // Production web should never target device/emulator loopback hosts.
+    if (!isLocalDevWeb && isLoopbackOrEmulatorHost(configured)) {
+      console.error(
+        "[Config] Ignoring loopback/emulator API URL for production web build:",
+        configured,
+      );
+      return "";
+    }
+    return configured;
+  }
+
+  return isLocalDevWeb ? LOCAL_WEB_API : "";
+}
 
 function isAndroidPhysicalDevice(): boolean {
   if (Platform.OS !== "android") return false;
@@ -65,7 +125,7 @@ function inferNativeDevApiUrl(): string | null {
       return LOCAL_ANDROID_EMULATOR_API;
     }
 
-    return `http://${host}:8004`;
+    return `http://${host}:8005`;
   } catch {
     return null;
   }
@@ -115,17 +175,11 @@ export const API_BASE_URL: string =
   Platform.OS === "android"
     ? resolveAndroidApiUrl()
     : Platform.OS === "web"
-      ? (ENV_API_URL_WEB && ENV_API_URL_WEB !== "")
-        ? ENV_API_URL_WEB
-        : (ENV_API_URL != null && ENV_API_URL !== "")
-          ? ENV_API_URL
-          : isLocalDev
-            ? LOCAL_WEB_API      // Dev web: localhost backend
-            : ""                 // Production web: relative paths (same domain)
-      : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
-        ? ENV_API_URL_IOS
-        : (ENV_API_URL != null && ENV_API_URL !== "")
-          ? ENV_API_URL
+      ? resolveWebApiUrl(isLocalDev)
+      : (ENV_API_URL_IOS && ENV_API_URL_IOS.trim() !== "")
+        ? ENV_API_URL_IOS.trim()
+        : (ENV_API_URL != null && ENV_API_URL.trim() !== "")
+          ? ENV_API_URL.trim()
           : inferNativeDevApiUrl() ?? LOCAL_WEB_API;
 
 /** How long (ms) to wait before timing out API calls. */

@@ -1,3 +1,4 @@
+import { isSimulatorFeatureEnabled } from "@/constants/Config";
 import { UITokens } from "@/constants/uiTokens";
 import { useAdminGate } from "@/hooks/useAdminGate";
 import { useThemeStore } from "@/services/themeStore";
@@ -13,6 +14,7 @@ type EagleEyeTab = {
   href:
     | "/(tabs)/eagle-eye"
     | "/(tabs)/eagle-eye/simulator"
+    | "/(tabs)/eagle-eye/simulator/decision"
     | "/(tabs)/eagle-eye/methodology"
     | "/(tabs)/eagle-eye/settings";
   matches: string[];
@@ -70,7 +72,8 @@ export function EagleEyeTopTabs() {
   const pathname = normalizePath(usePathname());
   const router = useRouter();
   const activeTextColor = "#ffffff";
-  const visibleTabs = EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || isAdmin);
+  const simulatorEnabled = isSimulatorFeatureEnabled();
+  const visibleTabs = EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || (isAdmin && simulatorEnabled));
   const activeTabIndex = findActiveTabIndex(pathname, visibleTabs);
 
   const pathnameRef = useRef(pathname);
