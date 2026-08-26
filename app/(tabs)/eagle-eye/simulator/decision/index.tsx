@@ -161,6 +161,7 @@ function ScannerRow({ row, colors }: { row: SimulatorSymbolState; colors: ThemeP
       <Cell text={row.gates_passing != null ? `${row.gates_passing}/9` : "—"} color={colors.textPrimary} />
       <Cell text={formatBase(row.base)} color={colors.textSecondary} />
       <Cell text={row.confidence != null ? `${row.confidence.toFixed(0)}%` : "—"} color={colors.success} />
+      <Cell text={row.last_disposition ?? "—"} color={labelColor} />
     </Pressable>
   );
 }

@@ -183,7 +183,6 @@ export const StockRow = React.memo(function StockRow({
             borderTopWidth: isFirst ? 0 : 0.5,
           },
         ]}
-        accessibilityRole="button"
         accessibilityLabel={`${item.ticker} ${item.rating}`}
       >
         <View style={[styles.leftStrip, { backgroundColor: leftStripColor }]} />
