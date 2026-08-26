@@ -142,11 +142,33 @@ export interface ScannerResponse {
   status: string;
   count: number;
   stocks: RatedStock[];
+  coverage?: ScannerCoverageSummary | null;
   progress_phase?: string | null;
   progress_message?: string | null;
   progress_current?: number | null;
   progress_total?: number | null;
   progress_percent?: number | null;
+}
+
+export interface ScannerCoverageBucket {
+  key: string;
+  label: string;
+  count: number;
+  symbols: string[];
+  description?: string | null;
+}
+
+export interface ScannerCoverageSummary {
+  total: number;
+  evaluated_count: number;
+  not_evaluated_count: number;
+  scanner_count: number;
+  scanner_extra_symbols: string[];
+  scanner_rating_date?: string | null;
+  latest_ohlcv_session?: string | null;
+  latest_simulator_session?: string | null;
+  quarantine_session?: string | null;
+  buckets: ScannerCoverageBucket[];
 }
 
 export interface FullStockAnalysis {

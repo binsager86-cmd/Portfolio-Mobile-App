@@ -20,7 +20,7 @@ import {
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
 import { isSimulatorFeatureEnabled } from "@/constants/Config";
-import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLEligibilityDetails, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
+import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { findSimulatorState, useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -274,7 +274,6 @@ export default function EagleEyeScannerScreen() {
   const { data: regimeData } = useEagleEyeRegime(regimeEnabled);
   const { data: mlBandsData } = useMLBands(fetchEnabled);
   const { data: mlDisplayState } = useMLDisplayState(fetchEnabled);
-  const { data: eligibilityDetails } = useMLEligibilityDetails(fetchEnabled);
   const eeRefresh = useEagleEyeRefresh();
   const [runStatus, setRunStatus] = useState<"idle" | "ok" | "err">("idle");
   const runStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -444,19 +443,36 @@ export default function EagleEyeScannerScreen() {
     simulatorStates,
   ]);
 
-  const evaluatedCount = stocks.length;
-  const coverageTotal = 139;
-  const notEvaluatedCount = Math.max(0, coverageTotal - evaluatedCount);
+  const coverage = data?.coverage;
+  const evaluatedCount = coverage?.evaluated_count ?? stocks.length;
+  const coverageTotal = coverage?.total ?? 139;
+  const notEvaluatedCount = coverage?.not_evaluated_count ?? Math.max(0, coverageTotal - evaluatedCount);
+  const scannerExtraCount = coverage?.scanner_extra_symbols?.length ?? 0;
   const showCoverageReasons = useCallback(() => {
-    const grouped = new Map<string, number>();
-    for (const item of eligibilityDetails?.details ?? []) {
-      if (item.eligible) continue;
-      const reason = String(item.reason || "UNKNOWN").split(":")[0];
-      grouped.set(reason, (grouped.get(reason) ?? 0) + 1);
+    if (!coverage) {
+      Alert.alert("Scanner coverage", "Coverage reasons are not available in this scanner response yet.");
+      return;
     }
-    const reasonText = Array.from(grouped.entries()).map(([reason, count]) => `${reason}: ${count}`).join("\n") || "No ineligible reason rows returned.";
-    Alert.alert("Not evaluated by reason", `${reasonText}\n\nSource: ML eligibility detail rows.`);
-  }, [eligibilityDetails]);
+    const sessionText = [
+      coverage.scanner_rating_date ? `Scanner ratings: ${coverage.scanner_rating_date}` : null,
+      coverage.latest_ohlcv_session ? `OHLCV: ${coverage.latest_ohlcv_session}` : null,
+      coverage.latest_simulator_session ? `Simulator: ${coverage.latest_simulator_session}` : null,
+      coverage.quarantine_session ? `Quarantine: ${coverage.quarantine_session}` : null,
+    ].filter(Boolean).join(" · ");
+    const bucketText = coverage.buckets
+      .map((bucket) => {
+        const symbols = bucket.symbols.length ? bucket.symbols.join(", ") : "none";
+        return `${bucket.label} (${bucket.count})\n${symbols}`;
+      })
+      .join("\n\n");
+    const extraText = coverage.scanner_extra_symbols.length
+      ? `\n\nScanner rows outside sealed universe (${coverage.scanner_extra_symbols.length})\n${coverage.scanner_extra_symbols.join(", ")}`
+      : "";
+    Alert.alert(
+      "Scanner coverage",
+      `${coverage.evaluated_count} of ${coverage.total} sealed symbols evaluated. ${coverage.not_evaluated_count} not evaluated.\n${sessionText}\n\n${bucketText}${extraText}`,
+    );
+  }, [coverage]);
 
   const discrepancyRows = useMemo(() => {
     return stocks
@@ -1379,7 +1395,7 @@ export default function EagleEyeScannerScreen() {
                       </Text>
                       <Pressable onPress={showCoverageReasons} accessibilityRole="button">
                         <Text style={[styles.previewSubtitle, { color: colors.accentPrimary }]}>
-                          {`${evaluatedCount} of ${coverageTotal} · ${notEvaluatedCount} not evaluated`}
+                          {`${evaluatedCount} of ${coverageTotal} sealed · ${notEvaluatedCount} not evaluated${scannerExtraCount ? ` · ${scannerExtraCount} outside universe` : ""}`}
                         </Text>
                       </Pressable>
                       <View style={styles.previewToggleRow}>
