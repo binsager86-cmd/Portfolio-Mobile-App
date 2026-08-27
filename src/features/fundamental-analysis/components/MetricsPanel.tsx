@@ -7,7 +7,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";
@@ -16,10 +16,8 @@ import { showErrorAlert } from "@/lib/errorHandling";
 import type { TableData } from "@/lib/exportAnalysis";
 import type { MetricsCategoryData } from "@/lib/exportMetricsPdf";
 import { calculateMetrics, StockMetric } from "@/services/api";
-import {
-  buildMetricCalculationSignature,
-  calculateAllMetricPeriods,
-} from "../metricCalculation";
+import { useAutoCalculateMetrics } from "../hooks/useAutoCalculateMetrics";
+import { formatMetricPeriodChipLabel } from "../periodLabels";
 import { st } from "../styles";
 import { CATEGORY_LABELS, type PanelWithSymbolProps } from "../types";
 import { buildHistoricalMetrics, buildMetricYearLabels, enrichMetricsWithFallbacks, formatMetricValue } from "../utils";
@@ -37,7 +35,6 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"historical" | "grouped">("historical");
   const [calcAllRunning, setCalcAllRunning] = useState(false);
-  const autoCalculatedSignatureRef = useRef<string | null>(null);
 
   const stmtQ = useStatements(stockId);
   const periods = useMemo(() => {
@@ -48,23 +45,21 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
       .map((s) => ({ period_end_date: s.period_end_date, fiscal_year: s.fiscal_year, fiscal_quarter: s.fiscal_quarter }));
   }, [stmtQ.data]);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-
-  useEffect(() => {
-    const latest = stmtQ.data?.latest_preferred?.period_end_date ?? null;
-    if (!latest) return;
-    if (!selectedPeriod) {
-      setSelectedPeriod(latest);
-      return;
+  const [userSelectedPeriod, setUserSelectedPeriod] = useState<string | null>(null);
+  const latestPreferredPeriod = stmtQ.data?.latest_preferred?.period_end_date ?? null;
+  const selectedPeriod = useMemo(() => {
+    if (userSelectedPeriod && periods.some((p) => p.period_end_date === userSelectedPeriod)) {
+      return userSelectedPeriod;
     }
-    const selectedStillExists = periods.some((p) => p.period_end_date === selectedPeriod);
-    if (!selectedStillExists) {
-      setSelectedPeriod(latest);
-    }
-  }, [stmtQ.data?.latest_preferred?.period_end_date, periods, selectedPeriod]);
+    return latestPreferredPeriod;
+  }, [userSelectedPeriod, periods, latestPreferredPeriod]);
+  const setSelectedPeriod = setUserSelectedPeriod;
 
   const { data, isLoading, refetch, isFetching } = useStockMetrics(stockId);
-  const periodsSignature = useMemo(() => buildMetricCalculationSignature(periods), [periods]);
+  const rawMetrics = useMemo(() => data?.metrics ?? [], [data?.metrics]);
+  const statements = useMemo(() => stmtQ.data?.statements ?? [], [stmtQ.data?.statements]);
+  const statementPeriods = useMemo(() => [...new Set(periods.map((p) => p.period_end_date))], [periods]);
+  const metricPeriods = useMemo(() => [...new Set(rawMetrics.map((m) => m.period_end_date))], [rawMetrics]);
 
   const calcMut = useMutation({
     mutationFn: (p: { period_end_date: string; fiscal_year: number; fiscal_quarter?: number }) => calculateMetrics(stockId, p),
@@ -72,41 +67,32 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
     onError: (err: Error) => showErrorAlert("Calculation Failed", err),
   });
 
-  const handleCalculateAll = async () => {
+  const handleCalculateAll = useCallback(async () => {
     if (periods.length === 0) return;
     setCalcAllRunning(true);
-    const summary = await calculateAllMetricPeriods(stockId, periods);
-    if (summary.failedPeriods > 0) {
-      showErrorAlert("Partial Failure", new Error(`${summary.failedPeriods}/${summary.totalPeriods} period calculations failed.`));
+    const results = await Promise.allSettled(
+      periods.map((p) =>
+        calculateMetrics(stockId, {
+          period_end_date: p.period_end_date,
+          fiscal_year: p.fiscal_year,
+          fiscal_quarter: p.fiscal_quarter ?? undefined,
+        })
+      )
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      showErrorAlert("Partial Failure", new Error(`${failed}/${periods.length} period calculations failed.`));
     }
     queryClient.invalidateQueries({ queryKey: ["analysis-metrics", stockId] });
     setCalcAllRunning(false);
-  };
+  }, [periods, queryClient, stockId]);
 
-  useEffect(() => {
-    if (!periodsSignature || periods.length === 0 || stmtQ.isLoading || stmtQ.isFetching) return;
-    if (autoCalculatedSignatureRef.current === periodsSignature) return;
-
-    let cancelled = false;
-    autoCalculatedSignatureRef.current = periodsSignature;
-    setCalcAllRunning(true);
-
-    void calculateAllMetricPeriods(stockId, periods)
-      .then((summary) => {
-        if (summary.failedPeriods > 0 && __DEV__) {
-          console.warn("Automatic metric calculation partially failed", summary);
-        }
-      })
-      .finally(() => {
-        queryClient.invalidateQueries({ queryKey: ["analysis-metrics", stockId] });
-        if (!cancelled) setCalcAllRunning(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [periodsSignature, periods, stockId, queryClient, stmtQ.isLoading, stmtQ.isFetching]);
-
-  const rawMetrics = data?.metrics ?? [];
-  const statements = stmtQ.data?.statements ?? [];
+  useAutoCalculateMetrics({
+    stockId,
+    statementPeriods,
+    metricPeriods,
+    onCalculateAll: handleCalculateAll,
+  });
 
   // Enrich with CFA-level fallback calculations for missing valuation metrics
   const allMetrics = useMemo(
@@ -145,11 +131,13 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
     for (const p of periods) {
       const q = normalizeQuarter(p.fiscal_quarter);
       const yearLabel = metricYearLabels[p.fiscal_year] ?? `FY${p.fiscal_year}`;
-      const isTtmYear = yearLabel.startsWith("TTM ");
       const isLatestInYear = latestPeriodByYear.get(p.fiscal_year) === p.period_end_date;
-      labels[p.period_end_date] = isTtmYear && isLatestInYear
-        ? yearLabel
-        : `FY${p.fiscal_year}${q != null ? ` Q${q}` : ""}`;
+      labels[p.period_end_date] = formatMetricPeriodChipLabel(
+        p.fiscal_year,
+        q,
+        yearLabel,
+        isLatestInYear,
+      );
     }
     return labels;
   }, [periods, metricYearLabels]);
@@ -227,7 +215,7 @@ export function MetricsPanel({ stockId, stockSymbol, colors, isDesktop }: PanelW
         </Card>
       </FadeIn>
 
-      {isLoading || (calcAllRunning && categories.length === 0) ? (
+      {isLoading ? (
         <FAPanelSkeleton />
       ) : categories.length === 0 ? (
         <View style={st.empty}>
