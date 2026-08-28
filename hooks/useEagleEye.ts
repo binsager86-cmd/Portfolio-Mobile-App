@@ -135,6 +135,15 @@ export interface RatedStock {
   pe_ratio?: number | null;
   computed_at?: string | null;
   volume_context?: VolumeContext | null;
+  continue_rising?: boolean | null;
+  continue_rising_badge?: string | null;
+  continue_rising_label?: string | null;
+  continue_rising_reason?: string | null;
+  continue_rising_exhaustion_count?: number | null;
+  continue_rising_exhaustion_signals?: string[] | null;
+  risk_warning_score?: number | null;
+  risky_near_resistance?: boolean | null;
+  risk_reward_ratio?: number | null;
   ml_band?: MLBandItem | null;
 }
 
@@ -179,6 +188,14 @@ export interface FullStockAnalysis {
   rating: string;
   confidence: number;
   thesis: string;
+  continue_rising?: boolean | null;
+  continue_rising_badge?: string | null;
+  continue_rising_label?: string | null;
+  continue_rising_reason?: string | null;
+  continue_rising_exhaustion_count?: number | null;
+  continue_rising_exhaustion_signals?: string[] | null;
+  risk_warning_score?: number | null;
+  risky_near_resistance?: boolean | null;
   supports: SupportResistanceLevel[];
   resistances: SupportResistanceLevel[];
   entry_primary?: number | null;

@@ -8,6 +8,7 @@
  * Route: /(tabs)/eagle-eye/[ticker]
  */
 
+import { ActionInterpretationCard } from "@/components/eagle-eye/ActionInterpretationCard";
 import { ConfluenceBar } from "@/components/eagle-eye/ConfluenceBar";
 import { EagleEyeChart } from "@/components/eagle-eye/EagleEyeChart";
 import { RatingBadge } from "@/components/eagle-eye/RatingBadge";
@@ -234,6 +235,10 @@ export default function EagleEyeDetailScreen() {
               </Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.section}>
+          <ActionInterpretationCard analysis={analysis} />
         </View>
 
         {/* ── Chart ─────────────────────────────────────────────────────────── */}
