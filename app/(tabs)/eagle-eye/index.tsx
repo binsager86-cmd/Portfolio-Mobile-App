@@ -19,6 +19,7 @@ import {
   computeRR,
 } from "@/components/eagle-eye/StockRow";
 import { MLDisclaimerBanner } from "@/components/eagle-eye/MLDisclaimerBanner";
+import { formatScannerCoverageLine } from "@/components/eagle-eye/scannerCoverage";
 import { isSimulatorFeatureEnabled } from "@/constants/Config";
 import { useEagleEyeRefresh, useEagleEyeRegime, useEagleEyeScanner, useMLBands, useMLDisplayState, type RatedStock } from "@/hooks/useEagleEye";
 import { findSimulatorState, useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
@@ -444,10 +445,7 @@ export default function EagleEyeScannerScreen() {
   ]);
 
   const coverage = data?.coverage;
-  const evaluatedCount = coverage?.evaluated_count ?? stocks.length;
-  const coverageTotal = coverage?.total ?? 139;
-  const notEvaluatedCount = coverage?.not_evaluated_count ?? Math.max(0, coverageTotal - evaluatedCount);
-  const scannerExtraCount = coverage?.scanner_extra_symbols?.length ?? 0;
+  const coverageLine = formatScannerCoverageLine(coverage);
   const showCoverageReasons = useCallback(() => {
     if (!coverage) {
       Alert.alert("Scanner coverage", "Coverage reasons are not available in this scanner response yet.");
@@ -1395,7 +1393,7 @@ export default function EagleEyeScannerScreen() {
                       </Text>
                       <Pressable onPress={showCoverageReasons} accessibilityRole="button">
                         <Text style={[styles.previewSubtitle, { color: colors.accentPrimary }]}>
-                          {`${evaluatedCount} of ${coverageTotal} sealed · ${notEvaluatedCount} not evaluated${scannerExtraCount ? ` · ${scannerExtraCount} outside universe` : ""}`}
+                          {coverageLine}
                         </Text>
                       </Pressable>
                       <View style={styles.previewToggleRow}>
