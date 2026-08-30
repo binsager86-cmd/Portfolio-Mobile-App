@@ -71,6 +71,14 @@ const RATING_SORT_WEIGHT: Record<string, number> = {
   INSUFFICIENT_DATA: 0,
 };
 
+const TREND_HOLD_SORT_WEIGHT: Record<string, number> = {
+  BUY: 5,
+  SCALE_OUT: 4,
+  HOLD: 3,
+  WAIT: 2,
+  SELL_SIGNAL: 1,
+};
+
 const STAGE_SORT_WEIGHT: Record<string, number> = {
   ACCUMULATION: 8,
   EARLY_MARKUP: 7,
@@ -97,6 +105,7 @@ type SortField =
   | "latvol"
   | "conf"
   | "v2gates"
+  | "trendhold"
   | "rr"
   | "price"
   | "entry"
@@ -128,6 +137,7 @@ const SORT_LABEL_BY_FIELD: Record<SortField, string> = {
   latvol: "Latest Volume",
   conf: "Spike Confidence",
   v2gates: "V2 Gates",
+  trendhold: "Trend-Hold",
   rr: "Risk/Reward",
   price: "Current Price",
   entry: "Entry",
@@ -426,6 +436,9 @@ export default function EagleEyeScannerScreen() {
       const stageWeight = (value: string | null | undefined) =>
         STAGE_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
 
+      const trendHoldWeight = (value: string | null | undefined) =>
+        TREND_HOLD_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
+
       let diff: number;
       const tierRank = (value: string | null | undefined) => String(value || "NONE").toUpperCase() === "NONE" ? 1 : 0;
       if (sortBy === "v2gates") {
@@ -437,6 +450,8 @@ export default function EagleEyeScannerScreen() {
         diff = b.ticker.localeCompare(a.ticker);
       } else if (sortBy === "stage") {
         diff = stageWeight(b.stage) - stageWeight(a.stage);
+      } else if (sortBy === "trendhold") {
+        diff = trendHoldWeight(b.trend_hold_decision) - trendHoldWeight(a.trend_hold_decision);
       } else if (sortBy === "volume") {
         diff = compareNumericDesc(a.volume_context?.relative_volume, b.volume_context?.relative_volume);
       } else if (sortBy === "avgvol") {
@@ -733,9 +748,23 @@ export default function EagleEyeScannerScreen() {
             <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.v2Decision }]}> 
               <Text style={[styles.colHeaderCell, { color: colors.textMuted }]}>V2 Decision</Text>
             </View>
-            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.v2Gates }]}> 
+            <View style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.v2Gates }]}>
               <Text style={[styles.colHeaderCell, { color: sortBy === "v2gates" ? colors.accentPrimary : colors.textMuted, textAlign: "right" }]}>V2 Gates{sortArrow("v2gates")}</Text>
             </View>
+            <Pressable
+              onPress={() => toggleSort("trendhold")}
+              style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.trendHold }]}
+              hitSlop={6}
+            >
+              <Text
+                style={[
+                  styles.colHeaderCell,
+                  { color: sortBy === "trendhold" ? colors.accentPrimary : colors.textMuted, textAlign: "right" },
+                ]}
+              >
+                {`Trend-Hold${sortArrow("trendhold")}`}
+              </Text>
+            </Pressable>
             <Pressable
               onPress={() => toggleSort("volume")}
               style={[styles.colHeaderBtn, { width: STOCK_TABLE_COL_WIDTHS.volume }]}

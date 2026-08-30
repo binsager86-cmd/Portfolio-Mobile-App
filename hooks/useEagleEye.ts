@@ -145,6 +145,16 @@ export interface RatedStock {
   risky_near_resistance?: boolean | null;
   risk_reward_ratio?: number | null;
   ml_band?: MLBandItem | null;
+  // trend_hold_engine.py output -- an independent second read (Donchian/
+  // EMA-cross entry, chandelier trailing stop, +20% scale-out), computed
+  // and persisted separately from `rating` above. Never merge into or use
+  // to override `rating`, filters, or sort -- same lesson as the V2
+  // rating-substitution bug fixed earlier: keep decision sources visibly
+  // separate.
+  trend_hold_decision?: string | null;  // BUY / HOLD / SCALE_OUT / SELL_SIGNAL / WAIT
+  trend_hold_reason?: string | null;
+  trend_hold_stop?: number | null;
+  trend_hold_entry_price?: number | null;
 }
 
 export interface ScannerResponse {

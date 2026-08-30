@@ -9,7 +9,7 @@
  * └──────────┴──────────────────────────────────┴──────────┘
  */
 import { UITokens } from "@/constants/uiTokens";
-import { getRatingColors } from "@/constants/eagleEyeColors";
+import { getRatingColors, getTrendHoldTextColor } from "@/constants/eagleEyeColors";
 import { cleanCompanyName } from "@/constants/eagleEyeStrings";
 import { useThemeStore } from "@/services/themeStore";
 import { useRouter } from "expo-router";
@@ -39,6 +39,7 @@ export const STOCK_TABLE_COL_WIDTHS = {
   confidence: 78,
   v2Decision: 102,
   v2Gates: 86,
+  trendHold: 112,
 } as const;
 
 type StockRowVariant = "default" | "table";
@@ -226,6 +227,20 @@ export const StockRow = React.memo(function StockRow({
           <Text style={[styles.tableNumText, { color: colors.textPrimary }]} numberOfLines={1}>
             {v2GateText ?? "—"}
           </Text>
+        </View>
+
+        <View style={styles.tableCellTrendHold}>
+          <Text
+            style={[styles.tableNumText, { color: getTrendHoldTextColor(item.trend_hold_decision, colors) }]}
+            numberOfLines={1}
+          >
+            {item.trend_hold_decision ?? "—"}
+          </Text>
+          {item.trend_hold_stop != null ? (
+            <Text style={[styles.tableSourceText, { color: colors.textMuted }]} numberOfLines={1}>
+              {`stop ${item.trend_hold_stop.toFixed(2)}`}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.tableCellVolume}>
@@ -595,6 +610,11 @@ const styles = StyleSheet.create({
   },
   tableCellV2Gates: {
     width: STOCK_TABLE_COL_WIDTHS.v2Gates,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  tableCellTrendHold: {
+    width: STOCK_TABLE_COL_WIDTHS.trendHold,
     alignItems: "flex-end",
     paddingRight: 6,
   },

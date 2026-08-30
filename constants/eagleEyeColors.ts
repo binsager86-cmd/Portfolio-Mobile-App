@@ -64,6 +64,52 @@ export function getRatingColors(rating: string, c: ThemePalette): RatingColorSet
   }
 }
 
+// ── Trend-hold engine colors ────────────────────────────────────────────────
+// Independent decision source (trend_hold_engine.py) -- deliberately its own
+// palette, not reusing getRatingColors, so it never visually reads as "the
+// rating" even by coincidence of shared styling.
+
+export function getTrendHoldColors(decision: string | null | undefined, c: ThemePalette): RatingColorSet {
+  switch (decision) {
+    case "BUY":
+      return { bg: c.success, text: "#ffffff", border: c.success };
+    case "SCALE_OUT":
+      return {
+        bg: c.mode === "dark" ? "#7C3AED" : "#8B5CF6",
+        text: "#ffffff",
+        border: c.mode === "dark" ? "#7C3AED" : "#8B5CF6",
+      };
+    case "HOLD":
+      return { bg: "#B8860B", text: "#ffffff", border: "#B8860B" };
+    case "SELL_SIGNAL":
+      return {
+        bg: c.mode === "dark" ? "#FF6B76" : "#F87171",
+        text: "#ffffff",
+        border: c.danger,
+      };
+    case "WAIT":
+    default:
+      return { bg: c.bgCard, text: c.textMuted, border: c.borderColor };
+  }
+}
+
+/** Single text color for the compact trend-hold cell in the scanner table. */
+export function getTrendHoldTextColor(decision: string | null | undefined, c: ThemePalette): string {
+  switch (decision) {
+    case "BUY":
+      return c.success;
+    case "SCALE_OUT":
+      return c.mode === "dark" ? "#A78BFA" : "#7C3AED";
+    case "HOLD":
+      return "#B8860B";
+    case "SELL_SIGNAL":
+      return c.danger;
+    case "WAIT":
+    default:
+      return c.textMuted;
+  }
+}
+
 /** Single text color for confidence numbers and small accents. */
 export function getRatingTextColor(rating: string, c: ThemePalette): string {
   switch (rating) {
