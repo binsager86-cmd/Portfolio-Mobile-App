@@ -104,7 +104,6 @@ type SortField =
   | "bvps"
   | "pe";
 type SortDir = "asc" | "desc";
-type ViewMode = "v2" | "spike";
 type StageFilter = (typeof STAGE_FILTER_ORDER)[number];
 type StatusFilter = (typeof STATUS_FILTER_ORDER)[number];
 type LoadingMode = "idle" | "loading" | "refresh" | "warming_up";
@@ -147,7 +146,12 @@ function mapV2Decision(state?: SimulatorSymbolState): string | null {
   if (lifecycle === "MARKUP_ACTIVE" && (gatesPassing == null || gatesPassing >= 3)) return "BUY";
   if (lifecycle === "BASE_VALID") return "WATCHLIST";
   if (lifecycle === "NEUTRAL") return "NEUTRAL";
-  return "HOLD";
+  // Unrecognized lifecycle value (state exists but doesn't match any known
+  // case) — return null rather than guessing "HOLD". Every call site falls
+  // back to the real backend rating via `?? stock.rating`, which is honest;
+  // asserting "HOLD" here was confidently wrong for any lifecycle state this
+  // function doesn't yet know about.
+  return null;
 }
 
 function getUpdatedAgo(ts: number): string {
@@ -170,7 +174,6 @@ export default function EagleEyeScannerScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   const [highVolumeOnly, setHighVolumeOnly] = useState(false);
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("v2");
   const [sortBy, setSortBy] = useState<SortField>("v2gates");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isWeb = Platform.OS === "web";
@@ -320,11 +323,20 @@ export default function EagleEyeScannerScreen() {
       const v2State = findSimulatorState(simulatorStates, stock.ticker);
       const v2Decision = mapV2Decision(v2State) ?? stock.rating;
       const spikeRating = String(stock.rating ?? "NEUTRAL");
-      const displayedRating = viewMode === "v2" ? v2Decision : spikeRating;
       const v2Confidence = Number.isFinite(v2State?.confidence as number) ? Number(v2State?.confidence) : null;
       return {
         ...stock,
-        rating: displayedRating,
+        // `rating` is intentionally left as the backend's real value here —
+        // it used to be swapped for v2Decision whenever viewMode === "v2",
+        // which meant the badge, the Buy/Sell filter chips, the status
+        // filter, and the sort order could all silently run on a client-side
+        // heuristic (mapV2Decision) instead of the backend's actual computed
+        // rating. That heuristic is dormant today (gated behind
+        // EXPO_PUBLIC_ENABLE_SIMULATOR, off by default) but would have
+        // activated the moment that flag is turned on for testing or a
+        // future release. v2_decision below still carries the V2 read for
+        // anything that wants to show or compare it explicitly (the
+        // secondary "V2 ... gates ..." label, the discrepancy panel).
         spike_rating: spikeRating,
         spike_confidence: Number(stock.confidence ?? 0),
         v2_confidence: v2Confidence,
@@ -439,7 +451,6 @@ export default function EagleEyeScannerScreen() {
     stageFilter,
     sortBy,
     sortDir,
-    viewMode,
     mlBandsData,
     simulatorStates,
   ]);
@@ -1244,33 +1255,6 @@ export default function EagleEyeScannerScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <View style={styles.modeToggleRow}>
-              <Pressable
-                onPress={() => setViewMode("v2")}
-                style={[
-                  styles.modeToggle,
-                  {
-                    backgroundColor: viewMode === "v2" ? colors.accentPrimary : colors.bgCard,
-                    borderColor: viewMode === "v2" ? colors.accentPrimary : colors.borderColor,
-                  },
-                ]}
-              >
-                <Text style={[styles.modeToggleText, { color: viewMode === "v2" ? colors.bgPrimary : colors.textPrimary }]}>V2 Canonical</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setViewMode("spike")}
-                style={[
-                  styles.modeToggle,
-                  {
-                    backgroundColor: viewMode === "spike" ? colors.warning : colors.bgCard,
-                    borderColor: viewMode === "spike" ? colors.warning : colors.borderColor,
-                  },
-                ]}
-              >
-                <Text style={[styles.modeToggleText, { color: viewMode === "spike" ? colors.bgPrimary : colors.textPrimary }]}>Spike Research</Text>
-              </Pressable>
-            </View>
-
             {regime ? (
               <View
                 style={[
@@ -1396,35 +1380,9 @@ export default function EagleEyeScannerScreen() {
                           {coverageLine}
                         </Text>
                       </Pressable>
-                      <View style={styles.previewToggleRow}>
-                        <Pressable
-                          onPress={() => setViewMode("v2")}
-                          style={[
-                            styles.modeToggle,
-                            {
-                              backgroundColor: viewMode === "v2" ? colors.accentPrimary : colors.bgCard,
-                              borderColor: viewMode === "v2" ? colors.accentPrimary : colors.borderColor,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.modeToggleText, { color: viewMode === "v2" ? colors.bgPrimary : colors.textPrimary }]}>V2 Canonical</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => setViewMode("spike")}
-                          style={[
-                            styles.modeToggle,
-                            {
-                              backgroundColor: viewMode === "spike" ? colors.warning : colors.bgCard,
-                              borderColor: viewMode === "spike" ? colors.warning : colors.borderColor,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.modeToggleText, { color: viewMode === "spike" ? colors.bgPrimary : colors.textPrimary }]}>Spike Research</Text>
-                        </Pressable>
-                      </View>
                       <View style={styles.sourceBadgeRow}>
                         <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
-                          {`Decision source: ${viewMode === "v2" ? "V2 canonical" : "Spike research"}`}
+                          Decision source: backend rating (Spike)
                         </Text>
                         <Text style={[styles.sourceBadge, { color: colors.textSecondary, borderColor: colors.borderColor }]}>
                           State source: V2 symbols/state
