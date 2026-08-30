@@ -7,7 +7,9 @@ import { Stack } from "expo-router";
  * - [ticker]        → stock detail
  * - [ticker]-dna    → DNA profile
  * - settings        → Eagle Eye settings
- * - simulator       → paper trading simulator index
+ * - trend-hold-book → auto paper-trading ledger for the trend-hold engine
+ * - simulator       → paper trading simulator index (unrelated, 3-symbol
+ *   backtest system -- do not confuse with trend-hold-book above)
  * - simulator/decision → decision transparency scanner
  * - simulator/decision/[ticker] → decision detail
  * - simulator/decision/[ticker]-dna → cycle history
@@ -21,6 +23,7 @@ export default function EagleEyeLayout() {
       <Stack.Screen name="[ticker]" />
       <Stack.Screen name="[ticker]-dna" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="trend-hold-book" />
       <Stack.Screen name="simulator/index" />
       <Stack.Screen name="simulator/decision/index" />
       <Stack.Screen name="simulator/decision/[ticker]" />
