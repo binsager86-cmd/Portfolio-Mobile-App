@@ -12,35 +12,89 @@
  * (holdings.tsx / trading.tsx) and of the unrelated eagle-eye/simulator
  * screens (a different, already-existing 3-symbol backtest system).
  */
+import SnapshotLineChart, { ChartDataPoint } from "@/components/charts/SnapshotLineChart";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
+import type { ThemePalette } from "@/constants/theme";
 import {
+  useTrendHoldBookNavHistory,
   useTrendHoldBookPortfolio,
   useTrendHoldBookPositions,
   useTrendHoldBookTrades,
+  useTrendHoldDecisionLog,
   type TrendHoldBookPosition,
   type TrendHoldBookTrade,
+  type TrendHoldDecisionLogEntry,
 } from "@/hooks/useTrendHoldBook";
 import { useResponsive } from "@/hooks/useResponsive";
+import { fmtNum, formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/currency";
 import { useThemeStore } from "@/services/themeStore";
-import React, { useCallback } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import React, { useCallback, useState } from "react";
+import { ActivityIndicator, LayoutChangeEvent, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function formatKwd(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return value.toLocaleString("en-KW", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-}
+// ── KPI card palette — deliberately its own violet/amber identity, not the
+// green/blue used for the real portfolio, so this never visually reads as
+// "real money" even at a glance. ───────────────────────────────────────────
 
-function formatPct(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+const KPI_STYLES = {
+  equity: {
+    dark: { bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)", accent: "#a78bfa" },
+    light: { bg: "rgba(124,58,237,0.08)", border: "rgba(124,58,237,0.2)", accent: "#7c3aed" },
+  },
+  cash: {
+    dark: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", accent: "#f59e0b" },
+    light: { bg: "rgba(217,119,6,0.08)", border: "rgba(217,119,6,0.2)", accent: "#d97706" },
+  },
+  returnPositive: {
+    dark: { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.3)", accent: "#10b981" },
+    light: { bg: "rgba(4,120,87,0.08)", border: "rgba(4,120,87,0.2)", accent: "#047857" },
+  },
+  returnNegative: {
+    dark: { bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)", accent: "#f87171" },
+    light: { bg: "rgba(220,38,38,0.08)", border: "rgba(220,38,38,0.2)", accent: "#dc2626" },
+  },
+  positions: {
+    dark: { bg: "rgba(6,182,212,0.12)", border: "rgba(6,182,212,0.3)", accent: "#06b6d4" },
+    light: { bg: "rgba(29,78,216,0.08)", border: "rgba(29,78,216,0.2)", accent: "#1D4ED8" },
+  },
+} as const;
+
+const DECISION_COLOR_KEY: Record<string, keyof typeof KPI_STYLES> = {
+  BUY: "returnPositive",
+  HOLD: "cash",
+  SCALE_OUT: "equity",
+  SELL_SIGNAL: "returnNegative",
+  WAIT: "positions",
+};
+
+function KpiCard({
+  label,
+  value,
+  subtitle,
+  kpiStyle,
+  colors,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  kpiStyle: { bg: string; border: string; accent: string };
+  colors: ThemePalette;
+}) {
+  return (
+    <View style={[styles.kpiCard, { backgroundColor: kpiStyle.bg, borderColor: kpiStyle.border }]}>
+      <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.kpiValue, { color: kpiStyle.accent }]}>{value}</Text>
+      {subtitle ? <Text style={[styles.kpiSub, { color: kpiStyle.accent }]}>{subtitle}</Text> : null}
+    </View>
+  );
 }
 
 function SimulatedBanner() {
   const { colors } = useThemeStore();
   return (
-    <View style={[styles.simBanner, { backgroundColor: colors.warning + "22", borderColor: colors.warning }]}>
+    <View style={[styles.simBanner, { backgroundColor: colors.warning + "1a", borderColor: colors.warning }]}>
+      <FontAwesome name="flask" size={13} color={colors.warning} style={{ marginTop: 1 }} />
       <Text style={[styles.simBannerText, { color: colors.warning }]}>
         SIMULATED — virtual money only. No real trades are executed. Every fill below was placed
         automatically by the trend-hold engine's daily scan; there is no manual buy/sell here.
@@ -49,40 +103,21 @@ function SimulatedBanner() {
   );
 }
 
-function PortfolioSummaryCard() {
+function InlineError({ message }: { message: string }) {
   const { colors } = useThemeStore();
-  const { data, isLoading } = useTrendHoldBookPortfolio();
-
-  if (isLoading && !data) {
-    return (
-      <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-        <ActivityIndicator color={colors.accentPrimary} />
-      </View>
-    );
-  }
-  if (!data) return null;
-
-  const isPositive = data.total_return_pct >= 0;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-      <Text style={[styles.equityText, { color: colors.textPrimary }]}>{formatKwd(data.equity_kwd)} KWD</Text>
-      <Text style={[styles.changeText, { color: isPositive ? colors.success : colors.danger }]}>
-        {formatPct(data.total_return_pct)} since inception
-      </Text>
-      <View style={styles.summaryRow}>
-        <View>
-          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>Cash</Text>
-          <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{formatKwd(data.cash_kwd)} KWD</Text>
-        </View>
-        <View>
-          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>Starting capital</Text>
-          <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{formatKwd(data.starting_capital_kwd)} KWD</Text>
-        </View>
-        <View>
-          <Text style={[styles.metaLabel, { color: colors.textMuted }]}>Open positions</Text>
-          <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{data.open_position_count}</Text>
-        </View>
-      </View>
+    <View style={[styles.errorPanel, { backgroundColor: colors.dangerBg, borderColor: colors.danger }]}>
+      <FontAwesome name="exclamation-triangle" size={13} color={colors.dangerText} />
+      <Text style={[styles.errorText, { color: colors.dangerText }]}>{message}</Text>
+    </View>
+  );
+}
+
+function SectionTitle({ icon, title, colors }: { icon: React.ComponentProps<typeof FontAwesome>["name"]; title: string; colors: ThemePalette }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <FontAwesome name={icon} size={14} color={colors.accentPrimary} />
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
     </View>
   );
 }
@@ -96,38 +131,96 @@ function PositionRow({ position }: { position: TrendHoldBookPosition }) {
       <View style={styles.rowMain}>
         <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{position.ticker}</Text>
         <Text style={[styles.rowMeta, { color: colors.textMuted }]}>
-          {position.quantity.toFixed(2)} sh @ {position.avg_cost.toFixed(3)}
+          {fmtNum(position.quantity, 2)} sh @ {formatCurrency(position.avg_cost)}
         </Text>
+        {position.opened_date ? (
+          <Text style={[styles.rowMetaSmall, { color: colors.textMuted }]}>Opened {position.opened_date}</Text>
+        ) : null}
       </View>
       <View style={styles.rowEnd}>
-        <Text style={[styles.rowValue, { color: colors.textPrimary }]}>{formatKwd(position.market_value_kwd)}</Text>
-        <Text style={[styles.rowMeta, { color: pnlColor }]}>{formatKwd(pnl)}</Text>
+        <Text style={[styles.rowValue, { color: colors.textPrimary }]}>{formatCurrency(position.market_value_kwd)}</Text>
+        <Text style={[styles.rowMeta, { color: pnlColor }]}>{formatSignedCurrency(pnl)}</Text>
       </View>
     </View>
   );
 }
 
-function TradeRow({ trade }: { trade: TrendHoldBookTrade }) {
+function TradeCard({ trade }: { trade: TrendHoldBookTrade }) {
   const { colors } = useThemeStore();
-  const sideColor =
-    trade.side === "BUY" ? colors.accentPrimary : trade.side === "SCALE_OUT" ? colors.warning : colors.danger;
+  const kpiKey = trade.side === "BUY" ? "returnPositive" : trade.side === "SCALE_OUT" ? "cash" : "returnNegative";
+  const isDark = colors.mode === "dark";
+  const sideStyle = KPI_STYLES[kpiKey][isDark ? "dark" : "light"];
   const pnl = trade.realized_pnl_kwd;
   const pnlColor = pnl == null ? colors.textMuted : pnl >= 0 ? colors.success : colors.danger;
+
+  return (
+    <View style={[styles.tradeCard, { borderColor: colors.borderColor }]}>
+      <View style={styles.tradeHeaderLine}>
+        <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{trade.ticker}</Text>
+        <View style={[styles.sideBadge, { backgroundColor: sideStyle.bg, borderColor: sideStyle.border }]}>
+          <Text style={[styles.sideBadgeText, { color: sideStyle.accent }]}>{trade.side}</Text>
+        </View>
+        <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginLeft: "auto" }]}>{trade.trade_date}</Text>
+      </View>
+
+      <View style={styles.tradeDetailGrid}>
+        <View style={styles.tradeDetailCell}>
+          <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Quantity</Text>
+          <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(trade.quantity, 2)} sh</Text>
+        </View>
+        <View style={styles.tradeDetailCell}>
+          <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Price</Text>
+          <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{formatCurrency(trade.price)}</Text>
+        </View>
+        <View style={styles.tradeDetailCell}>
+          <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Gross</Text>
+          <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{formatCurrency(trade.gross_kwd)}</Text>
+        </View>
+        <View style={styles.tradeDetailCell}>
+          <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Commission</Text>
+          <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{formatCurrency(trade.commission_kwd)}</Text>
+        </View>
+        {pnl != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Realized P&L</Text>
+            <Text style={[styles.detailValue, { color: pnlColor, fontWeight: "800" }]}>{formatSignedCurrency(pnl)}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {trade.reason ? (
+        <Text style={[styles.reasonText, { color: colors.textMuted }]}>{trade.reason}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function DecisionLogRow({ entry }: { entry: TrendHoldDecisionLogEntry }) {
+  const { colors } = useThemeStore();
+  const isDark = colors.mode === "dark";
+  const kpiKey = DECISION_COLOR_KEY[entry.decision] ?? "positions";
+  const style = KPI_STYLES[kpiKey][isDark ? "dark" : "light"];
   return (
     <View style={[styles.row, { borderColor: colors.borderColor }]}>
       <View style={styles.rowMain}>
         <View style={styles.tradeHeaderLine}>
-          <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{trade.ticker}</Text>
-          <Text style={[styles.sideBadge, { color: sideColor, borderColor: sideColor }]}>{trade.side}</Text>
+          <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{entry.ticker}</Text>
+          <View style={[styles.sideBadge, { backgroundColor: style.bg, borderColor: style.border }]}>
+            <Text style={[styles.sideBadgeText, { color: style.accent }]}>{entry.decision}</Text>
+          </View>
         </View>
         <Text style={[styles.rowMeta, { color: colors.textMuted }]} numberOfLines={2}>
-          {trade.trade_date} · {trade.quantity.toFixed(2)} sh @ {trade.price.toFixed(3)} · {trade.reason ?? ""}
+          {entry.trade_date} · {entry.reason ?? "—"}
         </Text>
       </View>
-      <View style={styles.rowEnd}>
-        <Text style={[styles.rowValue, { color: colors.textPrimary }]}>{formatKwd(trade.gross_kwd)}</Text>
-        {pnl != null ? <Text style={[styles.rowMeta, { color: pnlColor }]}>{formatKwd(pnl)}</Text> : null}
-      </View>
+      {entry.close != null ? (
+        <View style={styles.rowEnd}>
+          <Text style={[styles.rowValue, { color: colors.textPrimary }]}>{formatCurrency(entry.close)}</Text>
+          {entry.structural_stop != null ? (
+            <Text style={[styles.rowMetaSmall, { color: colors.textMuted }]}>stop {formatCurrency(entry.structural_stop)}</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -136,20 +229,40 @@ export default function TrendHoldBookScreen() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
+  const isDark = colors.mode === "dark";
+  const [chartWidth, setChartWidth] = useState(320);
+  const onChartLayout = useCallback((e: LayoutChangeEvent) => setChartWidth(e.nativeEvent.layout.width), []);
 
   const portfolioQuery = useTrendHoldBookPortfolio();
   const positionsQuery = useTrendHoldBookPositions();
   const tradesQuery = useTrendHoldBookTrades(100);
+  const navHistoryQuery = useTrendHoldBookNavHistory(180);
+  const decisionLogQuery = useTrendHoldDecisionLog(150, false);
 
-  const isRefetching = portfolioQuery.isRefetching || positionsQuery.isRefetching || tradesQuery.isRefetching;
+  const isRefetching =
+    portfolioQuery.isRefetching ||
+    positionsQuery.isRefetching ||
+    tradesQuery.isRefetching ||
+    navHistoryQuery.isRefetching ||
+    decisionLogQuery.isRefetching;
+
   const onRefresh = useCallback(() => {
     portfolioQuery.refetch();
     positionsQuery.refetch();
     tradesQuery.refetch();
-  }, [portfolioQuery, positionsQuery, tradesQuery]);
+    navHistoryQuery.refetch();
+    decisionLogQuery.refetch();
+  }, [portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery]);
 
+  const portfolio = portfolioQuery.data;
   const positions = positionsQuery.data?.positions ?? [];
   const trades = tradesQuery.data?.trades ?? [];
+  const navPoints = navHistoryQuery.data?.points ?? [];
+  const decisionEntries = decisionLogQuery.data?.entries ?? [];
+
+  const chartData: ChartDataPoint[] = navPoints.map((p) => ({ label: p.nav_date, value: p.equity_kwd }));
+  const isPositive = (portfolio?.total_return_pct ?? 0) >= 0;
+  const returnStyle = KPI_STYLES[isPositive ? "returnPositive" : "returnNegative"][isDark ? "dark" : "light"];
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
@@ -165,10 +278,55 @@ export default function TrendHoldBookScreen() {
         </Text>
         <SimulatedBanner />
 
-        <PortfolioSummaryCard />
+        {portfolioQuery.isError ? (
+          <InlineError message="Could not load the Trend-Hold Book portfolio. Pull to refresh to retry." />
+        ) : portfolioQuery.isLoading && !portfolio ? (
+          <ActivityIndicator color={colors.accentPrimary} />
+        ) : portfolio ? (
+          <View style={styles.kpiRow}>
+            <KpiCard
+              label="Portfolio Value"
+              value={formatCurrency(portfolio.equity_kwd)}
+              subtitle={formatPercent(portfolio.total_return_pct)}
+              kpiStyle={returnStyle}
+              colors={colors}
+            />
+            <KpiCard
+              label="Dummy Cash Remaining"
+              value={formatCurrency(portfolio.cash_kwd)}
+              subtitle={`of ${formatCurrency(portfolio.starting_capital_kwd)} starting`}
+              kpiStyle={KPI_STYLES.cash[isDark ? "dark" : "light"]}
+              colors={colors}
+            />
+            <KpiCard
+              label="Open Positions"
+              value={String(portfolio.open_position_count)}
+              subtitle={`of 10 max slots`}
+              kpiStyle={KPI_STYLES.positions[isDark ? "dark" : "light"]}
+              colors={colors}
+            />
+          </View>
+        ) : null}
 
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Open positions</Text>
-        {positionsQuery.isLoading && positions.length === 0 ? (
+        {chartData.length >= 2 ? (
+          <View onLayout={onChartLayout}>
+            <SectionTitle icon="line-chart" title="Equity Curve" colors={colors} />
+            <SnapshotLineChart
+              data={chartData}
+              title="Trend-Hold Book Equity"
+              colors={colors}
+              lineColor={isDark ? "#a78bfa" : "#7c3aed"}
+              height={220}
+              width={chartWidth}
+              formatValue={(v) => fmtNum(v, 0)}
+            />
+          </View>
+        ) : null}
+
+        <SectionTitle icon="briefcase" title="Open Positions" colors={colors} />
+        {positionsQuery.isError ? (
+          <InlineError message="Could not load open positions." />
+        ) : positionsQuery.isLoading && positions.length === 0 ? (
           <ActivityIndicator color={colors.accentPrimary} />
         ) : positions.length === 0 ? (
           <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
@@ -182,17 +340,40 @@ export default function TrendHoldBookScreen() {
           </View>
         )}
 
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Recent trades</Text>
-        {tradesQuery.isLoading && trades.length === 0 ? (
+        <SectionTitle icon="exchange" title="Recent Trades" colors={colors} />
+        {tradesQuery.isError ? (
+          <InlineError message="Could not load the trade ledger." />
+        ) : tradesQuery.isLoading && trades.length === 0 ? (
           <ActivityIndicator color={colors.accentPrimary} />
         ) : trades.length === 0 ? (
           <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>No trades recorded yet.</Text>
           </View>
         ) : (
-          <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <View style={styles.tradesList}>
             {trades.map((t) => (
-              <TradeRow key={t.id} trade={t} />
+              <TradeCard key={t.id} trade={t} />
+            ))}
+          </View>
+        )}
+
+        <SectionTitle icon="history" title="Decision Log" colors={colors} />
+        <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
+          Every non-WAIT decision the trend-hold engine has made, so you can learn from what it saw —
+          not just the trades the book acted on.
+        </Text>
+        {decisionLogQuery.isError ? (
+          <InlineError message="Could not load the decision log." />
+        ) : decisionLogQuery.isLoading && decisionEntries.length === 0 ? (
+          <ActivityIndicator color={colors.accentPrimary} />
+        ) : decisionEntries.length === 0 ? (
+          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No decisions logged yet.</Text>
+          </View>
+        ) : (
+          <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            {decisionEntries.map((e, idx) => (
+              <DecisionLogRow key={`${e.ticker}-${e.trade_date}-${idx}`} entry={e} />
             ))}
           </View>
         )}
@@ -206,18 +387,24 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, gap: 14 },
   pageTitle: { fontSize: 24, fontWeight: "800" },
   pageSubtitle: { fontSize: 13, lineHeight: 19 },
-  simBanner: { borderWidth: 1, borderRadius: 8, padding: 12 },
-  simBannerText: { fontSize: 12, lineHeight: 18, fontWeight: "700" },
-  card: { borderWidth: 1, borderRadius: 8, padding: 14, gap: 10 },
-  equityText: { fontSize: 28, fontWeight: "800" },
-  changeText: { fontSize: 13, fontWeight: "700" },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  metaLabel: { fontSize: 11, fontWeight: "600" },
-  metaValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
-  sectionTitle: { fontSize: 16, fontWeight: "800", marginTop: 4 },
+  simBanner: { flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 8, padding: 12 },
+  simBannerText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: "700" },
+
+  kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  kpiCard: { minWidth: 150, flex: 1, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, borderWidth: 1 },
+  kpiLabel: { fontSize: 11, marginBottom: 6, fontWeight: "600" },
+  kpiValue: { fontSize: 20, fontWeight: "800" },
+  kpiSub: { fontSize: 11, marginTop: 4, fontWeight: "600" },
+
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  sectionTitle: { fontSize: 16, fontWeight: "800" },
+
   listPanel: { borderWidth: 1, borderRadius: 8, overflow: "hidden" },
   emptyPanel: { borderWidth: 1, borderRadius: 8, padding: 14 },
   emptyText: { fontSize: 12, lineHeight: 18 },
+  errorPanel: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 8, padding: 12 },
+  errorText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -230,14 +417,17 @@ const styles = StyleSheet.create({
   rowEnd: { alignItems: "flex-end", gap: 2 },
   rowTicker: { fontSize: 14, fontWeight: "800" },
   rowMeta: { fontSize: 11, lineHeight: 15 },
+  rowMetaSmall: { fontSize: 10, lineHeight: 14 },
   rowValue: { fontSize: 13, fontWeight: "700" },
+
+  tradesList: { gap: 8 },
+  tradeCard: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 8 },
   tradeHeaderLine: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sideBadge: {
-    fontSize: 10,
-    fontWeight: "800",
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
+  sideBadge: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  sideBadgeText: { fontSize: 10, fontWeight: "800" },
+  tradeDetailGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tradeDetailCell: { minWidth: 88 },
+  detailLabel: { fontSize: 10, fontWeight: "600" },
+  detailValue: { fontSize: 13, fontWeight: "700", marginTop: 1 },
+  reasonText: { fontSize: 11, lineHeight: 16, fontStyle: "italic" },
 });

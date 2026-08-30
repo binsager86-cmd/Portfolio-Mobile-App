@@ -57,6 +57,31 @@ export interface TrendHoldBookTradesResponse {
   trades: TrendHoldBookTrade[];
 }
 
+export interface TrendHoldBookNavPoint {
+  nav_date: string;
+  cash_kwd: number;
+  equity_kwd: number;
+  open_position_count: number;
+}
+
+export interface TrendHoldBookNavHistoryResponse {
+  points: TrendHoldBookNavPoint[];
+}
+
+export interface TrendHoldDecisionLogEntry {
+  ticker: string;
+  trade_date: string;
+  decision: "BUY" | "HOLD" | "SCALE_OUT" | "SELL_SIGNAL" | "WAIT";
+  reason?: string | null;
+  position_state?: string | null;
+  close?: number | null;
+  structural_stop?: number | null;
+}
+
+export interface TrendHoldDecisionLogResponse {
+  entries: TrendHoldDecisionLogEntry[];
+}
+
 // ── Query keys ───────────────────────────────────────────────────────────────
 
 export const trendHoldBookKeys = {
@@ -64,6 +89,8 @@ export const trendHoldBookKeys = {
   portfolio: () => [...trendHoldBookKeys.all, "portfolio"] as const,
   positions: () => [...trendHoldBookKeys.all, "positions"] as const,
   trades: () => [...trendHoldBookKeys.all, "trades"] as const,
+  navHistory: () => [...trendHoldBookKeys.all, "nav-history"] as const,
+  decisionLog: () => [...trendHoldBookKeys.all, "decision-log"] as const,
 } as const;
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -117,6 +144,54 @@ export function useTrendHoldBookTrades(limit = 300, enabled = true) {
     queryFn: async () => {
       const { data } = await api.get<TrendHoldBookTradesResponse>(
         `/api/v1/trend-hold-book/trades?limit=${limit}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useTrendHoldBookNavHistory
+ * GET /api/v1/trend-hold-book/nav-history
+ *
+ * Daily equity snapshots -- feeds the equity curve chart.
+ */
+export function useTrendHoldBookNavHistory(days = 180, enabled = true) {
+  return useQuery<TrendHoldBookNavHistoryResponse>({
+    queryKey: [...trendHoldBookKeys.navHistory(), days],
+    queryFn: async () => {
+      const { data } = await api.get<TrendHoldBookNavHistoryResponse>(
+        `/api/v1/trend-hold-book/nav-history?days=${days}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useTrendHoldDecisionLog
+ * GET /api/v1/trend-hold-book/decision-log
+ *
+ * The trend-hold engine's full decision history (BUY/HOLD/SCALE_OUT/
+ * SELL_SIGNAL, and WAIT when includeWait=true) -- independent of the
+ * book's trade ledger, this is every decision the engine made, not just
+ * the ones the book acted on. Lets the user learn from/audit the engine
+ * over time, not just see today's snapshot.
+ */
+export function useTrendHoldDecisionLog(limit = 200, includeWait = false, enabled = true) {
+  return useQuery<TrendHoldDecisionLogResponse>({
+    queryKey: [...trendHoldBookKeys.decisionLog(), limit, includeWait],
+    queryFn: async () => {
+      const { data } = await api.get<TrendHoldDecisionLogResponse>(
+        `/api/v1/trend-hold-book/decision-log?limit=${limit}&include_wait=${includeWait}`
       );
       return data;
     },
