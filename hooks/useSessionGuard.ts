@@ -105,7 +105,7 @@ export function useSessionGuard() {
       }
     }
 
-    intervalRef.current = setInterval(heartbeat, HEARTBEAT_MS);
+    intervalRef.current = setInterval(() => { heartbeat().catch(() => {}); }, HEARTBEAT_MS);
 
     // ── Visibility / focus listeners ────────────────────────────
     let removeVisibility: (() => void) | null = null;
@@ -114,7 +114,7 @@ export function useSessionGuard() {
       // Web: visibilitychange fires when user switches tabs or minimises
       const onVisibility = () => {
         if (document.visibilityState === "visible") {
-          heartbeat();
+          heartbeat().catch(() => {});
         }
       };
       document.addEventListener("visibilitychange", onVisibility);
@@ -126,7 +126,9 @@ export function useSessionGuard() {
         "change",
         (state: AppStateStatus) => {
           if (state === "active") {
-            heartbeat();
+            // Fire-and-forget: never let a rejected/throwing heartbeat
+            // become an unhandled rejection during a foreground resume.
+            heartbeat().catch(() => {});
           }
         },
       );

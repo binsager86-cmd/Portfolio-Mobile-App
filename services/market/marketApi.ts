@@ -80,12 +80,31 @@ export const marketApi = {
 
   async refresh(): Promise<MarketData> {
     const headers = await authHeaders();
-    // Prefer non-blocking refresh: returns the latest snapshot immediately
-    // while backend refreshes in the background.
+    // Prefer non-blocking refresh: the /overview?live=true call kicks off a
+    // background TickerChart refresh on the server and returns the (still
+    // stale) cached snapshot immediately with status "refreshing". We then
+    // poll the plain (non-live) overview a few times so the pull-to-refresh
+    // gesture actually reflects the newly-refreshed data once it lands,
+    // instead of silently re-showing the same stale snapshot.
     const overviewRes = await fetch(`${MARKET_API}/overview?live=true&include_quotes=false`, { headers });
     if (overviewRes.ok) {
       const json = await overviewRes.json();
-      return json.data;
+      const initial: MarketData = json.data;
+      if (json.status !== "refreshing") return initial;
+
+      const initialFetchedAt = initial?._fetched_at ?? 0;
+      const POLL_INTERVAL_MS = 3000;
+      const MAX_POLLS = 8; // ~24s ceiling before giving up and returning latest snapshot
+      let latest = initial;
+      for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        const pollRes = await fetch(`${MARKET_API}/overview?live=false&include_quotes=false`, { headers });
+        if (!pollRes.ok) continue;
+        const pollJson = await pollRes.json();
+        latest = pollJson.data;
+        if ((latest?._fetched_at ?? 0) > initialFetchedAt) break;
+      }
+      return latest;
     }
 
     // Backward-compatible fallback for deployments without /overview.

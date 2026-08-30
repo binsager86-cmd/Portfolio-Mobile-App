@@ -31,7 +31,8 @@
         "backgroundColor": "#08070D"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "pan"
     },
     "androidNavigationBar": {
       "visible": "sticky-immersive"

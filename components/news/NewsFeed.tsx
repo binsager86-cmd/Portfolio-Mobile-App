@@ -35,6 +35,25 @@ import { useUserPrefsStore } from "@/src/store/userPrefsStore";
 import { ListContainer } from "@/components/ui/ListContainer";
 import { NewsDisclaimer } from "./NewsAttribution";
 import { NewsCard } from "./NewsCard";
+import { tokens } from "@/theme/tokens";
+
+// Fine-grained values not covered by the coarse spacing/typography scale,
+// anchored to the nearest token so they stay tied to the design system.
+const SP5 = tokens.spacing.xs + 1;
+const SP6 = tokens.spacing.sm - 2;
+const SP9 = tokens.spacing.sm + 1;
+const SP10 = tokens.spacing.sm + 2;
+const SP12 = tokens.spacing.md - 4;
+const SP14 = tokens.spacing.md - 2;
+const SP18 = tokens.spacing.md + 2;
+const SP40 = tokens.spacing.xl + tokens.spacing.sm;
+const FS12 = tokens.typography.caption.fontSize;
+const FS13 = tokens.typography.label.fontSize;
+const FS14 = tokens.typography.body.fontSize;
+const FS16 = tokens.typography.h2.fontSize - 4;
+const LH20 = tokens.typography.body.lineHeight;
+const LH21 = tokens.typography.body.lineHeight + 1;
+const LH22 = tokens.typography.body.lineHeight + 2;
 
 // ── Category filter config ──────────────────────────────────────
 
@@ -122,6 +141,9 @@ export const NewsFeed = React.memo(function NewsFeed({
   });
 
   // ── History query (past year, infinite scroll) ──
+  // Also fall back to history when the live feed errors out (not just when
+  // it's exhausted) so a transient /feed failure doesn't leave the screen
+  // permanently blank while stored articles are still available.
   const {
     data: historyData,
     isLoading: historyLoading,
@@ -132,7 +154,7 @@ export const NewsFeed = React.memo(function NewsFeed({
     categories: categoryFilter,
     symbols: symbolsFilter,
     lang,
-    enabled: !maxItems && hasNextPage === false,
+    enabled: !maxItems && (hasNextPage === false || (isError && !isLoading)),
   });
 
   const { data: selectedDetail } = useNewsDetail(selectedItem?.id ?? "", !!selectedItem?.id);
@@ -211,8 +233,8 @@ export const NewsFeed = React.memo(function NewsFeed({
         {[1, 2, 3].map((i) => (
           <View key={i} style={[s.skeleton, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
             <View style={[s.skeletonLine, { backgroundColor: colors.borderColor, width: "40%" }]} />
-            <View style={[s.skeletonLine, { backgroundColor: colors.borderColor, width: "90%", marginTop: 8 }]} />
-            <View style={[s.skeletonLine, { backgroundColor: colors.borderColor, width: "60%", marginTop: 6 }]} />
+            <View style={[s.skeletonLine, { backgroundColor: colors.borderColor, width: "90%", marginTop: tokens.spacing.sm }]} />
+            <View style={[s.skeletonLine, { backgroundColor: colors.borderColor, width: "60%", marginTop: SP6 }]} />
           </View>
         ))}
       </View>
@@ -234,7 +256,7 @@ export const NewsFeed = React.memo(function NewsFeed({
           style={[s.retryBtn, { borderColor: colors.accentPrimary }]}
         >
           <FontAwesome name="refresh" size={13} color={colors.accentPrimary} />
-          <Text style={{ color: colors.accentPrimary, fontSize: 13, fontWeight: "600", marginLeft: 6 }}>
+          <Text style={{ color: colors.accentPrimary, fontSize: FS13, fontWeight: "600", marginLeft: SP6 }}>
             {i18n.t('app.retry')}
           </Text>
         </Pressable>
@@ -248,7 +270,7 @@ export const NewsFeed = React.memo(function NewsFeed({
       {/* Category filter tabs */}
       {!hideCategoryFilter && !compact && (
         <View style={[s.filterRow, { borderBottomColor: colors.borderColor }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 6 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SP12, gap: SP6 }}>
             {CATEGORIES.map((cat) => {
               const active = activeCategory === cat.key;
               return (
@@ -274,9 +296,9 @@ export const NewsFeed = React.memo(function NewsFeed({
                   <Text
                     style={{
                       color: active ? colors.accentPrimary : colors.textSecondary,
-                      fontSize: 12,
+                      fontSize: FS12,
                       fontWeight: active ? "700" : "500",
-                      marginLeft: 5,
+                      marginLeft: SP5,
                     }}
                   >
                     {i18n.t('news.' + cat.label)}
@@ -321,11 +343,11 @@ export const NewsFeed = React.memo(function NewsFeed({
             {isError && newsItems.length > 0 ? (
               <View style={[s.cachedBanner, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
                 <FontAwesome name="wifi" size={12} color={colors.textMuted} />
-                <Text style={{ color: colors.textMuted, fontSize: 12, marginLeft: 6, flex: 1 }}>
+                <Text style={{ color: colors.textMuted, fontSize: FS12, marginLeft: SP6, flex: 1 }}>
                   {i18n.t('news.showingCached')}
                 </Text>
                 <Pressable accessibilityRole="button" accessibilityLabel={i18n.t('app.retry')} onPress={() => refetch()} hitSlop={8}>
-                  <Text style={{ color: colors.accentPrimary, fontSize: 12, fontWeight: "600" }}>{i18n.t('app.retry')}</Text>
+                  <Text style={{ color: colors.accentPrimary, fontSize: FS12, fontWeight: "600" }}>{i18n.t('app.retry')}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -337,7 +359,7 @@ export const NewsFeed = React.memo(function NewsFeed({
               <ActivityIndicator
                 size="small"
                 color={colors.accentPrimary}
-                style={{ marginVertical: 16 }}
+                style={{ marginVertical: tokens.spacing.md }}
               />
             )}
             {!compact && newsItems.length > 0 && (
@@ -415,13 +437,13 @@ export const NewsFeed = React.memo(function NewsFeed({
 
 const s = StyleSheet.create({
   loadingContainer: {
-    padding: 14,
-    gap: 10,
+    padding: SP14,
+    gap: SP10,
   },
   skeleton: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
+    padding: SP14,
   },
   skeletonLine: {
     height: 12,
@@ -429,96 +451,96 @@ const s = StyleSheet.create({
   },
   filterRow: {
     borderBottomWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: tokens.spacing.sm,
   },
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: SP12,
+    paddingVertical: SP6,
     borderRadius: 8,
     borderWidth: 1,
   },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    padding: 40,
-    gap: 12,
+    padding: SP40,
+    gap: SP12,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: FS14,
     textAlign: "center",
   },
   errorContainer: {
     alignItems: "center",
     justifyContent: "center",
-    padding: 40,
-    gap: 12,
+    padding: SP40,
+    gap: SP12,
   },
   errorText: {
-    fontSize: 14,
+    fontSize: FS14,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: LH20,
   },
   retryBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 9,
+    paddingHorizontal: SP18,
+    paddingVertical: SP9,
     borderRadius: 8,
     borderWidth: 1,
-    marginTop: 4,
+    marginTop: tokens.spacing.xs,
   },
   cachedBanner: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
+    padding: SP10,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 10,
+    marginBottom: SP10,
   },
   modalBackdrop: {
     flex: 1,
     justifyContent: "center",
-    padding: 16,
+    padding: tokens.spacing.md,
   },
   modalCard: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
+    padding: SP14,
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 6,
+    gap: tokens.spacing.sm,
+    marginBottom: SP6,
   },
   modalTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: FS16,
     fontWeight: "700",
-    lineHeight: 22,
+    lineHeight: LH22,
   },
   modalMeta: {
-    fontSize: 12,
-    marginBottom: 10,
+    fontSize: FS12,
+    marginBottom: SP10,
   },
   modalBody: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: FS14,
+    lineHeight: LH21,
   },
   modalActions: {
-    marginTop: 12,
+    marginTop: SP12,
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: 8,
+    gap: tokens.spacing.sm,
   },
   modalBtn: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: SP12,
+    paddingVertical: tokens.spacing.sm,
     minHeight: 40,
     justifyContent: "center",
   },

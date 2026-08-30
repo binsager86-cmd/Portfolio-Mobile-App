@@ -55,6 +55,24 @@ if (Platform.OS !== "web") {
   });
 }
 
+// ── Global JS error safety net ────────────────────────────────────────
+// RN's default fatal-error behavior is to hard-close the app in release
+// builds. We can't (and shouldn't) suppress a truly fatal error, but we
+// always want it captured (Sentry/analytics) first so crashes-on-resume
+// are diagnosable instead of silent, and we make sure our own handler
+// can never itself throw and mask the original error.
+if (typeof ErrorUtils !== "undefined" && typeof ErrorUtils.getGlobalHandler === "function") {
+  const previousHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    try {
+      analytics.captureError(error, { isFatal: String(!!isFatal), source: "global_handler" });
+    } catch {
+      // never let telemetry capture itself crash the crash handler
+    }
+    previousHandler?.(error, isFatal);
+  });
+}
+
 export {
     ErrorBoundary
 } from "expo-router";
@@ -108,7 +126,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded) {
-      SplashScreen.hideAsync();
+      // hideAsync() can reject if the splash screen was already hidden
+      // (e.g. the Activity was recreated after the OS killed a backgrounded
+      // app) — never let that reject unhandled.
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [loaded]);
 
@@ -137,9 +158,16 @@ function RootLayoutNav() {
   useEffect(() => {
     if (Platform.OS === "web") return;
     Notifications.setBadgeCountAsync(0).catch(() => {});
+    // AppState invokes listeners synchronously outside React's render cycle —
+    // an uncaught throw here is NOT contained by any error boundary and can
+    // bring down the whole app when resuming from foreground. Always guard.
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        Notifications.setBadgeCountAsync(0).catch(() => {});
+      try {
+        if (state === "active") {
+          Notifications.setBadgeCountAsync(0).catch(() => {});
+        }
+      } catch {
+        // never let a foreground-resume side effect crash the app
       }
     });
     return () => sub.remove();
@@ -337,6 +365,7 @@ function RootLayoutNav() {
 
   return (
     <SafeAreaProvider>
+    <AppErrorBoundary>
     <View style={{ flex: 1, direction: language === "ar" ? "rtl" : "ltr" }}>
     <StatusBar style={theme.isDark ? "light" : "dark"} />
     <QueryClientProvider client={queryClient}>
@@ -361,6 +390,7 @@ function RootLayoutNav() {
       </PaperProvider>
     </QueryClientProvider>
     </View>
+    </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }

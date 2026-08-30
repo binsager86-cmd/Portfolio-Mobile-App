@@ -11,8 +11,10 @@
  */
 
 import { NewsFeed } from "@/components/news/NewsFeed";
+import { withErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useThemeStore } from "@/services/themeStore";
+import { tokens } from "@/theme/tokens";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,7 +26,14 @@ import {
     View,
 } from "react-native";
 
-export default function NewsScreen() {
+// Fine-grained values not covered by the coarse spacing/typography scale,
+// anchored to the nearest token so they stay tied to the design system.
+const SP2 = tokens.spacing.xs / 2;
+const SP6 = tokens.spacing.sm - 2;
+const FS12 = tokens.typography.caption.fontSize;
+const FS13 = tokens.typography.label.fontSize;
+
+export default withErrorBoundary(function NewsScreen() {
   const { colors } = useThemeStore();
   const { t } = useTranslation();
   const [portfolioOnly, setPortfolioOnly] = useState(true);
@@ -40,7 +49,7 @@ export default function NewsScreen() {
             <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
               {t("news.title")}
             </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+            <Text style={{ color: colors.textMuted, fontSize: FS12, marginTop: SP2 }}>
               {t("news.subtitle")}
             </Text>
           </View>
@@ -88,9 +97,9 @@ export default function NewsScreen() {
             <Text
               style={{
                 color: portfolioOnly ? colors.accentPrimary : colors.textSecondary,
-                fontSize: 13,
+                fontSize: FS13,
                 fontWeight: portfolioOnly ? "700" : "500",
-                marginLeft: 6,
+                marginLeft: SP6,
               }}
             >
               {t("news.myHoldings")}
@@ -117,9 +126,9 @@ export default function NewsScreen() {
             <Text
               style={{
                 color: !portfolioOnly ? colors.accentPrimary : colors.textSecondary,
-                fontSize: 13,
+                fontSize: FS13,
                 fontWeight: !portfolioOnly ? "700" : "500",
-                marginLeft: 6,
+                marginLeft: SP6,
               }}
             >
               {t("news.allMarket")}
@@ -135,53 +144,53 @@ export default function NewsScreen() {
       />
     </View>
   );
-}
+});
 
 // ── Styles ──────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: tokens.spacing.md,
+    paddingTop: tokens.spacing.md - 4,
+    paddingBottom: tokens.spacing.sm,
     borderBottomWidth: 1,
   },
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: tokens.spacing.sm + 2,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: tokens.typography.h2.fontSize,
     fontWeight: "700",
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: tokens.spacing.md - 4,
+    paddingVertical: tokens.spacing.sm,
+    borderRadius: tokens.spacing.sm + 2,
     borderWidth: 1,
-    gap: 8,
-    marginBottom: 10,
+    gap: tokens.spacing.sm,
+    marginBottom: tokens.spacing.sm + 2,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    paddingVertical: 2,
+    fontSize: tokens.typography.body.fontSize,
+    paddingVertical: SP2,
   },
   toggleRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 4,
+    gap: tokens.spacing.sm,
+    marginBottom: tokens.spacing.xs,
   },
   toggleBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingHorizontal: tokens.spacing.md - 2,
+    paddingVertical: tokens.spacing.sm - 1,
+    borderRadius: tokens.spacing.sm,
     borderWidth: 1,
     flex: 1,
     justifyContent: "center",
