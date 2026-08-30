@@ -497,11 +497,26 @@ export default function EagleEyeScannerScreen() {
   // Market posture strip — a whole-market tally from the V2 projection, independent of
   // the user's current search/rating filters (so it stays "the fastest read" of the
   // market even while the table below is filtered down to a subset).
+  //
+  // IMPORTANT: mapV2Decision(v2State) ?? stock.rating means v2Call silently
+  // becomes the real backend rating whenever v2State is missing (simulator
+  // feature flag off, or this ticker isn't covered). That's the correct
+  // fallback for what gets FILTERED/SORTED on (fail open to the real
+  // rating), but it means the counts below can't just be tallied from
+  // v2Call without also tracking whether there was ever a real v2State to
+  // tally in the first place -- otherwise "divergent" is mathematically
+  // guaranteed to be 0 whether V2 is actually agreeing with every stock or
+  // simply isn't running at all, and the UI has no way to tell the two
+  // apart from a stat box that looks identical either way.
   const postureSummary = useMemo(() => {
     const counts = { buy: 0, watchlist: 0, neutral: 0, avoid: 0, divergent: 0 };
     const gateBuckets = { "0-2": 0, "3-5": 0, "6-8": 0, "9": 0 };
+    let covered = 0;
+    const total = (data?.stocks ?? []).length;
     for (const stock of data?.stocks ?? []) {
       const v2State = findSimulatorState(simulatorStates, stock.ticker);
+      if (!v2State) continue; // no real V2 read for this ticker -- don't count it either way
+      covered += 1;
       const v2Call = mapV2Decision(v2State) ?? stock.rating;
       switch (String(v2Call).toUpperCase()) {
         case "BUY":
@@ -527,7 +542,7 @@ export default function EagleEyeScannerScreen() {
         else gateBuckets["9"] += 1;
       }
     }
-    return { counts, gateBuckets };
+    return { counts, gateBuckets, covered, total };
   }, [data, simulatorStates]);
 
   const listData = useMemo<ScannerListItem[]>(() => {
@@ -1421,22 +1436,40 @@ export default function EagleEyeScannerScreen() {
                   <View style={styles.filterPanelHeader}>
                     <View>
 
-                    <View style={[styles.postureStrip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
-                      <Text style={[styles.postureText, { color: colors.textPrimary }]}>
-                        {`V2 today: ${postureSummary.counts.buy} buy · ${postureSummary.counts.watchlist} watchlist · ${postureSummary.counts.neutral} neutral · ${postureSummary.counts.avoid} avoid · ${postureSummary.counts.divergent} divergent`}
-                      </Text>
-                      <Text style={[styles.postureSubtext, { color: colors.textMuted }]}>
-                        {`Gates: 0-2 (${postureSummary.gateBuckets["0-2"]}) · 3-5 (${postureSummary.gateBuckets["3-5"]}) · 6-8 (${postureSummary.gateBuckets["6-8"]}) · 9 (${postureSummary.gateBuckets["9"]})`}
-                      </Text>
-                    </View>
+                    {postureSummary.covered === 0 ? (
+                      <View style={[styles.postureStrip, { backgroundColor: colors.warning + "1A", borderColor: colors.warning }]}>
+                        <Text style={[styles.postureText, { color: colors.warning }]}>
+                          {`V2 unavailable — 0/${postureSummary.total} stocks have a live V2 state`}
+                        </Text>
+                        <Text style={[styles.postureSubtext, { color: colors.textMuted }]}>
+                          Ratings, filters, and sort below all use the backend rating directly. The figures that used to show here when V2 has no data were the backend rating tallied a second time under a "V2" label, not an independent read — removed rather than left misleading.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.postureStrip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
+                        <Text style={[styles.postureText, { color: colors.textPrimary }]}>
+                          {`V2 today (${postureSummary.covered}/${postureSummary.total} covered): ${postureSummary.counts.buy} buy · ${postureSummary.counts.watchlist} watchlist · ${postureSummary.counts.neutral} neutral · ${postureSummary.counts.avoid} avoid · ${postureSummary.counts.divergent} divergent`}
+                        </Text>
+                        <Text style={[styles.postureSubtext, { color: colors.textMuted }]}>
+                          {`Gates: 0-2 (${postureSummary.gateBuckets["0-2"]}) · 3-5 (${postureSummary.gateBuckets["3-5"]}) · 6-8 (${postureSummary.gateBuckets["6-8"]}) · 9 (${postureSummary.gateBuckets["9"]})`}
+                        </Text>
+                        {postureSummary.covered < postureSummary.total ? (
+                          <Text style={[styles.postureSubtext, { color: colors.warning }]}>
+                            {`${postureSummary.total - postureSummary.covered} stock(s) have no live V2 state and are excluded from these counts.`}
+                          </Text>
+                        ) : null}
+                      </View>
+                    )}
 
-                    <View style={[styles.auditPanel, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}> 
+                    <View style={[styles.auditPanel, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
                       <Text style={[styles.auditTitle, { color: colors.textPrimary }]}>Discrepancy audit</Text>
                       <Text style={[styles.auditSubtitle, { color: colors.textMuted }]}>
-                        {`${discrepancyRows.length} flagged symbols (decision mismatch or confidence gap >= 15 points)`}
+                        {postureSummary.covered === 0
+                          ? "No V2 coverage — there is nothing to compare against the backend rating."
+                          : `${discrepancyRows.length} flagged symbols out of ${postureSummary.covered} with V2 coverage (decision mismatch or confidence gap >= 15 points)`}
                       </Text>
-                      {discrepancyRows.length === 0 ? (
-                        <Text style={[styles.auditEmpty, { color: colors.success }]}>No material discrepancy detected.</Text>
+                      {postureSummary.covered > 0 && discrepancyRows.length === 0 ? (
+                        <Text style={[styles.auditEmpty, { color: colors.success }]}>No material discrepancy detected among covered stocks.</Text>
                       ) : (
                         discrepancyRows.map((row) => {
                           const gap = row.v2_confidence != null ? Math.abs(row.spike_confidence - row.v2_confidence) : null;
