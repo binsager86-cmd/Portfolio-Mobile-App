@@ -66,6 +66,7 @@ async function registerTokenWithBackend(
   pushToken: string,
   jwt: string,
   platform: "ios" | "android" | "web",
+  tokenProvider: "expo" | "fcm",
   attempts = 3,
 ): Promise<boolean> {
   let lastStatus = 0;
@@ -79,7 +80,7 @@ async function registerTokenWithBackend(
           "Content-Type": "application/json",
           Authorization: `Bearer ${jwt}`,
         },
-        body: JSON.stringify({ token: pushToken, platform }),
+        body: JSON.stringify({ token: pushToken, platform, token_provider: tokenProvider }),
       });
 
       if (resp.ok) return true;
@@ -107,7 +108,7 @@ async function registerTokenWithBackend(
  * Register for push notifications and send the token to the backend.
  *
  * - Requests notification permissions
- * - Gets the Expo push token
+ * - Gets the native FCM token on Android, or an Expo token on iOS
  * - POSTs it to /api/v1/notifications/register-token
  */
 export async function registerPushToken(): Promise<string | null> {
@@ -182,17 +183,28 @@ export async function registerPushToken(): Promise<string | null> {
     return null;
   }
 
-  // Get the Expo push token
+  // Native Android tokens are FCM registration tokens. Keep iOS on Expo Push
+  // until APNs credentials and an iOS Firebase app are configured.
   try {
-    const projectId = resolveProjectId();
-    if (!projectId) {
-      console.warn("[Push] Missing EAS projectId — cannot fetch push token in production build");
-      return null;
+    let pushToken: string | null;
+    let tokenProvider: "expo" | "fcm";
+
+    if (Platform.OS === "android") {
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      pushToken = tokenData.data;
+      tokenProvider = "fcm";
+    } else {
+      const projectId = resolveProjectId();
+      if (!projectId) {
+        console.warn("[Push] Missing EAS projectId — cannot fetch push token in production build");
+        return null;
+      }
+      pushToken = await getExpoPushTokenWithRetry(projectId);
+      tokenProvider = "expo";
     }
-    const pushToken = await getExpoPushTokenWithRetry(projectId);
     if (!pushToken) return null;
 
-    if (__DEV__) console.info("[Push] Token:", pushToken);
+    if (__DEV__) console.info("[Push] Registered provider:", tokenProvider);
 
     // Send to backend
     const jwt = await getToken();
@@ -204,7 +216,7 @@ export async function registerPushToken(): Promise<string | null> {
     const platform =
       Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web";
 
-    const ok = await registerTokenWithBackend(pushToken, jwt, platform);
+    const ok = await registerTokenWithBackend(pushToken, jwt, platform, tokenProvider);
 
     if (ok) {
       if (__DEV__) console.info("[Push] Token registered with backend");
