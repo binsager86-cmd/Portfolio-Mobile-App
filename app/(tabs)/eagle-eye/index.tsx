@@ -174,7 +174,15 @@ export default function EagleEyeScannerScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null);
   const [highVolumeOnly, setHighVolumeOnly] = useState(false);
   const [stageFilter, setStageFilter] = useState<StageFilter | null>(null);
-  const [sortBy, setSortBy] = useState<SortField>("v2gates");
+  // "v2gates" used to be the default here, but with the V2 simulator
+  // unavailable (postureSummary.covered === 0 -- see above) every row's
+  // v2_state is null, so that sort had nothing to compare and left the
+  // table in API response order, not ranked by anything. "conf" (Spike
+  // confidence) is real, backend-computed, and always populated -- it's
+  // the field that actually reflects conviction today, so it's what the
+  // scanner should open sorted by. Once V2 has real coverage again,
+  // "v2gates" is still selectable from the column header same as before.
+  const [sortBy, setSortBy] = useState<SortField>("conf");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && viewportWidth >= 1120;
@@ -391,8 +399,26 @@ export default function EagleEyeScannerScreen() {
     }
     // sort
     list = [...list].sort((a, b) => {
-      const numberOrNegInf = (value: number | null | undefined) =>
-        Number.isFinite(value) ? (value as number) : -Infinity;
+      // Descending-by-default numeric compare that treats "no value" as
+      // sorting last, regardless of direction. The previous version
+      // (Number.isFinite(v) ? v : -Infinity, then subtracted) returns
+      // -Infinity - (-Infinity) = NaN whenever BOTH sides have no value --
+      // an undefined-behavior comparator result. That's not a corner case
+      // here: with the V2 simulator unavailable (see postureSummary above),
+      // every row's v2_state is null, so the v2gates sort compared NaN
+      // against NaN for the entire table, every time. Array.prototype.sort
+      // doesn't define what happens then -- in practice it left the list in
+      // whatever order the API returned it, silently. A scanner whose whole
+      // point is "show me the best setups first" was defaulting (see
+      // sortBy's initial state below) to an effectively unsorted list.
+      const compareNumericDesc = (av: number | null | undefined, bv: number | null | undefined): number => {
+        const aOk = Number.isFinite(av as number);
+        const bOk = Number.isFinite(bv as number);
+        if (!aOk && !bOk) return 0;
+        if (!aOk) return 1;
+        if (!bOk) return -1;
+        return (bv as number) - (av as number);
+      };
 
       const ratingWeight = (value: string | null | undefined) =>
         RATING_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
@@ -400,14 +426,11 @@ export default function EagleEyeScannerScreen() {
       const stageWeight = (value: string | null | undefined) =>
         STAGE_SORT_WEIGHT[String(value || "").toUpperCase()] ?? 0;
 
-      const relVolume = (stock: RatedStock) =>
-        numberOrNegInf(stock.volume_context?.relative_volume ?? null);
-
       let diff: number;
       const tierRank = (value: string | null | undefined) => String(value || "NONE").toUpperCase() === "NONE" ? 1 : 0;
       if (sortBy === "v2gates") {
-        diff = (tierRank(a.v2_state?.tier) - tierRank(b.v2_state?.tier)) * 1000
-          + numberOrNegInf(b.v2_state?.gates_passing) - numberOrNegInf(a.v2_state?.gates_passing);
+        const tierDiff = (tierRank(a.v2_state?.tier) - tierRank(b.v2_state?.tier)) * 1000;
+        diff = tierDiff !== 0 ? tierDiff : compareNumericDesc(a.v2_state?.gates_passing, b.v2_state?.gates_passing);
       } else if (sortBy === "rating") {
         diff = ratingWeight(b.rating) - ratingWeight(a.rating);
       } else if (sortBy === "ticker") {
@@ -415,27 +438,25 @@ export default function EagleEyeScannerScreen() {
       } else if (sortBy === "stage") {
         diff = stageWeight(b.stage) - stageWeight(a.stage);
       } else if (sortBy === "volume") {
-        diff = relVolume(b) - relVolume(a);
+        diff = compareNumericDesc(a.volume_context?.relative_volume, b.volume_context?.relative_volume);
       } else if (sortBy === "avgvol") {
-        diff = numberOrNegInf(b.average_volume) - numberOrNegInf(a.average_volume);
+        diff = compareNumericDesc(a.average_volume, b.average_volume);
       } else if (sortBy === "latvol") {
-        diff = numberOrNegInf(b.latest_volume) - numberOrNegInf(a.latest_volume);
+        diff = compareNumericDesc(a.latest_volume, b.latest_volume);
       } else if (sortBy === "conf") {
-        diff = b.confidence - a.confidence;
+        diff = compareNumericDesc(a.confidence, b.confidence);
       } else if (sortBy === "rr") {
-        const rrA = computeRR(a) ?? -Infinity;
-        const rrB = computeRR(b) ?? -Infinity;
-        diff = rrB - rrA;
+        diff = compareNumericDesc(computeRR(a), computeRR(b));
       } else if (sortBy === "price") {
-        diff = numberOrNegInf(b.last_price) - numberOrNegInf(a.last_price);
+        diff = compareNumericDesc(a.last_price, b.last_price);
       } else if (sortBy === "entry") {
-        diff = numberOrNegInf(b.entry_primary) - numberOrNegInf(a.entry_primary);
+        diff = compareNumericDesc(a.entry_primary, b.entry_primary);
       } else if (sortBy === "tp1") {
-        diff = numberOrNegInf(b.tp1) - numberOrNegInf(a.tp1);
+        diff = compareNumericDesc(a.tp1, b.tp1);
       } else if (sortBy === "bvps") {
-        diff = numberOrNegInf(b.book_value_per_share) - numberOrNegInf(a.book_value_per_share);
+        diff = compareNumericDesc(a.book_value_per_share, b.book_value_per_share);
       } else {
-        diff = numberOrNegInf(b.pe_ratio) - numberOrNegInf(a.pe_ratio);
+        diff = compareNumericDesc(a.pe_ratio, b.pe_ratio);
       }
       return sortDir === "asc" ? -diff : diff;
     });
