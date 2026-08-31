@@ -22,6 +22,7 @@ describe("Config — API_BASE_URL resolution", () => {
       delete process.env.EXPO_PUBLIC_API_URL_WEB;
       delete process.env.EXPO_PUBLIC_API_URL_ANDROID;
       delete process.env.EXPO_PUBLIC_API_URL_IOS;
+      delete process.env.EXPO_PUBLIC_ENABLE_SIMULATOR;
     }
   });
 
@@ -66,14 +67,14 @@ describe("Config — API_BASE_URL resolution", () => {
     return require("@/constants/Config");
   }
 
-  it("uses 127.0.0.1:8004 for local web dev on localhost", () => {
+  it("uses 127.0.0.1:8005 for local web dev on localhost", () => {
     const config = loadConfig("web", "localhost");
-    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
+    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8005");
   });
 
-  it("uses 127.0.0.1:8004 for local web dev on 127.0.0.1", () => {
+  it("uses 127.0.0.1:8005 for local web dev on 127.0.0.1", () => {
     const config = loadConfig("web", "127.0.0.1");
-    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
+    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8005");
   });
 
   it("LOCAL_WEB_API never contains 'localhost' (prevents IPv6 issues)", () => {
@@ -88,6 +89,20 @@ describe("Config — API_BASE_URL resolution", () => {
     expect(config.API_BASE_URL).toBe("");
   });
 
+  it("disables the simulator UI by default when EXPO_PUBLIC_ENABLE_SIMULATOR is unset", () => {
+    const config = require("@/constants/Config");
+    expect(typeof config.isSimulatorFeatureEnabled).toBe("function");
+    expect(config.isSimulatorFeatureEnabled()).toBe(false);
+    expect(config.SIMULATOR_UI_ENABLED).toBe(false);
+  });
+
+  it("enables the simulator UI only when EXPO_PUBLIC_ENABLE_SIMULATOR=true", () => {
+    process.env.EXPO_PUBLIC_ENABLE_SIMULATOR = "true";
+    const config = require("@/constants/Config");
+    expect(config.isSimulatorFeatureEnabled()).toBe(true);
+    expect(config.SIMULATOR_UI_ENABLED).toBe(true);
+  });
+
   it("respects EXPO_PUBLIC_API_URL env var over all defaults", () => {
     process.env.EXPO_PUBLIC_API_URL = "https://api.production.com";
     const config = loadConfig("web", "localhost");
@@ -95,10 +110,10 @@ describe("Config — API_BASE_URL resolution", () => {
   });
 
   it("prefers EXPO_PUBLIC_API_URL_WEB over EXPO_PUBLIC_API_URL on web", () => {
-    process.env.EXPO_PUBLIC_API_URL = "http://10.0.2.2:8004";
-    process.env.EXPO_PUBLIC_API_URL_WEB = "http://127.0.0.1:8004";
+    process.env.EXPO_PUBLIC_API_URL = "http://10.0.2.2:8005";
+    process.env.EXPO_PUBLIC_API_URL_WEB = "http://127.0.0.1:8005";
     const config = loadConfig("web", "localhost");
-    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
+    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8005");
   });
 
   it("exports API_TIMEOUT as a positive number", () => {
@@ -116,11 +131,11 @@ describe("Config — API_BASE_URL resolution", () => {
   });
 
   it("prefers inferred LAN URL on physical Android when env points to emulator", () => {
-    process.env.EXPO_PUBLIC_API_URL_ANDROID = "http://10.0.2.2:8004";
+    process.env.EXPO_PUBLIC_API_URL_ANDROID = "http://10.0.2.2:8005";
     const config = loadConfig("android", undefined, {
       hostUri: "192.168.1.2:8081",
       isDevice: true,
     });
-    expect(config.API_BASE_URL).toBe("http://192.168.1.2:8004");
+    expect(config.API_BASE_URL).toBe("http://192.168.1.2:8005");
   });
 });

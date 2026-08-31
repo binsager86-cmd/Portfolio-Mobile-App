@@ -181,11 +181,17 @@ export function mapAuthError(
         originalError: err,
       };
     }
-    if (msg.includes("network request failed")) {
+    if (
+      msg.includes("network request failed") ||
+      msg.includes("failed to fetch") ||
+      msg.includes("load failed") ||
+      msg.includes("networkerror") ||
+      msg.includes("network error")
+    ) {
       return {
         code: "auth/network-error",
         message: "Cannot reach the server. Please check your internet connection.",
-        severity: "error",
+        severity: "warning",
         originalError: err,
       };
     }
@@ -233,7 +239,7 @@ export function logAuthError(authError: AuthError, context?: string): void {
   const ctx = context ? ` (${context})` : "";
 
   if (__DEV__) {
-    if (authError.severity === "error" || authError.severity === "fatal") {
+    if (authError.severity === "fatal") {
       console.error(`${tag}${ctx} ${authError.message}`, {
         code: authError.code,
         severity: authError.severity,

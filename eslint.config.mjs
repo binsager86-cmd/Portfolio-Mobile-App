@@ -1,5 +1,6 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import { createRequire } from "node:module";
 
@@ -24,6 +25,7 @@ export default tseslint.config(
   // Base recommended rules
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  reactHooks.configs.flat.recommended,
 
   // Project-wide settings
   {

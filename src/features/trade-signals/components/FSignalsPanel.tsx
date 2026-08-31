@@ -563,18 +563,12 @@ function StockPicker({
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.listWrap}>
-        {topContent ? <View style={styles.topContentWrap}>{topContent}</View> : null}
+        {React.isValidElement(topContent) ? (
+          <View style={styles.topContentWrap}>{topContent}</View>
+        ) : null}
 
         {/* Quick Scan Section */}
-        <View
-          style={[
-            styles.quickScanBox,
-            {
-              backgroundColor: colors.accentPrimary + "10",
-              borderColor: colors.accentPrimary + "40",
-            },
-          ]}
-        >
+        <View style={[styles.quickScanBox, { backgroundColor: colors.accentPrimary + "10", borderColor: colors.accentPrimary + "40" }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
             {t("tradeSignals.quickScan", "Quick Scan")}
           </Text>
