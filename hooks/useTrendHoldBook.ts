@@ -82,6 +82,32 @@ export interface TrendHoldDecisionLogResponse {
   entries: TrendHoldDecisionLogEntry[];
 }
 
+export interface TrendHoldBookLesson {
+  ticker: string;
+  trade_date: string;
+  side: "SCALE_OUT" | "EXIT";
+  classification: string;
+  outcome: "WIN" | "LOSS" | "PARTIAL" | "UNKNOWN";
+  mae_pct?: number | null;
+  mfe_pct?: number | null;
+  giveback_pct?: number | null;
+  holding_days?: number | null;
+  reason: string;
+  enhancement: string;
+}
+
+export interface TrendHoldBookLessonsResponse {
+  lessons: TrendHoldBookLesson[];
+}
+
+export interface TrendHoldBookLessonsSummary {
+  total_closed: number;
+  by_classification: Record<string, number>;
+  by_outcome: Record<string, number>;
+  avg_loss_mae_pct?: number | null;
+  avg_win_giveback_pct?: number | null;
+}
+
 // ── Query keys ───────────────────────────────────────────────────────────────
 
 export const trendHoldBookKeys = {
@@ -91,6 +117,8 @@ export const trendHoldBookKeys = {
   trades: () => [...trendHoldBookKeys.all, "trades"] as const,
   navHistory: () => [...trendHoldBookKeys.all, "nav-history"] as const,
   decisionLog: () => [...trendHoldBookKeys.all, "decision-log"] as const,
+  lessons: () => [...trendHoldBookKeys.all, "lessons"] as const,
+  lessonsSummary: () => [...trendHoldBookKeys.all, "lessons-summary"] as const,
 } as const;
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -192,6 +220,55 @@ export function useTrendHoldDecisionLog(limit = 200, includeWait = false, enable
     queryFn: async () => {
       const { data } = await api.get<TrendHoldDecisionLogResponse>(
         `/api/v1/trend-hold-book/decision-log?limit=${limit}&include_wait=${includeWait}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useTrendHoldBookLessons
+ * GET /api/v1/trend-hold-book/lessons
+ *
+ * Post-trade "autopsy" for each closed leg (SCALE_OUT/EXIT) -- an
+ * auditable, rule-based classification (not a black box) explaining why
+ * a trade won or lost, using the realized price path, plus a suggested
+ * enhancement. See app/services/eagle_eye_v2/trend_hold_lessons.py.
+ */
+export function useTrendHoldBookLessons(limit = 200, enabled = true) {
+  return useQuery<TrendHoldBookLessonsResponse>({
+    queryKey: [...trendHoldBookKeys.lessons(), limit],
+    queryFn: async () => {
+      const { data } = await api.get<TrendHoldBookLessonsResponse>(
+        `/api/v1/trend-hold-book/lessons?limit=${limit}`
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useTrendHoldBookLessonsSummary
+ * GET /api/v1/trend-hold-book/lessons/summary
+ *
+ * Aggregate rollup of the lessons log -- the evidence to look at before
+ * deciding whether a trend_hold_engine.py parameter actually needs to
+ * change, rather than reacting to any single trade.
+ */
+export function useTrendHoldBookLessonsSummary(enabled = true) {
+  return useQuery<TrendHoldBookLessonsSummary>({
+    queryKey: trendHoldBookKeys.lessonsSummary(),
+    queryFn: async () => {
+      const { data } = await api.get<TrendHoldBookLessonsSummary>(
+        "/api/v1/trend-hold-book/lessons/summary"
       );
       return data;
     },

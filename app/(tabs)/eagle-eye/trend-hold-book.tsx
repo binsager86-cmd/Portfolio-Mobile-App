@@ -16,11 +16,14 @@ import SnapshotLineChart, { ChartDataPoint } from "@/components/charts/SnapshotL
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import type { ThemePalette } from "@/constants/theme";
 import {
+  useTrendHoldBookLessons,
+  useTrendHoldBookLessonsSummary,
   useTrendHoldBookNavHistory,
   useTrendHoldBookPortfolio,
   useTrendHoldBookPositions,
   useTrendHoldBookTrades,
   useTrendHoldDecisionLog,
+  type TrendHoldBookLesson,
   type TrendHoldBookPosition,
   type TrendHoldBookTrade,
   type TrendHoldDecisionLogEntry,
@@ -66,6 +69,13 @@ const DECISION_COLOR_KEY: Record<string, keyof typeof KPI_STYLES> = {
   SCALE_OUT: "equity",
   SELL_SIGNAL: "returnNegative",
   WAIT: "positions",
+};
+
+const OUTCOME_COLOR_KEY: Record<string, keyof typeof KPI_STYLES> = {
+  WIN: "returnPositive",
+  LOSS: "returnNegative",
+  PARTIAL: "equity",
+  UNKNOWN: "positions",
 };
 
 function KpiCard({
@@ -195,6 +205,58 @@ function TradeCard({ trade }: { trade: TrendHoldBookTrade }) {
   );
 }
 
+function LessonCard({ lesson }: { lesson: TrendHoldBookLesson }) {
+  const { colors } = useThemeStore();
+  const isDark = colors.mode === "dark";
+  const outcomeKey = OUTCOME_COLOR_KEY[lesson.outcome] ?? "positions";
+  const outcomeStyle = KPI_STYLES[outcomeKey][isDark ? "dark" : "light"];
+
+  return (
+    <View style={[styles.tradeCard, { borderColor: colors.borderColor }]}>
+      <View style={styles.tradeHeaderLine}>
+        <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{lesson.ticker}</Text>
+        <View style={[styles.sideBadge, { backgroundColor: outcomeStyle.bg, borderColor: outcomeStyle.border }]}>
+          <Text style={[styles.sideBadgeText, { color: outcomeStyle.accent }]}>{lesson.classification}</Text>
+        </View>
+        <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginLeft: "auto" }]}>{lesson.trade_date}</Text>
+      </View>
+
+      <View style={styles.tradeDetailGrid}>
+        {lesson.holding_days != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Held</Text>
+            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{lesson.holding_days}d</Text>
+          </View>
+        ) : null}
+        {lesson.mfe_pct != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Peak gain</Text>
+            <Text style={[styles.detailValue, { color: colors.success }]}>{formatPercent(lesson.mfe_pct)}</Text>
+          </View>
+        ) : null}
+        {lesson.mae_pct != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Worst drawdown</Text>
+            <Text style={[styles.detailValue, { color: colors.danger }]}>-{fmtNum(lesson.mae_pct, 1)}%</Text>
+          </View>
+        ) : null}
+        {lesson.giveback_pct != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Giveback</Text>
+            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.giveback_pct, 1)}pp</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={[styles.reasonText, { color: colors.textPrimary, fontStyle: "normal" }]}>{lesson.reason}</Text>
+      <View style={[styles.enhancementBox, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
+        <FontAwesome name="lightbulb-o" size={11} color={colors.accentPrimary} />
+        <Text style={[styles.enhancementText, { color: colors.textMuted }]}>{lesson.enhancement}</Text>
+      </View>
+    </View>
+  );
+}
+
 function DecisionLogRow({ entry }: { entry: TrendHoldDecisionLogEntry }) {
   const { colors } = useThemeStore();
   const isDark = colors.mode === "dark";
@@ -238,13 +300,17 @@ export default function TrendHoldBookScreen() {
   const tradesQuery = useTrendHoldBookTrades(100);
   const navHistoryQuery = useTrendHoldBookNavHistory(180);
   const decisionLogQuery = useTrendHoldDecisionLog(150, false);
+  const lessonsQuery = useTrendHoldBookLessons(100);
+  const lessonsSummaryQuery = useTrendHoldBookLessonsSummary();
 
   const isRefetching =
     portfolioQuery.isRefetching ||
     positionsQuery.isRefetching ||
     tradesQuery.isRefetching ||
     navHistoryQuery.isRefetching ||
-    decisionLogQuery.isRefetching;
+    decisionLogQuery.isRefetching ||
+    lessonsQuery.isRefetching ||
+    lessonsSummaryQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
     portfolioQuery.refetch();
@@ -252,13 +318,17 @@ export default function TrendHoldBookScreen() {
     tradesQuery.refetch();
     navHistoryQuery.refetch();
     decisionLogQuery.refetch();
-  }, [portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery]);
+    lessonsQuery.refetch();
+    lessonsSummaryQuery.refetch();
+  }, [portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery, lessonsQuery, lessonsSummaryQuery]);
 
   const portfolio = portfolioQuery.data;
   const positions = positionsQuery.data?.positions ?? [];
   const trades = tradesQuery.data?.trades ?? [];
   const navPoints = navHistoryQuery.data?.points ?? [];
   const decisionEntries = decisionLogQuery.data?.entries ?? [];
+  const lessons = lessonsQuery.data?.lessons ?? [];
+  const lessonsSummary = lessonsSummaryQuery.data;
 
   const chartData: ChartDataPoint[] = navPoints.map((p) => ({ label: p.nav_date, value: p.equity_kwd }));
   const isPositive = (portfolio?.total_return_pct ?? 0) >= 0;
@@ -357,6 +427,58 @@ export default function TrendHoldBookScreen() {
           </View>
         )}
 
+        <SectionTitle icon="graduation-cap" title="Lessons Learned" colors={colors} />
+        <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
+          A rule-based autopsy of every closed trade — why it won or lost, using the actual price
+          path, not a black box. This never auto-adjusts the engine; it's evidence for you to act on.
+        </Text>
+        {lessonsSummaryQuery.data && lessonsSummary && lessonsSummary.total_closed > 0 ? (
+          <View style={styles.kpiRow}>
+            <KpiCard
+              label="Closed Trades"
+              value={String(lessonsSummary.total_closed)}
+              subtitle={`${lessonsSummary.by_outcome.WIN ?? 0}W / ${lessonsSummary.by_outcome.LOSS ?? 0}L / ${lessonsSummary.by_outcome.PARTIAL ?? 0} scale-outs`}
+              kpiStyle={KPI_STYLES.positions[isDark ? "dark" : "light"]}
+              colors={colors}
+            />
+            {lessonsSummary.avg_loss_mae_pct != null ? (
+              <KpiCard
+                label="Avg Loss Drawdown"
+                value={`-${fmtNum(lessonsSummary.avg_loss_mae_pct, 1)}%`}
+                subtitle="before the stop caught it"
+                kpiStyle={KPI_STYLES.returnNegative[isDark ? "dark" : "light"]}
+                colors={colors}
+              />
+            ) : null}
+            {lessonsSummary.avg_win_giveback_pct != null ? (
+              <KpiCard
+                label="Avg Win Giveback"
+                value={`${fmtNum(lessonsSummary.avg_win_giveback_pct, 1)}pp`}
+                subtitle="given back from the peak"
+                kpiStyle={KPI_STYLES.equity[isDark ? "dark" : "light"]}
+                colors={colors}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {lessonsQuery.isError ? (
+          <InlineError message="Could not load the lessons log." />
+        ) : lessonsQuery.isLoading && lessons.length === 0 ? (
+          <ActivityIndicator color={colors.accentPrimary} />
+        ) : lessons.length === 0 ? (
+          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No closed trades yet — lessons appear once a position scales out or exits.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.tradesList}>
+            {lessons.map((l) => (
+              <LessonCard key={`${l.ticker}-${l.trade_date}`} lesson={l} />
+            ))}
+          </View>
+        )}
+
         <SectionTitle icon="history" title="Decision Log" colors={colors} />
         <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
           Every non-WAIT decision the trend-hold engine has made, so you can learn from what it saw —
@@ -430,4 +552,13 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 10, fontWeight: "600" },
   detailValue: { fontSize: 13, fontWeight: "700", marginTop: 1 },
   reasonText: { fontSize: 11, lineHeight: 16, fontStyle: "italic" },
+  enhancementBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  enhancementText: { flex: 1, fontSize: 11, lineHeight: 16 },
 });
