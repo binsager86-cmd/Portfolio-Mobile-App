@@ -10,7 +10,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ThemePalette } from "@/constants/theme";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { tokens } from "@/theme/tokens";
 import React, { useCallback, useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -47,16 +47,21 @@ function AnimatedTabItem({
   const focusAnim = useSharedValue(isFocused ? 1 : 0);
 
   useEffect(() => {
+    // Reanimated shared values are mutable values by design.
     focusAnim.value = withSpring(isFocused ? 1 : 0, SPRING_CONFIG);
-  }, [isFocused]);
+  }, [focusAnim, isFocused]);
 
   const handlePressIn = useCallback(() => {
+    // Reanimated shared values are mutable values by design.
+    // eslint-disable-next-line react-hooks/immutability
     scale.value = withSpring(0.85, { damping: 12, stiffness: 300 });
-  }, []);
+  }, [scale]);
 
   const handlePressOut = useCallback(() => {
+    // Reanimated shared values are mutable values by design.
+    // eslint-disable-next-line react-hooks/immutability
     scale.value = withSpring(1, SPRING_CONFIG);
-  }, []);
+  }, [scale]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -148,6 +153,21 @@ const ICON_MAP: Record<string, React.ComponentProps<typeof FontAwesome>["name"]>
   admin: "shield",
 };
 
+// Minimal shape of expo-router's tab-bar render props (SDK 56 dropped the
+// @react-navigation/bottom-tabs dependency, so this is defined locally
+// instead of importing BottomTabBarProps).
+interface TabBarRenderProps {
+  state: { index: number; routes: { key: string; name: string; params?: object }[] };
+  descriptors: Record<
+    string,
+    { options: Record<string, unknown> & { tabBarAccessibilityLabel?: string } }
+  >;
+  navigation: {
+    emit: (event: { type: string; target: string; canPreventDefault?: boolean }) => { defaultPrevented: boolean };
+    navigate: (name: string, params?: object) => void;
+  };
+}
+
 // ── Main component ─────────────────────────────────────────────────
 
 export function AnimatedTabBar({
@@ -156,7 +176,7 @@ export function AnimatedTabBar({
   navigation,
   colors,
   insetBottom,
-}: BottomTabBarProps & { colors: ThemePalette; insetBottom: number }) {
+}: TabBarRenderProps & { colors: ThemePalette; insetBottom: number }) {
   return (
     <View
       style={[
@@ -227,7 +247,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 6,
+    paddingTop: tokens.radii.sm,
   },
   activePill: {
     position: "absolute",
@@ -238,8 +258,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   label: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: tokens.typography.caption.fontSize,
+    marginTop: tokens.spacing.xs / 2,
     letterSpacing: 0.2,
   },
 });
