@@ -19,6 +19,7 @@ import {
   useTrendHoldBookLessons,
   useTrendHoldBookLessonsSummary,
   useTrendHoldBookNavHistory,
+  useTrendHoldBookPerformance,
   useTrendHoldBookPortfolio,
   useTrendHoldBookPositions,
   useTrendHoldBookTrades,
@@ -96,6 +97,26 @@ function KpiCard({
       <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>{label}</Text>
       <Text style={[styles.kpiValue, { color: kpiStyle.accent }]}>{value}</Text>
       {subtitle ? <Text style={[styles.kpiSub, { color: kpiStyle.accent }]}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+/** Compact stat tile -- denser than KpiCard, for the Performance scorecard grid. */
+function StatTile({
+  label,
+  value,
+  valueColor,
+  colors,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+  colors: ThemePalette;
+}) {
+  return (
+    <View style={[styles.statTile, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      <Text style={[styles.statTileLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.statTileValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
     </View>
   );
 }
@@ -302,6 +323,7 @@ export default function TrendHoldBookScreen() {
   const decisionLogQuery = useTrendHoldDecisionLog(150, false);
   const lessonsQuery = useTrendHoldBookLessons(100);
   const lessonsSummaryQuery = useTrendHoldBookLessonsSummary();
+  const performanceQuery = useTrendHoldBookPerformance();
 
   const isRefetching =
     portfolioQuery.isRefetching ||
@@ -310,7 +332,8 @@ export default function TrendHoldBookScreen() {
     navHistoryQuery.isRefetching ||
     decisionLogQuery.isRefetching ||
     lessonsQuery.isRefetching ||
-    lessonsSummaryQuery.isRefetching;
+    lessonsSummaryQuery.isRefetching ||
+    performanceQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
     portfolioQuery.refetch();
@@ -320,7 +343,11 @@ export default function TrendHoldBookScreen() {
     decisionLogQuery.refetch();
     lessonsQuery.refetch();
     lessonsSummaryQuery.refetch();
-  }, [portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery, lessonsQuery, lessonsSummaryQuery]);
+    performanceQuery.refetch();
+  }, [
+    portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery,
+    lessonsQuery, lessonsSummaryQuery, performanceQuery,
+  ]);
 
   const portfolio = portfolioQuery.data;
   const positions = positionsQuery.data?.positions ?? [];
@@ -329,6 +356,7 @@ export default function TrendHoldBookScreen() {
   const decisionEntries = decisionLogQuery.data?.entries ?? [];
   const lessons = lessonsQuery.data?.lessons ?? [];
   const lessonsSummary = lessonsSummaryQuery.data;
+  const performance = performanceQuery.data;
 
   const chartData: ChartDataPoint[] = navPoints.map((p) => ({ label: p.nav_date, value: p.equity_kwd }));
   const isPositive = (portfolio?.total_return_pct ?? 0) >= 0;
@@ -392,6 +420,84 @@ export default function TrendHoldBookScreen() {
             />
           </View>
         ) : null}
+
+        <SectionTitle icon="bar-chart" title="Performance" colors={colors} />
+        {performanceQuery.isError ? (
+          <InlineError message="Could not load performance stats." />
+        ) : performanceQuery.isLoading && !performance ? (
+          <ActivityIndicator color={colors.accentPrimary} />
+        ) : performance && performance.total_closed > 0 ? (
+          <View style={styles.statGrid}>
+            <StatTile
+              label="Record (W-L)"
+              value={`${performance.win_count}-${performance.loss_count}`}
+              colors={colors}
+            />
+            <StatTile
+              label="Win Rate"
+              value={performance.win_rate_pct != null ? `${fmtNum(performance.win_rate_pct, 0)}%` : "—"}
+              colors={colors}
+            />
+            <StatTile
+              label="Total P&L"
+              value={formatSignedCurrency(performance.total_realized_pnl_kwd)}
+              valueColor={performance.total_realized_pnl_kwd >= 0 ? colors.success : colors.danger}
+              colors={colors}
+            />
+            <StatTile
+              label="Max Profit"
+              value={performance.max_profit_kwd != null ? formatSignedCurrency(performance.max_profit_kwd) : "—"}
+              valueColor={colors.success}
+              colors={colors}
+            />
+            <StatTile
+              label="Max Loss"
+              value={performance.max_loss_kwd != null ? formatSignedCurrency(performance.max_loss_kwd) : "—"}
+              valueColor={colors.danger}
+              colors={colors}
+            />
+            <StatTile
+              label="Avg Win"
+              value={performance.avg_win_kwd != null ? formatSignedCurrency(performance.avg_win_kwd) : "—"}
+              valueColor={colors.success}
+              colors={colors}
+            />
+            <StatTile
+              label="Avg Loss"
+              value={performance.avg_loss_kwd != null ? formatSignedCurrency(performance.avg_loss_kwd) : "—"}
+              valueColor={colors.danger}
+              colors={colors}
+            />
+            <StatTile
+              label="Profit Factor"
+              value={performance.profit_factor != null ? fmtNum(performance.profit_factor, 2) : "—"}
+              colors={colors}
+            />
+            <StatTile
+              label="Expectancy / Trade"
+              value={performance.expectancy_kwd != null ? formatSignedCurrency(performance.expectancy_kwd) : "—"}
+              valueColor={
+                performance.expectancy_kwd != null
+                  ? performance.expectancy_kwd >= 0
+                    ? colors.success
+                    : colors.danger
+                  : undefined
+              }
+              colors={colors}
+            />
+            <StatTile
+              label="Commission Paid"
+              value={formatCurrency(performance.total_commission_paid_kwd)}
+              colors={colors}
+            />
+          </View>
+        ) : (
+          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No closed trades yet — performance stats appear once a position exits.
+            </Text>
+          </View>
+        )}
 
         <SectionTitle icon="briefcase" title="Open Positions" colors={colors} />
         {positionsQuery.isError ? (
@@ -517,6 +623,11 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 11, marginBottom: 6, fontWeight: "600" },
   kpiValue: { fontSize: 20, fontWeight: "800" },
   kpiSub: { fontSize: 11, marginTop: 4, fontWeight: "600" },
+
+  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  statTile: { minWidth: 100, flexGrow: 1, flexBasis: "30%", paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8, borderWidth: 1 },
+  statTileLabel: { fontSize: 10, fontWeight: "600", marginBottom: 3 },
+  statTileValue: { fontSize: 14, fontWeight: "800" },
 
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
   sectionTitle: { fontSize: 16, fontWeight: "800" },

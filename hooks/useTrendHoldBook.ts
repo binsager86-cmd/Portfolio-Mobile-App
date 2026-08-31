@@ -108,6 +108,21 @@ export interface TrendHoldBookLessonsSummary {
   avg_win_giveback_pct?: number | null;
 }
 
+export interface TrendHoldBookPerformance {
+  total_closed: number;
+  win_count: number;
+  loss_count: number;
+  win_rate_pct?: number | null;
+  total_realized_pnl_kwd: number;
+  max_profit_kwd?: number | null;
+  max_loss_kwd?: number | null;
+  avg_win_kwd?: number | null;
+  avg_loss_kwd?: number | null;
+  profit_factor?: number | null;
+  expectancy_kwd?: number | null;
+  total_commission_paid_kwd: number;
+}
+
 // ── Query keys ───────────────────────────────────────────────────────────────
 
 export const trendHoldBookKeys = {
@@ -119,6 +134,7 @@ export const trendHoldBookKeys = {
   decisionLog: () => [...trendHoldBookKeys.all, "decision-log"] as const,
   lessons: () => [...trendHoldBookKeys.all, "lessons"] as const,
   lessonsSummary: () => [...trendHoldBookKeys.all, "lessons-summary"] as const,
+  performance: () => [...trendHoldBookKeys.all, "performance"] as const,
 } as const;
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -269,6 +285,30 @@ export function useTrendHoldBookLessonsSummary(enabled = true) {
     queryFn: async () => {
       const { data } = await api.get<TrendHoldBookLessonsSummary>(
         "/api/v1/trend-hold-book/lessons/summary"
+      );
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useTrendHoldBookPerformance
+ * GET /api/v1/trend-hold-book/performance
+ *
+ * Standard trading scorecard (win rate, max profit/loss, profit factor,
+ * expectancy) computed directly from realized P&L -- populated as soon
+ * as any trade closes, independent of the lessons classifier.
+ */
+export function useTrendHoldBookPerformance(enabled = true) {
+  return useQuery<TrendHoldBookPerformance>({
+    queryKey: trendHoldBookKeys.performance(),
+    queryFn: async () => {
+      const { data } = await api.get<TrendHoldBookPerformance>(
+        "/api/v1/trend-hold-book/performance"
       );
       return data;
     },
