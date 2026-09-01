@@ -31,7 +31,12 @@ import { useAuthStore } from "@/services/authStore";
 
 const MAX_REFRESH_ATTEMPTS = 2;
 const RATE_LIMIT_WINDOW = 10_000; // 10s
-const RATE_LIMIT_MAX = 30;
+// Screens like Eagle Eye's Trend-Hold Book fire ~9 parallel queries on
+// mount by design (two independent paper books + comparison + decision
+// log), and normal navigation between data-heavy screens within the same
+// window compounds that. 30 was tripping during ordinary use, silently
+// rejecting requests client-side before they ever reached the network.
+const RATE_LIMIT_MAX = 90;
 
 // ── Rate limiter ────────────────────────────────────────────────────
 
