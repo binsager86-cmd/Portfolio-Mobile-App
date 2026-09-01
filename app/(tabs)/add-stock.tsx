@@ -330,7 +330,7 @@ export default function AddStockScreen() {
                   initialNumToRender={10}
                   maxToRenderPerBatch={10}
                   windowSize={5}
-                  removeClippedSubviews={true}
+                  removeClippedSubviews={false}
                   renderItem={({ item }) => {
                     const dup = existingSymbols.has(item.symbol.toUpperCase());
                     return (

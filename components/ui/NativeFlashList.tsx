@@ -3,7 +3,6 @@
  *   - Pull-to-refresh with haptic snap feedback
  *   - Native-feel RefreshControl tint from the active theme
  *   - Bottom padding for tab-bar clearance (iOS 100 / Android 80)
- *   - `removeClippedSubviews` on Android for memory savings
  *   - Sensible render-window defaults for 60 fps scroll
  *
  * This is the preferred list component for all screens. Prefer it over
@@ -118,7 +117,7 @@ export function NativeFlashList<T>({
       // Render window tuning (per-platform)
       initialNumToRender={12}
       drawDistance={Platform.OS === "ios" ? 600 : 400}
-      removeClippedSubviews={Platform.OS === "android"}
+      removeClippedSubviews={false}
     />
   );
 }

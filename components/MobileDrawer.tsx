@@ -222,7 +222,7 @@ export function MobileDrawer({ visible, onClose }: MobileDrawerProps) {
         <ScrollView
           style={s.navScroll}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={Platform.OS === "android"}
+          removeClippedSubviews={false}
         >
           {navItems.map((item) => (
             <DrawerNavItem

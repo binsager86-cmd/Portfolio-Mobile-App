@@ -50,7 +50,7 @@ export function AccessibleDragList<T extends DragItem>({
       initialNumToRender={10}
       maxToRenderPerBatch={10}
       windowSize={5}
-      removeClippedSubviews={true}
+      removeClippedSubviews={false}
       renderItem={({ item, index }) => (
         <View
           style={[styles.row, { borderBottomColor: colors.borderColor }]}

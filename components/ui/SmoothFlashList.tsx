@@ -90,7 +90,7 @@ export function SmoothFlashList<T>({
         contentContainerStyle={[styles.list, contentContainerStyle]}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.15}
-        removeClippedSubviews={Platform.OS === "android"}
+        removeClippedSubviews={false}
         optimizeItemArrangement={true}
         initialNumToRender={10}
         maxToRenderPerBatch={6}

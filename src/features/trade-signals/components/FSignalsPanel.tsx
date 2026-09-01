@@ -387,7 +387,7 @@ function AddStockModal({
                 initialNumToRender={10}
                 maxToRenderPerBatch={10}
                 windowSize={5}
-                removeClippedSubviews={true}
+                removeClippedSubviews={false}
                 renderItem={({ item, index }) => {
                   const active = selectedEntry?.symbol === item.symbol;
                   return (
@@ -685,7 +685,7 @@ function StockPicker({
           data={stocks}
           keyExtractor={(item) => String(item.id)}
           scrollEnabled={false}
-          removeClippedSubviews={true}
+          removeClippedSubviews={false}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={5}

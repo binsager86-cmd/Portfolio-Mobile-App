@@ -96,7 +96,7 @@ export function ListContainer<T>({
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
-      removeClippedSubviews={true}
+      removeClippedSubviews={false}
       initialNumToRender={8}
       maxToRenderPerBatch={5}
       windowSize={10}

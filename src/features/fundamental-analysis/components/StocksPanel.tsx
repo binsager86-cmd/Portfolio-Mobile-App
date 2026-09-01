@@ -335,7 +335,7 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                       initialNumToRender={15}
                       maxToRenderPerBatch={10}
                       windowSize={5}
-                      removeClippedSubviews={true}
+                      removeClippedSubviews={false}
                       renderItem={({ item, index }) => (
                         <Pressable
                           accessibilityRole="button"
