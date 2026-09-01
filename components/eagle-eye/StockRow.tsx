@@ -203,12 +203,27 @@ export const StockRow = React.memo(function StockRow({
         </View>
 
         <View style={styles.tableCellV2Decision}>
-          <Text style={[styles.tableNumText, { color: decisionMismatch ? colors.warning : colors.textPrimary }]} numberOfLines={1}>
-            {v2Decision ?? "—"}
-          </Text>
-          <Text style={[styles.tableSourceText, { color: colors.textMuted }]} numberOfLines={1}>
-            {simulatorState?.source === "day_zero_inventory" ? "Day-zero" : simulatorState?.source === "decision_log" ? "Decision log" : "—"}
-          </Text>
+          {simulatorState ? (
+            <>
+              <Text style={[styles.tableNumText, { color: decisionMismatch ? colors.warning : colors.textPrimary }]} numberOfLines={1}>
+                {v2Decision ?? "—"}
+              </Text>
+              <Text style={[styles.tableSourceText, { color: colors.textMuted }]} numberOfLines={1}>
+                {simulatorState.source === "day_zero_inventory" ? "Day-zero" : simulatorState.source === "decision_log" ? "Decision log" : "—"}
+              </Text>
+            </>
+          ) : (
+            // No live V2/simulator read for this ticker -- v2Decision has
+            // silently fallen back to `rating` (see index.tsx's `mapV2Decision
+            // (v2State) ?? stock.rating`, kept for filter/sort so "BUY rating
+            // only" still includes uncovered tickers). Showing that fallback
+            // value here would look like a second system independently
+            // confirming the rating, when it's really just the rating
+            // repeated -- so this cell says so honestly instead.
+            <Text style={[styles.tableSourceText, { color: colors.textMuted, fontStyle: "italic" }]} numberOfLines={2}>
+              No V2 data
+            </Text>
+          )}
           {decisionMismatch ? (
             <Text
               onPress={showDivergenceDetail}
@@ -433,8 +448,10 @@ export const StockRow = React.memo(function StockRow({
           );
         })()}
 
-        <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
-          {`V2 ${v2Decision ?? "—"} · gates ${v2GateText ?? "—"}`}
+        <Text style={{ fontSize: 10, color: colors.textMuted, fontStyle: simulatorState ? "normal" : "italic" }} numberOfLines={1}>
+          {simulatorState
+            ? `V2 ${v2Decision ?? "—"} · gates ${v2GateText ?? "—"}`
+            : "V2: no data"}
           {simulatorState?.lifecycle ? ` · ${simulatorState.lifecycle}` : ""}
           {simulatorState?.tier ? `/${simulatorState.tier}` : ""}
           {simulatorState?.source ? ` · src:${simulatorState.source === "day_zero_inventory" ? "DZ" : "DL"}` : ""}
