@@ -217,6 +217,14 @@ function TradeCard({ trade }: { trade: TrendHoldBookTrade }) {
             <Text style={[styles.detailValue, { color: pnlColor, fontWeight: "800" }]}>{formatSignedCurrency(pnl)}</Text>
           </View>
         ) : null}
+        {trade.confidence != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
+              {trade.side === "BUY" ? "Buy Confidence" : "Sell Confidence"}
+            </Text>
+            <Text style={[styles.detailValue, { color: sideStyle.accent }]}>{fmtNum(trade.confidence, 0)}/100</Text>
+          </View>
+        ) : null}
       </View>
 
       {trade.reason ? (
@@ -291,6 +299,9 @@ function DecisionLogRow({ entry }: { entry: TrendHoldDecisionLogEntry }) {
           <View style={[styles.sideBadge, { backgroundColor: style.bg, borderColor: style.border }]}>
             <Text style={[styles.sideBadgeText, { color: style.accent }]}>{entry.decision}</Text>
           </View>
+          {entry.confidence != null ? (
+            <Text style={[styles.rowMetaSmall, { color: style.accent, fontWeight: "700" }]}>{fmtNum(entry.confidence, 0)}/100</Text>
+          ) : null}
         </View>
         <Text style={[styles.rowMeta, { color: colors.textMuted }]} numberOfLines={2}>
           {entry.trade_date} · {entry.reason ?? "—"}

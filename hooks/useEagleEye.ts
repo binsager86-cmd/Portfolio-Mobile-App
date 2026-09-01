@@ -155,6 +155,7 @@ export interface RatedStock {
   trend_hold_reason?: string | null;
   trend_hold_stop?: number | null;
   trend_hold_entry_price?: number | null;
+  trend_hold_confidence?: number | null;  // 0-100 signal strength, BUY/SELL_SIGNAL only
 }
 
 export interface ScannerResponse {
@@ -237,6 +238,7 @@ export interface FullStockAnalysis {
   trend_hold_reason?: string | null;
   trend_hold_stop?: number | null;
   trend_hold_entry_price?: number | null;
+  trend_hold_confidence?: number | null;  // 0-100 signal strength, BUY/SELL_SIGNAL only
   computed_at?: string | null;
   days_of_history?: number | null;
 }

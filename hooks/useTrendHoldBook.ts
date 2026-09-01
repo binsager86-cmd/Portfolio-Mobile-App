@@ -51,6 +51,10 @@ export interface TrendHoldBookTrade {
   commission_kwd: number;
   realized_pnl_kwd?: number | null;
   reason?: string | null;
+  // 0-100 signal-strength score at the moment this decision fired.
+  // BUY/EXIT only -- null for SCALE_OUT (a fixed profit-milestone rule,
+  // not a judged signal).
+  confidence?: number | null;
 }
 
 export interface TrendHoldBookTradesResponse {
@@ -76,6 +80,7 @@ export interface TrendHoldDecisionLogEntry {
   position_state?: string | null;
   close?: number | null;
   structural_stop?: number | null;
+  confidence?: number | null;
 }
 
 export interface TrendHoldDecisionLogResponse {

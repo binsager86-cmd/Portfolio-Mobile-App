@@ -545,13 +545,19 @@ function TrendHoldCard({ analysis }: { analysis: FullStockAnalysis }) {
       {analysis.trend_hold_reason ? (
         <Text style={[styles.systemCalcText, { color: colors.textSecondary }]}>{analysis.trend_hold_reason}</Text>
       ) : null}
-      {analysis.trend_hold_entry_price != null || analysis.trend_hold_stop != null ? (
+      {analysis.trend_hold_entry_price != null || analysis.trend_hold_stop != null || analysis.trend_hold_confidence != null ? (
         <View style={styles.simMetricsRow}>
           {analysis.trend_hold_entry_price != null ? (
             <MetricChip label="Entry" value={analysis.trend_hold_entry_price.toFixed(3)} />
           ) : null}
           {analysis.trend_hold_stop != null ? (
             <MetricChip label="Trailing Stop" value={analysis.trend_hold_stop.toFixed(3)} />
+          ) : null}
+          {analysis.trend_hold_confidence != null ? (
+            <MetricChip
+              label={decision === "BUY" ? "Buy Confidence" : decision === "SELL_SIGNAL" ? "Sell Confidence" : "Confidence"}
+              value={`${analysis.trend_hold_confidence.toFixed(0)}/100`}
+            />
           ) : null}
         </View>
       ) : null}
