@@ -13,6 +13,7 @@ import { ConfluenceBar } from "@/components/eagle-eye/ConfluenceBar";
 import { EagleEyeChart } from "@/components/eagle-eye/EagleEyeChart";
 import { RatingBadge } from "@/components/eagle-eye/RatingBadge";
 import { isSimulatorFeatureEnabled } from "@/constants/Config";
+import { getTrendHoldColors } from "@/constants/eagleEyeColors";
 import { SafetyConfirmModal } from "@/components/eagle-eye/SafetyConfirmModal";
 import { SignalBreakdown } from "@/components/eagle-eye/SignalBreakdown";
 import { StageTag } from "@/components/eagle-eye/StageTag";
@@ -20,12 +21,12 @@ import { TradePlanCard } from "@/components/eagle-eye/TradePlanCard";
 import { MLSignalCard } from "@/components/eagle-eye/MLSignalCard";
 import { EE, STAGE_INTERPRETATIONS, getStageDescription, getStageLabelFull } from "@/constants/eagleEyeStrings";
 import { UITokens } from "@/constants/uiTokens";
-import { useEagleEyeStock } from "@/hooks/useEagleEye";
+import { useEagleEyeStock, type FullStockAnalysis } from "@/hooks/useEagleEye";
 import { findSimulatorState, useReadOnlySimulatorSymbolStates, type SimulatorSymbolState } from "@/hooks/useSimulatorReadOnly";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import EagleEyeDnaScreen from "./[ticker]-dna";
 import {
   ActivityIndicator,
@@ -63,28 +64,23 @@ export default function EagleEyeDetailScreen() {
   const v2Confidence = simulatorState?.confidence;
   const spikeConfidence = analysis?.confidence;
 
-  // Safety modal — auto-show when requires_confirmation
-  const [safetyVisible, setSafetyVisible] = useState(false);
+  // Safety modal — shown whenever requires_confirmation is true, until dismissed.
+  // Derived directly at render time (no effect needed): the modal's visibility
+  // is a pure function of (requires_confirmation, dismissed), not separate state
+  // that needs to be kept in sync with them.
   const [safetyDismissed, setSafetyDismissed] = useState(false);
+  const safetyVisible = Boolean(analysis?.requires_confirmation) && !safetyDismissed;
   // Stage tooltip (web hover)
   const [stageTooltipVisible, setStageTooltipVisible] = useState(false);
 
-  useEffect(() => {
-    if (analysis?.requires_confirmation && !safetyDismissed) {
-      setSafetyVisible(true);
-    }
-  }, [analysis?.requires_confirmation, safetyDismissed]);
-
-  const handleProceed = useCallback(() => {
-    setSafetyVisible(false);
+  const handleProceed = () => {
     setSafetyDismissed(true);
-  }, []);
+  };
 
-  const handleReduce = useCallback(() => {
-    setSafetyVisible(false);
+  const handleReduce = () => {
     setSafetyDismissed(true);
     // Could navigate to settings here — for now just dismiss
-  }, []);
+  };
 
   // Expo Router v6 routes [ticker]-dna URLs here; delegate to the DNA screen.
   if (isDnaRoute) {
@@ -240,6 +236,14 @@ export default function EagleEyeDetailScreen() {
         <View style={styles.section}>
           <ActionInterpretationCard analysis={analysis} />
         </View>
+
+        {/* ── Trend-Hold Book verdict — independent of the rating above ──── */}
+        {analysis.trend_hold_decision ? (
+          <View style={styles.section}>
+            <SectionTitle title="Trend-Hold Book" colors={colors} />
+            <TrendHoldCard analysis={analysis} />
+          </View>
+        ) : null}
 
         {/* ── Chart ─────────────────────────────────────────────────────────── */}
         {analysis.last_price != null && (
@@ -441,7 +445,7 @@ export default function EagleEyeDetailScreen() {
         worstCasePct={null}
         onProceed={handleProceed}
         onReduce={handleReduce}
-        onDismiss={() => setSafetyVisible(false)}
+        onDismiss={() => setSafetyDismissed(true)}
       />
     </View>
   );
@@ -509,6 +513,48 @@ function MetricChip({ label, value }: { label: string; value: string }) {
     <View style={[styles.metricChip, { backgroundColor: colors.bgSecondary, borderColor: colors.borderColor }]}>
       <Text style={[styles.metricLabel, { color: colors.textMuted }]}>{label}</Text>
       <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+/**
+ * TrendHoldCard -- surfaces the trend_hold_engine's own decision inline
+ * with the rating/Action Plan above. This is a SEPARATE, independent
+ * decision source (Donchian/EMA-cross entry, chandelier trailing stop) --
+ * it can legitimately disagree with `rating`/the Action Plan above it,
+ * because it's a different methodology, not a second opinion on the same
+ * one. Shown explicitly, right here, so that disagreement is never a
+ * surprise: this is what the Trend-Hold Book actually trades on.
+ */
+function TrendHoldCard({ analysis }: { analysis: FullStockAnalysis }) {
+  const { colors } = useThemeStore();
+  const decision = analysis.trend_hold_decision;
+  if (!decision) return null;
+
+  const palette = getTrendHoldColors(decision, colors);
+  return (
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      <View style={styles.trendHoldHeaderRow}>
+        <View style={[styles.trendHoldBadge, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+          <Text style={[styles.trendHoldBadgeText, { color: palette.text }]}>{decision}</Text>
+        </View>
+        <Text style={[styles.trendHoldCaption, { color: colors.textMuted }]}>
+          Independent of the rating above — different methodology
+        </Text>
+      </View>
+      {analysis.trend_hold_reason ? (
+        <Text style={[styles.systemCalcText, { color: colors.textSecondary }]}>{analysis.trend_hold_reason}</Text>
+      ) : null}
+      {analysis.trend_hold_entry_price != null || analysis.trend_hold_stop != null ? (
+        <View style={styles.simMetricsRow}>
+          {analysis.trend_hold_entry_price != null ? (
+            <MetricChip label="Entry" value={analysis.trend_hold_entry_price.toFixed(3)} />
+          ) : null}
+          {analysis.trend_hold_stop != null ? (
+            <MetricChip label="Trailing Stop" value={analysis.trend_hold_stop.toFixed(3)} />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -692,6 +738,26 @@ const styles = StyleSheet.create({
     borderRadius: UITokens.radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  trendHoldHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: UITokens.spacing.sm,
+    flexWrap: "wrap",
+  },
+  trendHoldBadge: {
+    borderWidth: 1,
+    borderRadius: UITokens.radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  trendHoldBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  trendHoldCaption: {
+    fontSize: 11,
+    fontStyle: "italic",
   },
   simStateBadge: {
     maxWidth: 210,

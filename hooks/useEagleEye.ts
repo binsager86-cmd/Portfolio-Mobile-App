@@ -229,6 +229,14 @@ export interface FullStockAnalysis {
   requires_confirmation?: boolean | null;
   last_price?: number | null;
   signals: SignalItem[];
+  // trend_hold_engine.py output -- an independent second read, computed
+  // and persisted separately from `rating` above. Never merge into or
+  // use to override `rating` -- can legitimately disagree, different
+  // methodology, not a bug. See [[eagle-eye-decision-source-isolation]].
+  trend_hold_decision?: string | null;  // BUY / HOLD / SCALE_OUT / SELL_SIGNAL / WAIT
+  trend_hold_reason?: string | null;
+  trend_hold_stop?: number | null;
+  trend_hold_entry_price?: number | null;
   computed_at?: string | null;
   days_of_history?: number | null;
 }
