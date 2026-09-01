@@ -1,12 +1,17 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
 /**
- * Trend-Hold Book screen.
+ * Paper Books screen.
  *
- * Read-only view of the virtual-money paper-trading ledger that
- * mechanically fills the trend_hold_engine's BUY/SCALE_OUT/SELL_SIGNAL
- * decisions across the full scanner universe. No manual buy/sell controls
- * -- every fill here was executed automatically by the 14:18 Asia/Kuwait
- * scheduler step, never by a person.
+ * Read-only view of two independent, virtual-money paper-trading ledgers,
+ * switchable via the selector at the top:
+ *   - "Trend-Hold" : mechanically fills trend_hold_engine's BUY/SCALE_OUT/
+ *     SELL_SIGNAL decisions (14:18 Asia/Kuwait scheduler step)
+ *   - "V1 Rating"  : mechanically fills the V1 rating engine's BUY/SELL
+ *     decisions (14:19 Asia/Kuwait scheduler step)
+ * Both start from the same capital and use identical sizing/commission, so
+ * their scorecards (shown side by side above the selector) are a fair,
+ * direct comparison. No manual buy/sell controls in either -- every fill
+ * was executed automatically, never by a person.
  *
  * This is SIMULATED. It is independent of the real portfolio
  * (holdings.tsx / trading.tsx) and of the unrelated eagle-eye/simulator
@@ -16,6 +21,7 @@ import SnapshotLineChart, { ChartDataPoint } from "@/components/charts/SnapshotL
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import type { ThemePalette } from "@/constants/theme";
 import {
+  useBookComparison,
   useTrendHoldBookLessons,
   useTrendHoldBookLessonsSummary,
   useTrendHoldBookNavHistory,
@@ -24,6 +30,8 @@ import {
   useTrendHoldBookPositions,
   useTrendHoldBookTrades,
   useTrendHoldDecisionLog,
+  type BookComparisonResponse,
+  type PaperBookId,
   type TrendHoldBookLesson,
   type TrendHoldBookPosition,
   type TrendHoldBookTrade,
@@ -34,7 +42,7 @@ import { fmtNum, formatCurrency, formatPercent, formatSignedCurrency } from "@/l
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, LayoutChangeEvent, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, LayoutChangeEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── KPI card palette — deliberately its own violet/amber identity, not the
@@ -117,6 +125,102 @@ function StatTile({
     <View style={[styles.statTile, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       <Text style={[styles.statTileLabel, { color: colors.textMuted }]}>{label}</Text>
       <Text style={[styles.statTileValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+const BOOK_LABEL: Record<PaperBookId, string> = {
+  trend_hold: "Trend-Hold",
+  v1_rating: "V1 Rating",
+};
+
+function BookSelector({
+  selected,
+  onSelect,
+  colors,
+}: {
+  selected: PaperBookId;
+  onSelect: (book: PaperBookId) => void;
+  colors: ThemePalette;
+}) {
+  const books: PaperBookId[] = ["trend_hold", "v1_rating"];
+  return (
+    <View style={styles.bookSelectorRow}>
+      {books.map((b) => {
+        const active = b === selected;
+        return (
+          <Pressable
+            key={b}
+            onPress={() => onSelect(b)}
+            style={[
+              styles.bookSelectorPill,
+              {
+                backgroundColor: active ? colors.accentPrimary : colors.bgCard,
+                borderColor: active ? colors.accentPrimary : colors.borderColor,
+              },
+            ]}
+          >
+            <Text style={[styles.bookSelectorText, { color: active ? "#ffffff" : colors.textPrimary }]}>
+              {BOOK_LABEL[b]}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Compact head-to-head scorecard, always visible regardless of which book is selected below. */
+function ComparisonStrip({ data, colors }: { data?: BookComparisonResponse; colors: ThemePalette }) {
+  const isDark = colors.mode === "dark";
+  if (!data) return null;
+
+  const rows: { label: string; format: (v: number | null | undefined) => string; better: "higher" | "higher_or_zero" }[] = [
+    { label: "Total P&L", format: (v) => formatSignedCurrency(v), better: "higher" },
+    { label: "Win Rate", format: (v) => (v != null ? `${fmtNum(v, 0)}%` : "—"), better: "higher" },
+    { label: "Profit Factor", format: (v) => (v != null ? fmtNum(v, 2) : "—"), better: "higher" },
+  ];
+  const fields: (keyof typeof data.trend_hold)[] = ["total_realized_pnl_kwd", "win_rate_pct", "profit_factor"];
+
+  return (
+    <View style={[styles.compareCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      <Text style={[styles.compareTitle, { color: colors.textPrimary }]}>Head-to-Head</Text>
+      <View style={styles.compareHeaderRow}>
+        <View style={styles.compareLabelCol} />
+        <Text style={[styles.compareColHeader, { color: colors.textMuted }]}>Trend-Hold</Text>
+        <Text style={[styles.compareColHeader, { color: colors.textMuted }]}>V1 Rating</Text>
+      </View>
+      {rows.map((row, i) => {
+        const thVal = data.trend_hold[fields[i]] as number | null | undefined;
+        const v1Val = data.v1_rating[fields[i]] as number | null | undefined;
+        const thWins = thVal != null && v1Val != null && thVal > v1Val;
+        const v1Wins = thVal != null && v1Val != null && v1Val > thVal;
+        return (
+          <View key={row.label} style={styles.compareRow}>
+            <Text style={[styles.compareLabelCol, styles.compareLabelText, { color: colors.textMuted }]}>{row.label}</Text>
+            <Text
+              style={[
+                styles.compareColValue,
+                { color: thWins ? colors.success : colors.textPrimary, fontWeight: thWins ? "800" : "600" },
+              ]}
+            >
+              {row.format(thVal)}
+            </Text>
+            <Text
+              style={[
+                styles.compareColValue,
+                { color: v1Wins ? colors.success : colors.textPrimary, fontWeight: v1Wins ? "800" : "600" },
+              ]}
+            >
+              {row.format(v1Val)}
+            </Text>
+          </View>
+        );
+      })}
+      <Text style={[styles.compareCaption, { color: colors.textMuted }]}>
+        {data.trend_hold.total_closed} closed trades (Trend-Hold) vs {data.v1_rating.total_closed} (V1 Rating) —
+        {isDark ? " " : " "}highlighted = currently ahead on that metric.
+      </Text>
     </View>
   );
 }
@@ -326,17 +430,20 @@ export default function TrendHoldBookScreen() {
   const isDark = colors.mode === "dark";
   const [chartWidth, setChartWidth] = useState(320);
   const onChartLayout = useCallback((e: LayoutChangeEvent) => setChartWidth(e.nativeEvent.layout.width), []);
+  const [selectedBook, setSelectedBook] = useState<PaperBookId>("trend_hold");
 
-  const portfolioQuery = useTrendHoldBookPortfolio();
-  const positionsQuery = useTrendHoldBookPositions();
-  const tradesQuery = useTrendHoldBookTrades(100);
-  const navHistoryQuery = useTrendHoldBookNavHistory(180);
-  const decisionLogQuery = useTrendHoldDecisionLog(150, false);
-  const lessonsQuery = useTrendHoldBookLessons(100);
-  const lessonsSummaryQuery = useTrendHoldBookLessonsSummary();
-  const performanceQuery = useTrendHoldBookPerformance();
+  const comparisonQuery = useBookComparison();
+  const portfolioQuery = useTrendHoldBookPortfolio(selectedBook);
+  const positionsQuery = useTrendHoldBookPositions(selectedBook);
+  const tradesQuery = useTrendHoldBookTrades(100, selectedBook);
+  const navHistoryQuery = useTrendHoldBookNavHistory(180, selectedBook);
+  const decisionLogQuery = useTrendHoldDecisionLog(150, false, selectedBook === "trend_hold");
+  const lessonsQuery = useTrendHoldBookLessons(100, selectedBook);
+  const lessonsSummaryQuery = useTrendHoldBookLessonsSummary(selectedBook);
+  const performanceQuery = useTrendHoldBookPerformance(selectedBook);
 
   const isRefetching =
+    comparisonQuery.isRefetching ||
     portfolioQuery.isRefetching ||
     positionsQuery.isRefetching ||
     tradesQuery.isRefetching ||
@@ -347,6 +454,7 @@ export default function TrendHoldBookScreen() {
     performanceQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
+    comparisonQuery.refetch();
     portfolioQuery.refetch();
     positionsQuery.refetch();
     tradesQuery.refetch();
@@ -356,7 +464,7 @@ export default function TrendHoldBookScreen() {
     lessonsSummaryQuery.refetch();
     performanceQuery.refetch();
   }, [
-    portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery,
+    comparisonQuery, portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery,
     lessonsQuery, lessonsSummaryQuery, performanceQuery,
   ]);
 
@@ -381,20 +489,28 @@ export default function TrendHoldBookScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={colors.accentPrimary} />}
       >
-        <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Trend-Hold Book</Text>
+        <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Paper Books</Text>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted }]}>
-          Auto paper-trades the trend-hold engine's decisions across the full scanner universe.
+          Two independent auto paper-traders, run side by side so you can see which strategy actually performs better.
         </Text>
         <SimulatedBanner />
 
+        {comparisonQuery.isError ? (
+          <InlineError message="Could not load the head-to-head comparison." />
+        ) : (
+          <ComparisonStrip data={comparisonQuery.data} colors={colors} />
+        )}
+
+        <BookSelector selected={selectedBook} onSelect={setSelectedBook} colors={colors} />
+
         {portfolioQuery.isError ? (
-          <InlineError message="Could not load the Trend-Hold Book portfolio. Pull to refresh to retry." />
+          <InlineError message={`Could not load the ${BOOK_LABEL[selectedBook]} Book portfolio. Pull to refresh to retry.`} />
         ) : portfolioQuery.isLoading && !portfolio ? (
           <ActivityIndicator color={colors.accentPrimary} />
         ) : portfolio ? (
           <View style={styles.kpiRow}>
             <KpiCard
-              label="Portfolio Value"
+              label={`${BOOK_LABEL[selectedBook]} Value`}
               value={formatCurrency(portfolio.equity_kwd)}
               subtitle={formatPercent(portfolio.total_return_pct)}
               kpiStyle={returnStyle}
@@ -596,24 +712,34 @@ export default function TrendHoldBookScreen() {
           </View>
         )}
 
-        <SectionTitle icon="history" title="Decision Log" colors={colors} />
-        <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
-          Every non-WAIT decision the trend-hold engine has made, so you can learn from what it saw —
-          not just the trades the book acted on.
-        </Text>
-        {decisionLogQuery.isError ? (
-          <InlineError message="Could not load the decision log." />
-        ) : decisionLogQuery.isLoading && decisionEntries.length === 0 ? (
-          <ActivityIndicator color={colors.accentPrimary} />
-        ) : decisionEntries.length === 0 ? (
-          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No decisions logged yet.</Text>
-          </View>
+        {selectedBook === "trend_hold" ? (
+          <>
+            <SectionTitle icon="history" title="Decision Log" colors={colors} />
+            <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
+              Every non-WAIT decision the trend-hold engine has made, so you can learn from what it saw —
+              not just the trades the book acted on.
+            </Text>
+            {decisionLogQuery.isError ? (
+              <InlineError message="Could not load the decision log." />
+            ) : decisionLogQuery.isLoading && decisionEntries.length === 0 ? (
+              <ActivityIndicator color={colors.accentPrimary} />
+            ) : decisionEntries.length === 0 ? (
+              <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>No decisions logged yet.</Text>
+              </View>
+            ) : (
+              <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+                {decisionEntries.map((e, idx) => (
+                  <DecisionLogRow key={`${e.ticker}-${e.trade_date}-${idx}`} entry={e} />
+                ))}
+              </View>
+            )}
+          </>
         ) : (
-          <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-            {decisionEntries.map((e, idx) => (
-              <DecisionLogRow key={`${e.ticker}-${e.trade_date}-${idx}`} entry={e} />
-            ))}
+          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No decision log for V1 Rating yet — only its executed trades (above) and lessons are tracked so far.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -628,6 +754,20 @@ const styles = StyleSheet.create({
   pageSubtitle: { fontSize: 13, lineHeight: 19 },
   simBanner: { flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 8, padding: 12 },
   simBannerText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: "700" },
+
+  bookSelectorRow: { flexDirection: "row", gap: 8 },
+  bookSelectorPill: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 1.5 },
+  bookSelectorText: { fontSize: 13, fontWeight: "800" },
+
+  compareCard: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  compareTitle: { fontSize: 14, fontWeight: "800" },
+  compareHeaderRow: { flexDirection: "row", alignItems: "center" },
+  compareLabelCol: { flex: 1.2 },
+  compareColHeader: { flex: 1, fontSize: 11, fontWeight: "700", textAlign: "right" },
+  compareRow: { flexDirection: "row", alignItems: "center" },
+  compareLabelText: { fontSize: 12, fontWeight: "600" },
+  compareColValue: { flex: 1, fontSize: 14, textAlign: "right" },
+  compareCaption: { fontSize: 10, lineHeight: 14, marginTop: 4 },
 
   kpiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   kpiCard: { minWidth: 150, flex: 1, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, borderWidth: 1 },

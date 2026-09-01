@@ -1,12 +1,20 @@
 /**
- * Trend-Hold Book React Query hooks.
+ * Paper Book React Query hooks.
  *
- * Wraps the 3 read-only backend endpoints for the Trend-Hold Book — a
- * virtual-money paper-trading ledger that mechanically fills the
- * trend_hold_engine's BUY/SCALE_OUT/SELL_SIGNAL decisions. Independent of
- * the real portfolio (useHoldings/useTrading) and of the unrelated
- * eagle-eye/simulator screens (a different, already-existing 3-symbol
- * backtest system).
+ * Wraps the read-only backend endpoints for BOTH virtual-money paper-
+ * trading books:
+ *   - "trend_hold" : mechanically fills trend_hold_engine's BUY/SCALE_OUT/
+ *     SELL_SIGNAL decisions (/api/v1/trend-hold-book/*)
+ *   - "v1_rating"  : mechanically fills the V1 rating engine's BUY/SELL
+ *     decisions (/api/v1/v1-rating-book/*)
+ * Run side by side, own starting capital, own cash, own positions, own
+ * trades -- so the two strategies' real performance can be compared
+ * directly (see useBookComparison). Independent of the real portfolio
+ * (useHoldings/useTrading) and of the unrelated eagle-eye/simulator
+ * screens (a different, already-existing 3-symbol backtest system).
+ *
+ * Every hook below defaults to `book: "trend_hold"` so existing call
+ * sites keep working unchanged; pass `"v1_rating"` for the second book.
  *
  * All requests go through the shared Axios client (JWT auth attached
  * automatically by the request interceptor in services/api/client.ts).
@@ -14,6 +22,12 @@
 
 import api from "@/services/api/client";
 import { useQuery } from "@tanstack/react-query";
+
+export type PaperBookId = "trend_hold" | "v1_rating";
+
+function bookPrefix(book: PaperBookId): string {
+  return book === "trend_hold" ? "/api/v1/trend-hold-book" : "/api/v1/v1-rating-book";
+}
 
 // ── Type definitions ─────────────────────────────────────────────────────────
 
@@ -128,34 +142,40 @@ export interface TrendHoldBookPerformance {
   total_commission_paid_kwd: number;
 }
 
+export interface BookComparisonResponse {
+  trend_hold: TrendHoldBookPerformance;
+  v1_rating: TrendHoldBookPerformance;
+}
+
 // ── Query keys ───────────────────────────────────────────────────────────────
 
 export const trendHoldBookKeys = {
   all: ["trend-hold-book"] as const,
-  portfolio: () => [...trendHoldBookKeys.all, "portfolio"] as const,
-  positions: () => [...trendHoldBookKeys.all, "positions"] as const,
-  trades: () => [...trendHoldBookKeys.all, "trades"] as const,
-  navHistory: () => [...trendHoldBookKeys.all, "nav-history"] as const,
+  portfolio: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "portfolio"] as const,
+  positions: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "positions"] as const,
+  trades: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "trades"] as const,
+  navHistory: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "nav-history"] as const,
   decisionLog: () => [...trendHoldBookKeys.all, "decision-log"] as const,
-  lessons: () => [...trendHoldBookKeys.all, "lessons"] as const,
-  lessonsSummary: () => [...trendHoldBookKeys.all, "lessons-summary"] as const,
-  performance: () => [...trendHoldBookKeys.all, "performance"] as const,
+  lessons: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "lessons"] as const,
+  lessonsSummary: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "lessons-summary"] as const,
+  performance: (book: PaperBookId) => [...trendHoldBookKeys.all, book, "performance"] as const,
+  comparison: () => [...trendHoldBookKeys.all, "comparison"] as const,
 } as const;
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 
 /**
  * useTrendHoldBookPortfolio
- * GET /api/v1/trend-hold-book/portfolio
+ * GET /api/v1/{book}/portfolio
  *
- * staleTime: 10 minutes — data changes only on the 14:18 Asia/Kuwait
- * scheduler step, matching the scanner/trend-hold data cadence.
+ * staleTime: 10 minutes — data changes only on each book's daily
+ * scheduler step.
  */
-export function useTrendHoldBookPortfolio(enabled = true) {
+export function useTrendHoldBookPortfolio(book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookPortfolio>({
-    queryKey: trendHoldBookKeys.portfolio(),
+    queryKey: trendHoldBookKeys.portfolio(book),
     queryFn: async () => {
-      const { data } = await api.get<TrendHoldBookPortfolio>("/api/v1/trend-hold-book/portfolio");
+      const { data } = await api.get<TrendHoldBookPortfolio>(`${bookPrefix(book)}/portfolio`);
       return data;
     },
     staleTime: 10 * 60_000,
@@ -167,13 +187,13 @@ export function useTrendHoldBookPortfolio(enabled = true) {
 
 /**
  * useTrendHoldBookPositions
- * GET /api/v1/trend-hold-book/positions
+ * GET /api/v1/{book}/positions
  */
-export function useTrendHoldBookPositions(enabled = true) {
+export function useTrendHoldBookPositions(book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookPositionsResponse>({
-    queryKey: trendHoldBookKeys.positions(),
+    queryKey: trendHoldBookKeys.positions(book),
     queryFn: async () => {
-      const { data } = await api.get<TrendHoldBookPositionsResponse>("/api/v1/trend-hold-book/positions");
+      const { data } = await api.get<TrendHoldBookPositionsResponse>(`${bookPrefix(book)}/positions`);
       return data;
     },
     staleTime: 10 * 60_000,
@@ -185,14 +205,14 @@ export function useTrendHoldBookPositions(enabled = true) {
 
 /**
  * useTrendHoldBookTrades
- * GET /api/v1/trend-hold-book/trades
+ * GET /api/v1/{book}/trades
  */
-export function useTrendHoldBookTrades(limit = 300, enabled = true) {
+export function useTrendHoldBookTrades(limit = 300, book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookTradesResponse>({
-    queryKey: [...trendHoldBookKeys.trades(), limit],
+    queryKey: [...trendHoldBookKeys.trades(book), limit],
     queryFn: async () => {
       const { data } = await api.get<TrendHoldBookTradesResponse>(
-        `/api/v1/trend-hold-book/trades?limit=${limit}`
+        `${bookPrefix(book)}/trades?limit=${limit}`
       );
       return data;
     },
@@ -205,16 +225,16 @@ export function useTrendHoldBookTrades(limit = 300, enabled = true) {
 
 /**
  * useTrendHoldBookNavHistory
- * GET /api/v1/trend-hold-book/nav-history
+ * GET /api/v1/{book}/nav-history
  *
  * Daily equity snapshots -- feeds the equity curve chart.
  */
-export function useTrendHoldBookNavHistory(days = 180, enabled = true) {
+export function useTrendHoldBookNavHistory(days = 180, book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookNavHistoryResponse>({
-    queryKey: [...trendHoldBookKeys.navHistory(), days],
+    queryKey: [...trendHoldBookKeys.navHistory(book), days],
     queryFn: async () => {
       const { data } = await api.get<TrendHoldBookNavHistoryResponse>(
-        `/api/v1/trend-hold-book/nav-history?days=${days}`
+        `${bookPrefix(book)}/nav-history?days=${days}`
       );
       return data;
     },
@@ -232,8 +252,8 @@ export function useTrendHoldBookNavHistory(days = 180, enabled = true) {
  * The trend-hold engine's full decision history (BUY/HOLD/SCALE_OUT/
  * SELL_SIGNAL, and WAIT when includeWait=true) -- independent of the
  * book's trade ledger, this is every decision the engine made, not just
- * the ones the book acted on. Lets the user learn from/audit the engine
- * over time, not just see today's snapshot.
+ * the ones the book acted on. Trend-Hold-only -- no V1 equivalent exists
+ * yet, so this hook has no `book` parameter.
  */
 export function useTrendHoldDecisionLog(limit = 200, includeWait = false, enabled = true) {
   return useQuery<TrendHoldDecisionLogResponse>({
@@ -253,19 +273,20 @@ export function useTrendHoldDecisionLog(limit = 200, includeWait = false, enable
 
 /**
  * useTrendHoldBookLessons
- * GET /api/v1/trend-hold-book/lessons
+ * GET /api/v1/{book}/lessons
  *
- * Post-trade "autopsy" for each closed leg (SCALE_OUT/EXIT) -- an
- * auditable, rule-based classification (not a black box) explaining why
- * a trade won or lost, using the realized price path, plus a suggested
- * enhancement. See app/services/eagle_eye_v2/trend_hold_lessons.py.
+ * Post-trade "autopsy" for each closed leg -- an auditable, rule-based
+ * classification (not a black box) explaining why a trade won or lost,
+ * using the realized price path, plus a suggested enhancement. See
+ * app/services/eagle_eye_v2/trend_hold_lessons.py (signal-source-agnostic,
+ * shared by both books).
  */
-export function useTrendHoldBookLessons(limit = 200, enabled = true) {
+export function useTrendHoldBookLessons(limit = 200, book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookLessonsResponse>({
-    queryKey: [...trendHoldBookKeys.lessons(), limit],
+    queryKey: [...trendHoldBookKeys.lessons(book), limit],
     queryFn: async () => {
       const { data } = await api.get<TrendHoldBookLessonsResponse>(
-        `/api/v1/trend-hold-book/lessons?limit=${limit}`
+        `${bookPrefix(book)}/lessons?limit=${limit}`
       );
       return data;
     },
@@ -278,19 +299,13 @@ export function useTrendHoldBookLessons(limit = 200, enabled = true) {
 
 /**
  * useTrendHoldBookLessonsSummary
- * GET /api/v1/trend-hold-book/lessons/summary
- *
- * Aggregate rollup of the lessons log -- the evidence to look at before
- * deciding whether a trend_hold_engine.py parameter actually needs to
- * change, rather than reacting to any single trade.
+ * GET /api/v1/{book}/lessons/summary
  */
-export function useTrendHoldBookLessonsSummary(enabled = true) {
+export function useTrendHoldBookLessonsSummary(book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookLessonsSummary>({
-    queryKey: trendHoldBookKeys.lessonsSummary(),
+    queryKey: trendHoldBookKeys.lessonsSummary(book),
     queryFn: async () => {
-      const { data } = await api.get<TrendHoldBookLessonsSummary>(
-        "/api/v1/trend-hold-book/lessons/summary"
-      );
+      const { data } = await api.get<TrendHoldBookLessonsSummary>(`${bookPrefix(book)}/lessons/summary`);
       return data;
     },
     staleTime: 10 * 60_000,
@@ -302,19 +317,38 @@ export function useTrendHoldBookLessonsSummary(enabled = true) {
 
 /**
  * useTrendHoldBookPerformance
- * GET /api/v1/trend-hold-book/performance
+ * GET /api/v1/{book}/performance
  *
  * Standard trading scorecard (win rate, max profit/loss, profit factor,
  * expectancy) computed directly from realized P&L -- populated as soon
  * as any trade closes, independent of the lessons classifier.
  */
-export function useTrendHoldBookPerformance(enabled = true) {
+export function useTrendHoldBookPerformance(book: PaperBookId = "trend_hold", enabled = true) {
   return useQuery<TrendHoldBookPerformance>({
-    queryKey: trendHoldBookKeys.performance(),
+    queryKey: trendHoldBookKeys.performance(book),
     queryFn: async () => {
-      const { data } = await api.get<TrendHoldBookPerformance>(
-        "/api/v1/trend-hold-book/performance"
-      );
+      const { data } = await api.get<TrendHoldBookPerformance>(`${bookPrefix(book)}/performance`);
+      return data;
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 2,
+    enabled,
+  });
+}
+
+/**
+ * useBookComparison
+ * GET /api/v1/v1-rating-book/compare
+ *
+ * Both books' performance scorecards side by side -- the direct
+ * "which one is best" answer.
+ */
+export function useBookComparison(enabled = true) {
+  return useQuery<BookComparisonResponse>({
+    queryKey: trendHoldBookKeys.comparison(),
+    queryFn: async () => {
+      const { data } = await api.get<BookComparisonResponse>("/api/v1/v1-rating-book/compare");
       return data;
     },
     staleTime: 10 * 60_000,
