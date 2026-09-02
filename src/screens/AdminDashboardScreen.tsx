@@ -210,6 +210,7 @@ function TableHeader({
       {columns.map((col) => (
         <Text
           key={col.label}
+          numberOfLines={1}
           style={[
             st.tableHeaderCell,
             { flex: col.flex, textAlign: col.align ?? "left",
@@ -304,31 +305,31 @@ function UserTableRow({
         },
       ]}
     >
-      <Text style={[st.tableCell, { flex: 1.2, color: colors.textPrimary, fontSize: fonts.body }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1.2, color: colors.textPrimary, fontSize: fonts.body }]}>
         {formatDate(user.created_at)}
       </Text>
-      <Text style={[st.tableCell, { flex: 1.2, color: colors.textPrimary, fontSize: fonts.body, fontWeight: "600" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1.2, color: colors.textPrimary, fontSize: fonts.body, fontWeight: "600" }]}>
         {user.name || "\u2014"}
       </Text>
-      <Text style={[st.tableCell, { flex: 1, color: colors.textMuted, fontSize: fonts.body }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1, color: colors.textMuted, fontSize: fonts.body }]}>
         @{user.username}
       </Text>
-      <Text style={[st.tableCell, { flex: 1.2, color: colors.textMuted, fontSize: fonts.body, textAlign: "center" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1.2, color: colors.textMuted, fontSize: fonts.body, textAlign: "center" }]}>
         {timeAgo(user.last_login, t)}
       </Text>
-      <Text style={[st.tableCell, { flex: 1, color: colors.textPrimary, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1, color: colors.textPrimary, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
         {fmtInt(user.stocks_value)}
       </Text>
-      <Text style={[st.tableCell, { flex: 0.8, color: colors.success ?? "#27ae60", fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 0.8, color: colors.success ?? "#27ae60", fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
         {fmtInt(user.cash_balance)}
       </Text>
-      <Text style={[st.tableCell, { flex: 1, color: colors.textPrimary, fontSize: fonts.body, textAlign: "center", fontWeight: "700" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 1, color: colors.textPrimary, fontSize: fonts.body, textAlign: "center", fontWeight: "700" }]}>
         {fmtInt(user.total_value)}
       </Text>
-      <Text style={[st.tableCell, { flex: 0.8, color: growthColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 0.8, color: growthColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
         {growthSign}{fmtInt(user.growth_value)}
       </Text>
-      <Text style={[st.tableCell, { flex: 0.8, color: dailyColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
+      <Text numberOfLines={1} style={[st.tableCell, { flex: 0.8, color: dailyColor, fontSize: fonts.body, textAlign: "center", fontWeight: "600" }]}>
         {dailySign}{fmtInt(user.daily_change)}
       </Text>
     </Pressable>
@@ -505,6 +506,11 @@ function AdminDashboardScreen() {
     [usersData],
   );
 
+  const sortedUsers = useMemo(
+    () => [...(usersData?.users ?? [])].sort((a, b) => (b.last_login ?? 0) - (a.last_login ?? 0)),
+    [usersData],
+  );
+
   if (!isAdmin) {
     return (
       <View style={[st.center, { backgroundColor: colors.bgPrimary, flex: 1 }]}>
@@ -647,7 +653,7 @@ function AdminDashboardScreen() {
           {usersLoading ? (
             <ActivityIndicator color={colors.accentPrimary} style={{ padding: SPACE_24 }} />
           ) : (
-            (usersData?.users ?? []).map((user) => (
+            sortedUsers.map((user) => (
               <UserTableRow
                 key={user.id}
                 user={user}
@@ -958,7 +964,7 @@ function AdminDashboardScreen() {
           {usersLoading ? (
             <ActivityIndicator color={colors.accentPrimary} style={{ padding: SPACE_24 }} />
           ) : (
-            (usersData?.users ?? [])
+            sortedUsers
               .filter((u) =>
                 !manageSearch ||
                 u.username.toLowerCase().includes(manageSearch.toLowerCase()) ||
@@ -1329,14 +1335,17 @@ const st = StyleSheet.create({
     flexDirection: "row", paddingHorizontal: SPACE_16, paddingVertical: SPACE_8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  tableHeaderCell: { fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+  tableHeaderCell: {
+    fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5,
+    flexShrink: 1, minWidth: 0,
+  },
   tableRow: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: SPACE_16, paddingVertical: SPACE_12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     ...Platform.select({ web: ({ cursor: "pointer" } as unknown as ViewStyle) }),
   },
-  tableCell: { paddingRight: SPACE_8 },
+  tableCell: { paddingRight: SPACE_8, flexShrink: 1, minWidth: 0 },
 
   userCardMobile: {
     paddingHorizontal: SPACE_16, paddingVertical: SPACE_12,
