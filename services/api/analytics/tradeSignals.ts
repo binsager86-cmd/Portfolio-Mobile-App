@@ -22,6 +22,7 @@ export interface PEQuarterlyResponse {
   years: number[];
   pe_table: Record<string, QuarterRow>;
   growth_table: Record<string, QuarterRow>;
+  qoq_growth_table: Record<string, QuarterRow>;
   averages: QuarterRow;
   current_pe: number | null;
   current_quarter: Quarter;

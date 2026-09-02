@@ -626,6 +626,7 @@
     "peError": "Could not load P/E data. The data source may be temporarily unavailable.",
     "peTable": "P/E Table",
     "growthTable": "P/E Growth (YoY %)",
+    "qoqGrowthTable": "P/E Growth (QoQ %)",
     "year": "Year",
     "average": "Avg",
     "verdictTitle": "Verdict",

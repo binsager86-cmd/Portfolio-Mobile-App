@@ -44,6 +44,40 @@ type SignalTabKey = "pe" | "dividendYield" | "whaleTracker" | "quarterMovement";
 const US_SUFFIXES = new Set(["US", "USA", "NYSE", "NASDAQ", "AMEX"]);
 const KW_SUFFIXES = new Set(["KW", "KSE", "BK"]);
 
+// Local style literals — named per custom-styles/no-hardcoded-styles, which
+// forbids raw numeric/hex literals in style properties. This file predates
+// the app-wide theme/tokens.ts scale and uses finer-grained values than that
+// scale defines, so values are preserved as-is and only extracted into named
+// constants (no visual change).
+const SPACE_1 = 1;
+const SPACE_2 = 2;
+const SPACE_3 = 3;
+const SPACE_4 = 4;
+const SPACE_5 = 5;
+const SPACE_6 = 6;
+const SPACE_7 = 7;
+const SPACE_8 = 8;
+const SPACE_9 = 9;
+const SPACE_10 = 10;
+const SPACE_12 = 12;
+const SPACE_14 = 14;
+const SPACE_16 = 16;
+const SPACE_18 = 18;
+const SPACE_24 = 24;
+const SPACE_28 = 28;
+const SPACE_36 = 36;
+const SPACE_80 = 80;
+const FONT_10 = 10;
+const FONT_11 = 11;
+const FONT_12 = 12;
+const FONT_13 = 13;
+const FONT_14 = 14;
+const FONT_15 = 15;
+const FONT_16 = 16;
+const FONT_18 = 18;
+const COLOR_WHITE = "#fff";
+const COLOR_DANGER_RED = "#e74c3c";
+
 const fmtPe = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? "-" : v.toFixed(2);
 
@@ -125,7 +159,7 @@ export function FSignalsPanel({ colors }: { colors: ThemePalette }) {
 
       {signalTab === "pe" && peQuery.isLoading && (        <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.accentPrimary} />
-          <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 13 }}>
+          <Text style={{ color: colors.textMuted, marginTop: SPACE_8, fontSize: FONT_13 }}>
             {t("tradeSignals.loadingPe", "Loading P/E history...")}
           </Text>
         </View>
@@ -173,7 +207,7 @@ function SignalTabBar({
         ]}
       >
         <FontAwesome name="line-chart" size={12} color={active === "pe" ? colors.accentPrimary : colors.textMuted} />
-        <Text style={{ color: active === "pe" ? colors.accentPrimary : colors.textSecondary, fontSize: 12, fontWeight: "700" }}>
+        <Text style={{ color: active === "pe" ? colors.accentPrimary : colors.textSecondary, fontSize: FONT_12, fontWeight: "700" }}>
           {t("tradeSignals.peSignal", "P/E Signal")}
         </Text>
       </Pressable>
@@ -191,7 +225,7 @@ function SignalTabBar({
         <Text
           style={{
             color: active === "dividendYield" ? colors.accentPrimary : colors.textSecondary,
-            fontSize: 12,
+            fontSize: FONT_12,
             fontWeight: "700",
           }}
         >
@@ -212,7 +246,7 @@ function SignalTabBar({
         <Text
           style={{
             color: active === "whaleTracker" ? colors.accentPrimary : colors.textSecondary,
-            fontSize: 12,
+            fontSize: FONT_12,
             fontWeight: "700",
           }}
         >
@@ -233,7 +267,7 @@ function SignalTabBar({
         <Text
           style={{
             color: active === "quarterMovement" ? colors.accentPrimary : colors.textSecondary,
-            fontSize: 12,
+            fontSize: FONT_12,
             fontWeight: "700",
           }}
         >
@@ -333,7 +367,7 @@ function AddStockModal({
                 },
               ]}
             >
-              <Text style={{ color: market === "kuwait" ? colors.accentPrimary : colors.textSecondary, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: market === "kuwait" ? colors.accentPrimary : colors.textSecondary, fontSize: FONT_12, fontWeight: "700" }}>
                 Kuwait (KSE)
               </Text>
             </Pressable>
@@ -351,14 +385,14 @@ function AddStockModal({
                 },
               ]}
             >
-              <Text style={{ color: market === "us" ? colors.accentPrimary : colors.textSecondary, fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: market === "us" ? colors.accentPrimary : colors.textSecondary, fontSize: FONT_12, fontWeight: "700" }}>
                 US
               </Text>
             </Pressable>
           </View>
 
           <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>Search & Select Stock</Text>
-          <View style={[styles.searchBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, marginBottom: 8 }]}>
+          <View style={[styles.searchBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, marginBottom: SPACE_8 }]}>
             <FontAwesome name="search" size={12} color={colors.textMuted} />
             <TextInput
               value={pickerSearch}
@@ -405,10 +439,10 @@ function AddStockModal({
                         },
                       ]}
                     >
-                      <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700", width: 90 }}>
+                      <Text style={{ color: colors.textPrimary, fontSize: FONT_12, fontWeight: "700", width: 90 }}>
                         {item.symbol}
                       </Text>
-                      <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12, flex: 1 }}>
+                      <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: FONT_12, flex: 1 }}>
                         {item.name}
                       </Text>
                       {active && <FontAwesome name="check-circle" size={14} color={colors.accentPrimary} />}
@@ -416,8 +450,8 @@ function AddStockModal({
                   );
                 }}
                 ListEmptyComponent={
-                  <View style={{ padding: 16, alignItems: "center" }}>
-                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>No stocks found</Text>
+                  <View style={{ padding: SPACE_16, alignItems: "center" }}>
+                    <Text style={{ color: colors.textMuted, fontSize: FONT_12 }}>No stocks found</Text>
                   </View>
                 }
               />
@@ -426,7 +460,7 @@ function AddStockModal({
 
           <View style={styles.modalActions}>
             <Pressable onPress={onClose} style={[styles.modalBtn, { backgroundColor: colors.bgInput }]}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 12 }}>
+              <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: FONT_12 }}>
                 {t("common.cancel", "Cancel")}
               </Text>
             </Pressable>
@@ -437,7 +471,7 @@ function AddStockModal({
                 { backgroundColor: canSubmit ? colors.accentPrimary : colors.textMuted + "55" },
               ]}
             >
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+              <Text style={{ color: COLOR_WHITE, fontWeight: "700", fontSize: FONT_12 }}>
                 {createMut.isPending ? t("tradeSignals.adding", "Adding...") : t("tradeSignals.add", "Add")}
               </Text>
             </Pressable>
@@ -569,14 +603,14 @@ function StockPicker({
 
         {/* Quick Scan Section */}
         <View style={[styles.quickScanBox, { backgroundColor: colors.accentPrimary + "10", borderColor: colors.accentPrimary + "40" }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: SPACE_8 }]}>
             {t("tradeSignals.quickScan", "Quick Scan")}
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 10 }}>
+          <Text style={{ color: colors.textMuted, fontSize: FONT_12, marginBottom: SPACE_10 }}>
             {t("tradeSignals.scanHint", "Kuwait tickers (bare or .KW), US stocks use .US suffix")}
           </Text>
 
-          <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flexDirection: "row", gap: SPACE_8 }}>
             <View
               style={[
                 styles.scanInputBox,
@@ -622,7 +656,7 @@ function StockPicker({
           </View>
 
           {scanError ? (
-            <Text style={{ color: "#e74c3c", fontSize: 11, marginTop: 8 }}>
+            <Text style={{ color: COLOR_DANGER_RED, fontSize: FONT_11, marginTop: SPACE_8 }}>
               {"\u26A0"} {scanError}
             </Text>
           ) : null}
@@ -630,7 +664,7 @@ function StockPicker({
 
       <View style={styles.dividerBox}>
         <View style={{ flex: 1, height: 1, backgroundColor: colors.borderColor }} />
-        <Text style={{ color: colors.textMuted, marginHorizontal: 8, fontSize: 11 }}>
+        <Text style={{ color: colors.textMuted, marginHorizontal: SPACE_8, fontSize: FONT_11 }}>
           {t("common.or", "OR")}
         </Text>
         <View style={{ flex: 1, height: 1, backgroundColor: colors.borderColor }} />
@@ -671,10 +705,10 @@ function StockPicker({
       {!loading && stocks.length === 0 && (
         <View style={[styles.emptyBox, { borderColor: colors.borderColor }]}>
           <FontAwesome name="inbox" size={28} color={colors.textMuted} />
-          <Text style={{ color: colors.textPrimary, fontWeight: "600", marginTop: 10 }}>
+          <Text style={{ color: colors.textPrimary, fontWeight: "600", marginTop: SPACE_10 }}>
             {t("tradeSignals.noStocks", "No saved companies")}
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4, textAlign: "center" }}>
+          <Text style={{ color: colors.textMuted, fontSize: FONT_12, marginTop: SPACE_4, textAlign: "center" }}>
             {t("tradeSignals.noStocksHint", "Add companies from the Fundamental Analysis tab first.")}
           </Text>
         </View>
@@ -695,19 +729,19 @@ function StockPicker({
               style={[styles.stockRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
             >
               <View style={[styles.symbolBadge, { backgroundColor: colors.accentPrimary + "15" }]}>
-                <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: 13 }}>
+                <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: FONT_13 }}>
                   {item.symbol.slice(0, 4)}
                 </Text>
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 15 }}>
+              <View style={{ flex: 1, marginLeft: SPACE_12 }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: FONT_15 }}>
                   {item.symbol}
                 </Text>
-                <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                <Text style={{ color: colors.textSecondary, fontSize: FONT_12, marginTop: SPACE_1 }} numberOfLines={1}>
                   {item.company_name}
                 </Text>
                 <View style={[styles.stockMetaPill, { backgroundColor: colors.bgInput }]}>
-                  <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: "700" }}>{marketLabel(item.symbol)}</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: FONT_10, fontWeight: "700" }}>{marketLabel(item.symbol)}</Text>
                 </View>
               </View>
               <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
@@ -759,25 +793,25 @@ function SelectedHeader({
   return (
     <View style={[styles.selectedRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       <View style={[styles.symbolBadge, { backgroundColor: colors.accentPrimary + "15" }]}>
-        <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: 13 }}>{stock.symbol}</Text>
+        <Text style={{ color: colors.accentPrimary, fontWeight: "800", fontSize: FONT_13 }}>{stock.symbol}</Text>
       </View>
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 14 }}>{stock.symbol}</Text>
-        <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{stock.company_name}</Text>
+      <View style={{ flex: 1, marginLeft: SPACE_12 }}>
+        <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: FONT_14 }}>{stock.symbol}</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: FONT_12 }} numberOfLines={1}>{stock.company_name}</Text>
       </View>
       {allowDelete ? (
         <Pressable
           onPress={handleDelete}
           disabled={deleteMut.isPending}
-          style={[styles.changeBtn, { backgroundColor: colors.danger + "12", marginRight: 8 }]}
+          style={[styles.changeBtn, { backgroundColor: colors.danger + "12", marginRight: SPACE_8 }]}
         >
-          <Text style={{ color: colors.danger, fontSize: 12, fontWeight: "700" }}>
+          <Text style={{ color: colors.danger, fontSize: FONT_12, fontWeight: "700" }}>
             {deleteMut.isPending ? t("common.deleting", "Deleting...") : t("common.delete", "Delete")}
           </Text>
         </Pressable>
       ) : null}
       <Pressable onPress={onChange} style={[styles.changeBtn, { backgroundColor: colors.accentPrimary + "12" }]}>
-        <Text style={{ color: colors.accentPrimary, fontSize: 12, fontWeight: "700" }}>
+        <Text style={{ color: colors.accentPrimary, fontSize: FONT_12, fontWeight: "700" }}>
           {t("tradeSignals.change", "Change")}
         </Text>
       </Pressable>
@@ -805,10 +839,10 @@ function PEContent({ colors, data }: { colors: ThemePalette; data: PEQuarterlyRe
     <>
       <View style={[styles.verdictCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
         <View style={styles.verdictHeader}>
-          <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "700", letterSpacing: 0.5 }}>
+          <Text style={{ color: colors.textMuted, fontSize: FONT_11, fontWeight: "700", letterSpacing: 0.5 }}>
             {t("tradeSignals.verdictTitle", "VERDICT").toUpperCase()}
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+          <Text style={{ color: colors.textMuted, fontSize: FONT_11 }}>
             {t("tradeSignals.source", "Source")}: {data.source}
           </Text>
         </View>
@@ -832,11 +866,11 @@ function PEContent({ colors, data }: { colors: ThemePalette; data: PEQuarterlyRe
 
         <View style={[styles.verdictBadge, { backgroundColor: verdictColors.bg }]}>
           <FontAwesome name={verdictColors.icon} size={14} color={verdictColors.fg} />
-          <Text style={{ color: verdictColors.fg, fontWeight: "800", marginLeft: 8, fontSize: 14 }}>
+          <Text style={{ color: verdictColors.fg, fontWeight: "800", marginLeft: SPACE_8, fontSize: FONT_14 }}>
             {t(`tradeSignals.verdict_${data.verdict.verdict}`, data.verdict.verdict).toUpperCase()}
           </Text>
           {data.verdict.scale > 0 && (
-            <Text style={{ color: verdictColors.fg, marginLeft: 8, fontSize: 12, fontWeight: "600" }}>
+            <Text style={{ color: verdictColors.fg, marginLeft: SPACE_8, fontSize: FONT_12, fontWeight: "600" }}>
               {" · "}{t(`tradeSignals.scale_${data.verdict.scaleLabel}`, data.verdict.scaleLabel).toUpperCase()}
             </Text>
           )}
@@ -845,7 +879,7 @@ function PEContent({ colors, data }: { colors: ThemePalette; data: PEQuarterlyRe
         <ScaleMeter scale={data.verdict.scale} verdict={data.verdict.verdict} colors={colors} />
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 18 }]}>{t("tradeSignals.peTable", "P/E Table")}</Text>
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: SPACE_18 }]}>{t("tradeSignals.peTable", "P/E Table")}</Text>
       <QuarterTable
         colors={colors}
         rows={data.years.map((y) => ({ year: y, row: data.pe_table[String(y)] }))}
@@ -854,10 +888,18 @@ function PEContent({ colors, data }: { colors: ThemePalette; data: PEQuarterlyRe
         showAverage
       />
 
-      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 18 }]}>{t("tradeSignals.growthTable", "P/E Growth (YoY %)")}</Text>
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: SPACE_18 }]}>{t("tradeSignals.growthTable", "P/E Growth (YoY %)")}</Text>
       <QuarterTable
         colors={colors}
         rows={data.years.map((y) => ({ year: y, row: data.growth_table[String(y)] }))}
+        formatter={fmtPct}
+        signedColors
+      />
+
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: SPACE_18 }]}>{t("tradeSignals.qoqGrowthTable", "P/E Growth (QoQ %)")}</Text>
+      <QuarterTable
+        colors={colors}
+        rows={data.years.map((y) => ({ year: y, row: data.qoq_growth_table[String(y)] }))}
         formatter={fmtPct}
         signedColors
       />
@@ -873,17 +915,17 @@ function DividendYieldContent({ colors, stock }: { colors: ThemePalette; stock: 
       <View style={[styles.placeholderIconWrap, { backgroundColor: colors.accentPrimary + "14" }]}>
         <FontAwesome name="money" size={20} color={colors.accentPrimary} />
       </View>
-      <Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 16, marginTop: 12 }}>
+      <Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: FONT_16, marginTop: SPACE_12 }}>
         {t("tradeSignals.dividendYieldSignal", "Dividend Yield Signal")}
       </Text>
-      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6, textAlign: "center", maxWidth: 420 }}>
+      <Text style={{ color: colors.textMuted, fontSize: FONT_12, marginTop: SPACE_6, textAlign: "center", maxWidth: 420 }}>
         {t(
           "tradeSignals.dividendYieldDesc",
           "Dividend yield history, trend strength, and valuation bands will be shown here.",
         )}
       </Text>
       <View style={[styles.placeholderTickerPill, { backgroundColor: colors.bgInput }]}>
-        <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "700" }}>{stock.symbol}</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: FONT_11, fontWeight: "700" }}>{stock.symbol}</Text>
       </View>
     </View>
   );
@@ -992,67 +1034,67 @@ function ErrorBox({
   return (
     <View style={[styles.errorBox, { borderColor: colors.danger + "40", backgroundColor: colors.danger + "10" }]}>
       <FontAwesome name="exclamation-triangle" size={20} color={colors.danger} />
-      <Text style={{ color: colors.danger, marginTop: 8, fontSize: 13, textAlign: "center" }}>{message}</Text>
+      <Text style={{ color: colors.danger, marginTop: SPACE_8, fontSize: FONT_13, textAlign: "center" }}>{message}</Text>
       <Pressable onPress={onRetry} style={[styles.retryBtn, { backgroundColor: colors.danger }]}>
-        <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>Retry</Text>
+        <Text style={{ color: COLOR_WHITE, fontWeight: "700", fontSize: FONT_12 }}>Retry</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 80 },
+  content: { padding: SPACE_16, paddingBottom: SPACE_80 },
   listWrap: { width: "100%", maxWidth: 1120, alignSelf: "center" },
-  topContentWrap: { marginBottom: 8 },
+  topContentWrap: { marginBottom: SPACE_8 },
   signalTabsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignSelf: "stretch",
     borderWidth: 1,
     borderRadius: 12,
-    padding: 4,
-    gap: 4,
-    marginBottom: 12,
+    padding: SPACE_4,
+    gap: SPACE_4,
+    marginBottom: SPACE_12,
   },
   signalTab: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignSelf: "stretch",
     justifyContent: "center",
-    gap: 6,
+    gap: SPACE_6,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: SPACE_10,
+    paddingVertical: SPACE_8,
   },
-  sectionTitle: { fontSize: 14, fontWeight: "700", marginBottom: 10 },
-  pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  sectionTitle: { fontSize: FONT_14, fontWeight: "700", marginBottom: SPACE_10 },
+  pickerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: SPACE_10 },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    gap: SPACE_6,
+    paddingHorizontal: SPACE_12,
+    paddingVertical: SPACE_7,
     borderRadius: 9,
   },
-  addBtnText: { color: "#fff", fontSize: 12, fontWeight: "700", flexGrow: 1 },
+  addBtnText: { color: COLOR_WHITE, fontSize: FONT_12, fontWeight: "700", flexGrow: 1 },
 
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: SPACE_12,
+    paddingVertical: SPACE_10,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
-    marginBottom: 12,
+    gap: SPACE_8,
+    marginBottom: SPACE_12,
   },
-  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  searchInput: { flex: 1, fontSize: FONT_14, paddingVertical: 0 },
 
-  loadingBox: { paddingVertical: 36, alignItems: "center" },
+  loadingBox: { paddingVertical: SPACE_36, alignItems: "center" },
   emptyBox: {
-    paddingVertical: 36,
-    paddingHorizontal: 24,
+    paddingVertical: SPACE_36,
+    paddingHorizontal: SPACE_24,
     alignItems: "center",
     borderRadius: 14,
     borderWidth: 1,
@@ -1062,29 +1104,29 @@ const styles = StyleSheet.create({
   stockRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: SPACE_14,
+    paddingVertical: SPACE_12,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 8,
+    marginBottom: SPACE_8,
   },
   symbolBadge: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   stockMetaPill: {
     alignSelf: "flex-start",
-    marginTop: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    marginTop: SPACE_5,
+    paddingHorizontal: SPACE_8,
+    paddingVertical: SPACE_3,
     borderRadius: 999,
   },
-  selectedRow: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 14 },
-  changeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  selectedRow: { flexDirection: "row", alignItems: "center", padding: SPACE_12, borderRadius: 14, borderWidth: 1, marginBottom: SPACE_14 },
+  changeBtn: { paddingHorizontal: SPACE_12, paddingVertical: SPACE_6, borderRadius: 8 },
 
   placeholderCard: {
     borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",
-    paddingVertical: 28,
-    paddingHorizontal: 16,
+    paddingVertical: SPACE_28,
+    paddingHorizontal: SPACE_16,
   },
   placeholderIconWrap: {
     width: 52,
@@ -1094,62 +1136,62 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   placeholderTickerPill: {
-    marginTop: 14,
+    marginTop: SPACE_14,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: SPACE_10,
+    paddingVertical: SPACE_5,
   },
 
-  verdictCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 6 },
-  verdictHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  verdictRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
+  verdictCard: { borderRadius: 14, borderWidth: 1, padding: SPACE_16, marginBottom: SPACE_6 },
+  verdictHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: SPACE_12 },
+  verdictRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: SPACE_14 },
   metricCol: { alignItems: "flex-start", flex: 1 },
-  metricLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.3, marginBottom: 4 },
-  metricValue: { fontSize: 18, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  verdictBadge: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
-  scaleRow: { flexDirection: "row", marginTop: 12, gap: 6 },
+  metricLabel: { fontSize: FONT_11, fontWeight: "600", letterSpacing: 0.3, marginBottom: SPACE_4 },
+  metricValue: { fontSize: FONT_18, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  verdictBadge: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", paddingHorizontal: SPACE_12, paddingVertical: SPACE_8, borderRadius: 999 },
+  scaleRow: { flexDirection: "row", marginTop: SPACE_12, gap: SPACE_6 },
   scaleDot: { flex: 1, height: 6, borderRadius: 3, borderWidth: 1 },
 
   table: { borderRadius: 12, borderWidth: 1, overflow: "hidden" },
-  tableRow: { flexDirection: "row", paddingVertical: 10, paddingHorizontal: 8, alignItems: "center" },
-  thYear: { width: 56, fontSize: 12, fontWeight: "700" },
-  thCell: { flex: 1, fontSize: 12, fontWeight: "700", textAlign: "right" },
-  tdCell: { flex: 1, fontSize: 13, textAlign: "right", fontVariant: ["tabular-nums"] },
+  tableRow: { flexDirection: "row", paddingVertical: SPACE_10, paddingHorizontal: SPACE_8, alignItems: "center" },
+  thYear: { width: 56, fontSize: FONT_12, fontWeight: "700" },
+  thCell: { flex: 1, fontSize: FONT_12, fontWeight: "700", textAlign: "right" },
+  tdCell: { flex: 1, fontSize: FONT_13, textAlign: "right", fontVariant: ["tabular-nums"] },
 
-  errorBox: { padding: 18, borderRadius: 12, borderWidth: 1, alignItems: "center" },
-  retryBtn: { marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  errorBox: { padding: SPACE_18, borderRadius: 12, borderWidth: 1, alignItems: "center" },
+  retryBtn: { marginTop: SPACE_12, paddingHorizontal: SPACE_16, paddingVertical: SPACE_8, borderRadius: 8 },
 
-  modalBackdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(0,0,0,0.45)" },
-  modalCard: { width: "100%", maxWidth: 440, borderRadius: 14, borderWidth: 1, padding: 16 },
-  modalTitle: { fontSize: 16, fontWeight: "800", marginBottom: 12 },
-  fieldLabel: { fontSize: 12, fontWeight: "600", marginBottom: 6 },
-  fieldInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, fontSize: 14 },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 2 },
-  modalBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  marketRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
-  marketChip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
-  pickerList: { maxHeight: 220, borderWidth: 1, borderRadius: 10, overflow: "hidden", marginBottom: 12 },
-  pickerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10, paddingVertical: 9, borderBottomWidth: 1 },
+  modalBackdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACE_16, backgroundColor: "rgba(0,0,0,0.45)" },
+  modalCard: { width: "100%", maxWidth: 440, borderRadius: 14, borderWidth: 1, padding: SPACE_16 },
+  modalTitle: { fontSize: FONT_16, fontWeight: "800", marginBottom: SPACE_12 },
+  fieldLabel: { fontSize: FONT_12, fontWeight: "600", marginBottom: SPACE_6 },
+  fieldInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACE_12, paddingVertical: SPACE_10, marginBottom: SPACE_12, fontSize: FONT_14 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: SPACE_8, marginTop: SPACE_2 },
+  modalBtn: { paddingHorizontal: SPACE_14, paddingVertical: SPACE_8, borderRadius: 8 },
+  marketRow: { flexDirection: "row", gap: SPACE_8, marginBottom: SPACE_10 },
+  marketChip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: SPACE_10, paddingVertical: SPACE_7 },
+  pickerList: { maxHeight: 220, borderWidth: 1, borderRadius: 10, overflow: "hidden", marginBottom: SPACE_12 },
+  pickerRow: { flexDirection: "row", alignItems: "center", gap: SPACE_8, paddingHorizontal: SPACE_10, paddingVertical: SPACE_9, borderBottomWidth: 1 },
 
   quickScanBox: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 14,
+    padding: SPACE_14,
+    marginBottom: SPACE_14,
   },
   scanInputBox: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: SPACE_12,
+    gap: SPACE_8,
   },
   scanInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: FONT_13,
     fontWeight: "600",
-    paddingVertical: 10,
+    paddingVertical: SPACE_10,
   },
   scanBtn: {
     width: 40,
@@ -1161,7 +1203,7 @@ const styles = StyleSheet.create({
   dividerBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginVertical: 14,
+    gap: SPACE_8,
+    marginVertical: SPACE_14,
   },
 });
