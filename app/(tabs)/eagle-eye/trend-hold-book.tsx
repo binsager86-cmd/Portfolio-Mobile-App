@@ -22,6 +22,7 @@ import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import type { ThemePalette } from "@/constants/theme";
 import {
   useBookComparison,
+  useRefreshTrendHoldBookPrices,
   useTrendHoldBookLessons,
   useTrendHoldBookLessonsSummary,
   useTrendHoldBookNavHistory,
@@ -113,11 +114,13 @@ function KpiCard({
 function StatTile({
   label,
   value,
+  sub,
   valueColor,
   colors,
 }: {
   label: string;
   value: string;
+  sub?: string;
   valueColor?: string;
   colors: ThemePalette;
 }) {
@@ -125,6 +128,7 @@ function StatTile({
     <View style={[styles.statTile, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       <Text style={[styles.statTileLabel, { color: colors.textMuted }]}>{label}</Text>
       <Text style={[styles.statTileValue, { color: valueColor ?? colors.textPrimary }]}>{value}</Text>
+      {sub ? <Text style={[styles.statTileSub, { color: colors.textMuted }]}>{sub}</Text> : null}
     </View>
   );
 }
@@ -172,15 +176,43 @@ function BookSelector({
 
 /** Compact head-to-head scorecard, always visible regardless of which book is selected below. */
 function ComparisonStrip({ data, colors }: { data?: BookComparisonResponse; colors: ThemePalette }) {
-  const isDark = colors.mode === "dark";
   if (!data) return null;
 
-  const rows: { label: string; format: (v: number | null | undefined) => string; better: "higher" | "higher_or_zero" }[] = [
-    { label: "Total P&L", format: (v) => formatSignedCurrency(v), better: "higher" },
-    { label: "Win Rate", format: (v) => (v != null ? `${fmtNum(v, 0)}%` : "—"), better: "higher" },
-    { label: "Profit Factor", format: (v) => (v != null ? fmtNum(v, 2) : "—"), better: "higher" },
+  const rows: {
+    label: string;
+    sub?: string;
+    format: (v: number | null | undefined) => string;
+    th: number | null | undefined;
+    v1: number | null | undefined;
+    isPnl?: boolean;
+  }[] = [
+    {
+      label: "Realized P&L",
+      sub: "booked, closed trades only",
+      format: (v) => formatSignedCurrency(v),
+      th: data.trend_hold.total_realized_pnl_kwd,
+      v1: data.v1_rating.total_realized_pnl_kwd,
+      isPnl: true,
+    },
+    {
+      label: "Unrealized P&L",
+      sub: "open positions, marked to market",
+      format: (v) => formatSignedCurrency(v),
+      th: data.trend_hold_portfolio?.unrealized_pnl_kwd,
+      v1: data.v1_rating_portfolio?.unrealized_pnl_kwd,
+      isPnl: true,
+    },
+    {
+      label: "Net P&L",
+      sub: "realized + unrealized — true bottom line",
+      format: (v) => formatSignedCurrency(v),
+      th: data.trend_hold_portfolio?.net_pnl_kwd,
+      v1: data.v1_rating_portfolio?.net_pnl_kwd,
+      isPnl: true,
+    },
+    { label: "Win Rate", format: (v) => (v != null ? `${fmtNum(v, 0)}%` : "—"), th: data.trend_hold.win_rate_pct, v1: data.v1_rating.win_rate_pct },
+    { label: "Profit Factor", format: (v) => (v != null ? fmtNum(v, 2) : "—"), th: data.trend_hold.profit_factor, v1: data.v1_rating.profit_factor },
   ];
-  const fields: (keyof typeof data.trend_hold)[] = ["total_realized_pnl_kwd", "win_rate_pct", "profit_factor"];
 
   return (
     <View style={[styles.compareCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
@@ -190,36 +222,34 @@ function ComparisonStrip({ data, colors }: { data?: BookComparisonResponse; colo
         <Text style={[styles.compareColHeader, { color: colors.textMuted }]}>Trend-Hold</Text>
         <Text style={[styles.compareColHeader, { color: colors.textMuted }]}>V1 Rating</Text>
       </View>
-      {rows.map((row, i) => {
-        const thVal = data.trend_hold[fields[i]] as number | null | undefined;
-        const v1Val = data.v1_rating[fields[i]] as number | null | undefined;
-        const thWins = thVal != null && v1Val != null && thVal > v1Val;
-        const v1Wins = thVal != null && v1Val != null && v1Val > thVal;
+      {rows.map((row) => {
+        const thWins = row.th != null && row.v1 != null && row.th > row.v1;
+        const v1Wins = row.th != null && row.v1 != null && row.v1 > row.th;
+        // P&L rows: color always reflects the number's own sign (red = loss,
+        // green = gain), independent of which book is ahead -- a smaller
+        // gain must never read the same red as an outright loss. Win
+        // Rate/Profit Factor aren't signed, so those keep the "winner is
+        // green" comparison-only coloring. Either way, the winner is bold.
+        const thColor = row.isPnl ? (row.th != null && row.th < 0 ? colors.danger : colors.success) : thWins ? colors.success : colors.textPrimary;
+        const v1Color = row.isPnl ? (row.v1 != null && row.v1 < 0 ? colors.danger : colors.success) : v1Wins ? colors.success : colors.textPrimary;
         return (
           <View key={row.label} style={styles.compareRow}>
-            <Text style={[styles.compareLabelCol, styles.compareLabelText, { color: colors.textMuted }]}>{row.label}</Text>
-            <Text
-              style={[
-                styles.compareColValue,
-                { color: thWins ? colors.success : colors.textPrimary, fontWeight: thWins ? "800" : "600" },
-              ]}
-            >
-              {row.format(thVal)}
+            <View style={styles.compareLabelCol}>
+              <Text style={[styles.compareLabelText, { color: colors.textMuted }]}>{row.label}</Text>
+              {row.sub ? <Text style={[styles.compareLabelSub, { color: colors.textMuted }]}>{row.sub}</Text> : null}
+            </View>
+            <Text style={[styles.compareColValue, { color: thColor, fontWeight: thWins ? "800" : "600" }]}>
+              {row.format(row.th)}
             </Text>
-            <Text
-              style={[
-                styles.compareColValue,
-                { color: v1Wins ? colors.success : colors.textPrimary, fontWeight: v1Wins ? "800" : "600" },
-              ]}
-            >
-              {row.format(v1Val)}
+            <Text style={[styles.compareColValue, { color: v1Color, fontWeight: v1Wins ? "800" : "600" }]}>
+              {row.format(row.v1)}
             </Text>
           </View>
         );
       })}
       <Text style={[styles.compareCaption, { color: colors.textMuted }]}>
         {data.trend_hold.total_closed} closed trades (Trend-Hold) vs {data.v1_rating.total_closed} (V1 Rating) —
-        {isDark ? " " : " "}highlighted = currently ahead on that metric.
+        highlighted = currently ahead on that metric.
       </Text>
     </View>
   );
@@ -254,6 +284,27 @@ function SectionTitle({ icon, title, colors }: { icon: React.ComponentProps<type
       <FontAwesome name={icon} size={14} color={colors.accentPrimary} />
       <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
     </View>
+  );
+}
+
+/** Manual "Fetch Price" trigger for the Trend-Hold Book's open positions -- see useRefreshTrendHoldBookPrices. */
+function FetchPriceButton({ onPress, pending, colors }: { onPress: () => void; pending: boolean; colors: ThemePalette }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={pending}
+      style={[
+        styles.fetchPriceButton,
+        { backgroundColor: colors.bgCard, borderColor: colors.borderColor, opacity: pending ? 0.6 : 1 },
+      ]}
+    >
+      {pending ? (
+        <ActivityIndicator size="small" color={colors.accentPrimary} />
+      ) : (
+        <FontAwesome name="refresh" size={12} color={colors.accentPrimary} />
+      )}
+      <Text style={[styles.fetchPriceText, { color: colors.accentPrimary }]}>Fetch Price</Text>
+    </Pressable>
   );
 }
 
@@ -441,6 +492,7 @@ export default function TrendHoldBookScreen() {
   const lessonsQuery = useTrendHoldBookLessons(100, selectedBook);
   const lessonsSummaryQuery = useTrendHoldBookLessonsSummary(selectedBook);
   const performanceQuery = useTrendHoldBookPerformance(selectedBook);
+  const refreshPricesMutation = useRefreshTrendHoldBookPrices();
 
   const isRefetching =
     comparisonQuery.isRefetching ||
@@ -471,6 +523,10 @@ export default function TrendHoldBookScreen() {
   const portfolio = portfolioQuery.data;
   const positions = positionsQuery.data?.positions ?? [];
   const trades = tradesQuery.data?.trades ?? [];
+  // "Closed" = any trade that realized P&L -- SCALE_OUT and EXIT, never BUY.
+  // Same definition the backend's performance scorecard already uses
+  // (ee_trend_hold_book_trades.realized_pnl_kwd IS NOT NULL).
+  const closedTrades = trades.filter((t) => t.realized_pnl_kwd != null);
   const navPoints = navHistoryQuery.data?.points ?? [];
   const decisionEntries = decisionLogQuery.data?.entries ?? [];
   const lessons = lessonsQuery.data?.lessons ?? [];
@@ -483,7 +539,17 @@ export default function TrendHoldBookScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingTop: showSidebar ? insets.top : 0 }]}>
-      <EagleEyeTopTabs />
+      <EagleEyeTopTabs
+        rightSlot={
+          selectedBook === "trend_hold" ? (
+            <FetchPriceButton
+              onPress={() => refreshPricesMutation.mutate()}
+              pending={refreshPricesMutation.isPending}
+              colors={colors}
+            />
+          ) : undefined
+        }
+      />
       <ScrollView
         style={{ backgroundColor: colors.bgPrimary }}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
@@ -533,6 +599,35 @@ export default function TrendHoldBookScreen() {
           </View>
         ) : null}
 
+        {portfolio ? (
+          <View>
+            <SectionTitle icon="balance-scale" title="P&L Breakdown" colors={colors} />
+            <View style={styles.statGrid}>
+              <StatTile
+                label="Realized P&L"
+                sub="booked, closed trades only"
+                value={formatSignedCurrency(portfolio.realized_pnl_kwd)}
+                valueColor={portfolio.realized_pnl_kwd >= 0 ? colors.success : colors.danger}
+                colors={colors}
+              />
+              <StatTile
+                label="Unrealized P&L"
+                sub="open positions, marked to market"
+                value={formatSignedCurrency(portfolio.unrealized_pnl_kwd)}
+                valueColor={portfolio.unrealized_pnl_kwd >= 0 ? colors.success : colors.danger}
+                colors={colors}
+              />
+              <StatTile
+                label="Net P&L"
+                sub="realized + unrealized — true bottom line"
+                value={formatSignedCurrency(portfolio.net_pnl_kwd)}
+                valueColor={portfolio.net_pnl_kwd >= 0 ? colors.success : colors.danger}
+                colors={colors}
+              />
+            </View>
+          </View>
+        ) : null}
+
         {chartData.length >= 2 ? (
           <View onLayout={onChartLayout}>
             <SectionTitle icon="line-chart" title="Equity Curve" colors={colors} />
@@ -566,7 +661,7 @@ export default function TrendHoldBookScreen() {
               colors={colors}
             />
             <StatTile
-              label="Total P&L"
+              label="Realized P&L"
               value={formatSignedCurrency(performance.total_realized_pnl_kwd)}
               valueColor={performance.total_realized_pnl_kwd >= 0 ? colors.success : colors.danger}
               colors={colors}
@@ -623,6 +718,25 @@ export default function TrendHoldBookScreen() {
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
               No closed trades yet — performance stats appear once a position exits.
             </Text>
+          </View>
+        )}
+
+        <SectionTitle icon="check-circle" title="Closed Trades" colors={colors} />
+        {tradesQuery.isError ? (
+          <InlineError message="Could not load closed trades." />
+        ) : tradesQuery.isLoading && closedTrades.length === 0 ? (
+          <ActivityIndicator color={colors.accentPrimary} />
+        ) : closedTrades.length === 0 ? (
+          <View style={[styles.emptyPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No closed trades yet — this fills in once a position scales out or exits.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.tradesList}>
+            {closedTrades.map((t) => (
+              <TradeCard key={t.id} trade={t} />
+            ))}
           </View>
         )}
 
@@ -766,6 +880,7 @@ const styles = StyleSheet.create({
   compareColHeader: { flex: 1, fontSize: 11, fontWeight: "700", textAlign: "right" },
   compareRow: { flexDirection: "row", alignItems: "center" },
   compareLabelText: { fontSize: 12, fontWeight: "600" },
+  compareLabelSub: { fontSize: 9, lineHeight: 12, marginTop: 1 },
   compareColValue: { flex: 1, fontSize: 14, textAlign: "right" },
   compareCaption: { fontSize: 10, lineHeight: 14, marginTop: 4 },
 
@@ -779,9 +894,20 @@ const styles = StyleSheet.create({
   statTile: { minWidth: 100, flexGrow: 1, flexBasis: "30%", paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8, borderWidth: 1 },
   statTileLabel: { fontSize: 10, fontWeight: "600", marginBottom: 3 },
   statTileValue: { fontSize: 14, fontWeight: "800" },
+  statTileSub: { fontSize: 9, lineHeight: 12, marginTop: 2 },
 
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
   sectionTitle: { fontSize: 16, fontWeight: "800" },
+  fetchPriceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fetchPriceText: { fontSize: 11, fontWeight: "700" },
 
   listPanel: { borderWidth: 1, borderRadius: 8, overflow: "hidden" },
   emptyPanel: { borderWidth: 1, borderRadius: 8, padding: 14 },

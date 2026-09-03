@@ -4,7 +4,7 @@ import { useAdminGate } from "@/hooks/useAdminGate";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { usePathname, useRouter } from "expo-router";
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type EagleEyeTab = {
@@ -74,7 +74,7 @@ function findActiveTabIndex(pathname: string, tabs: readonly EagleEyeTab[]): num
   );
 }
 
-export function EagleEyeTopTabs() {
+export function EagleEyeTopTabs({ rightSlot }: { rightSlot?: React.ReactNode } = {}) {
   const { colors } = useThemeStore();
   const { isAdmin } = useAdminGate();
   const pathname = normalizePath(usePathname());
@@ -84,35 +84,49 @@ export function EagleEyeTopTabs() {
   const visibleTabs = EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || (isAdmin && simulatorEnabled));
   const activeTabIndex = findActiveTabIndex(pathname, visibleTabs);
 
+  // Kept fresh via effect (not during render) so the pan responder --
+  // created once below, closure fixed at that point -- can still read the
+  // latest pathname/tabs when a gesture fires much later.
   const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname;
   const visibleTabsRef = useRef(visibleTabs);
-  visibleTabsRef.current = visibleTabs;
+  useEffect(() => {
+    pathnameRef.current = pathname;
+    visibleTabsRef.current = visibleTabs;
+  });
 
   const isNative = Platform.OS !== "web";
-  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
-        const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
-        const isHorizontallyDominant =
-          Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
-        return hasMinimumDistance && isHorizontallyDominant;
-      },
-      onPanResponderRelease: (_, { dx }) => {
-        const currentTabs = visibleTabsRef.current;
-        const currentIndex = findActiveTabIndex(pathnameRef.current, currentTabs);
-        if (currentIndex === -1) return;
-        if (dx < -SWIPE_THRESHOLD && currentIndex < currentTabs.length - 1) {
-          router.push(currentTabs[currentIndex + 1].href);
-        } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
-          router.push(currentTabs[currentIndex - 1].href);
-        }
-      },
-    });
-  }
-  const panResponder = panResponderRef.current;
+  // Built in an effect, not a render-phase useState initializer -- the
+  // react-hooks/refs lint rule flags *any* ref access reachable from a
+  // useState/useMemo initializer, even one only actually invoked later by
+  // PanResponder on a real gesture, since it can't prove that. An effect is
+  // the sanctioned place for this per that rule's own guidance. Created
+  // once (empty deps) for the same stable identity the old ref-based
+  // lazy-init gave the gesture handlers.
+  const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
+  useEffect(() => {
+    setPanResponder(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+          const hasMinimumDistance = Math.abs(dx) > SWIPE_THRESHOLD;
+          const isHorizontallyDominant =
+            Math.abs(dx) > Math.abs(dy) * VERTICAL_TO_HORIZONTAL_RATIO;
+          return hasMinimumDistance && isHorizontallyDominant;
+        },
+        onPanResponderRelease: (_, { dx }) => {
+          const currentTabs = visibleTabsRef.current;
+          const currentIndex = findActiveTabIndex(pathnameRef.current, currentTabs);
+          if (currentIndex === -1) return;
+          if (dx < -SWIPE_THRESHOLD && currentIndex < currentTabs.length - 1) {
+            router.push(currentTabs[currentIndex + 1].href);
+          } else if (dx > SWIPE_THRESHOLD && currentIndex > 0) {
+            router.push(currentTabs[currentIndex - 1].href);
+          }
+        },
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- created once; handlers read latest state via the refs above
+  }, []);
 
   return (
     <View
@@ -120,7 +134,7 @@ export function EagleEyeTopTabs() {
         styles.container,
         { backgroundColor: colors.headerBg, borderBottomColor: colors.borderColor },
       ]}
-      {...(isNative ? panResponder.panHandlers : {})}
+      {...(isNative && panResponder ? panResponder.panHandlers : {})}
     >
       <ScrollView
         horizontal
@@ -128,6 +142,7 @@ export function EagleEyeTopTabs() {
         nestedScrollEnabled
         directionalLockEnabled
         keyboardShouldPersistTaps="handled"
+        style={styles.tabsScroll}
         contentContainerStyle={styles.content}
       >
         {visibleTabs.map((tab, index) => {
@@ -163,19 +178,28 @@ export function EagleEyeTopTabs() {
           );
         })}
       </ScrollView>
+      {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  tabsScroll: {
+    flexShrink: 1,
   },
   content: {
     paddingHorizontal: UITokens.spacing.sm,
     paddingVertical: UITokens.spacing.sm,
     gap: UITokens.spacing.xs,
     alignItems: "center",
+  },
+  rightSlot: {
+    paddingRight: UITokens.spacing.sm,
   },
   tab: {
     flexDirection: "row",

@@ -21,7 +21,7 @@
  */
 
 import api from "@/services/api/client";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type PaperBookId = "trend_hold" | "v1_rating";
 
@@ -37,6 +37,12 @@ export interface TrendHoldBookPortfolio {
   equity_kwd: number;
   total_return_pct: number;
   open_position_count: number;
+  // realized: booked gain/loss from closed legs only (SCALE_OUT + EXIT).
+  // unrealized: mark-to-market on currently open positions only, never booked.
+  // net: realized + unrealized -- the true bottom line (ties to equity_kwd - starting_capital_kwd).
+  realized_pnl_kwd: number;
+  unrealized_pnl_kwd: number;
+  net_pnl_kwd: number;
   as_of?: string | null;
 }
 
@@ -145,6 +151,8 @@ export interface TrendHoldBookPerformance {
 export interface BookComparisonResponse {
   trend_hold: TrendHoldBookPerformance;
   v1_rating: TrendHoldBookPerformance;
+  trend_hold_portfolio: TrendHoldBookPortfolio;
+  v1_rating_portfolio: TrendHoldBookPortfolio;
 }
 
 // ── Query keys ───────────────────────────────────────────────────────────────
@@ -334,6 +342,31 @@ export function useTrendHoldBookPerformance(book: PaperBookId = "trend_hold", en
     gcTime: 30 * 60_000,
     retry: 2,
     enabled,
+  });
+}
+
+/**
+ * useRefreshTrendHoldBookPrices
+ * POST /api/v1/trend-hold-book/refresh-prices
+ *
+ * Manual "Fetch Price" trigger: fetches a fresh TickerChart quote for
+ * whatever the Trend-Hold Book currently holds (same job the scheduler
+ * runs every 15 min during the KSE session). Trend-Hold-only -- the V1
+ * Rating Book has no equivalent endpoint. On success, invalidates the
+ * portfolio/positions queries so the screen reflects the new prices
+ * immediately instead of waiting for their 10-minute staleTime.
+ */
+export function useRefreshTrendHoldBookPrices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post("/api/v1/trend-hold-book/refresh-prices");
+      return data as { status: string; updated: number; positions: number; errors: number };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: trendHoldBookKeys.portfolio("trend_hold") });
+      qc.invalidateQueries({ queryKey: trendHoldBookKeys.positions("trend_hold") });
+    },
   });
 }
 
