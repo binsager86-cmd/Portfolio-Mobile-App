@@ -8,7 +8,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import {
     Alert,
-    FlatList,
   KeyboardAvoidingView,
     Modal,
     Platform,
@@ -328,16 +327,10 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                   </View>
                 ) : (
                   <View style={{ maxHeight: 220, borderWidth: 1, borderColor: colors.borderColor, borderRadius: 10, overflow: "hidden" }}>
-                    <FlatList
-                      data={filteredStocks}
-                      keyExtractor={(item) => item.symbol}
-                      keyboardShouldPersistTaps="handled"
-                      initialNumToRender={15}
-                      maxToRenderPerBatch={10}
-                      windowSize={5}
-                      removeClippedSubviews={false}
-                      renderItem={({ item, index }) => (
+                    <View>
+                      {filteredStocks.map((item, index) => (
                         <Pressable
+                          key={item.symbol}
                           accessibilityRole="button"
                           accessibilityLabel={`Pick ${item.symbol} ${item.name}`}
                           onPress={() => handlePickStock(item)}
@@ -357,15 +350,15 @@ function StockFormModal({ stock, colors, onClose }: { stock?: AnalysisStock; col
                           </View>
                           <FontAwesome name="plus-circle" size={16} color={colors.accentPrimary} />
                         </Pressable>
-                      )}
-                      ListEmptyComponent={
+                      ))}
+                      {filteredStocks.length === 0 && (
                         <View style={{ padding: 20, alignItems: "center" }}>
                           <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                             {pickerSearch ? "No stocks match your search" : "Type to search"}
                           </Text>
                         </View>
-                      }
-                    />
+                      )}
+                    </View>
                   </View>
                 )}
 

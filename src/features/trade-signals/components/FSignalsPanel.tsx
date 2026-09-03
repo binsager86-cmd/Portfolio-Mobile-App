@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+
 /**
  * F.Signals Panel - multi-signal fundamental tabs.
  */
@@ -715,16 +717,10 @@ function StockPicker({
       )}
 
       {!loading && stocks.length > 0 && (
-        <FlatList
-          data={stocks}
-          keyExtractor={(item) => String(item.id)}
-          scrollEnabled={false}
-          removeClippedSubviews={false}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={5}
-          renderItem={({ item }) => (
+        <View>
+          {stocks.map((item) => (
             <Pressable
+              key={String(item.id)}
               onPress={() => onSelect(item)}
               style={[styles.stockRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
             >
@@ -746,8 +742,8 @@ function StockPicker({
               </View>
               <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
             </Pressable>
-          )}
-        />
+          ))}
+        </View>
       )}
       </View>
     </ScrollView>
