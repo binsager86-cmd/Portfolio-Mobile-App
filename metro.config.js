@@ -39,6 +39,22 @@ config.resolver.blockList = [
 const origResolveRequest = config.resolver.resolveRequest;
 const semverStubPath = path.resolve(__dirname, "reanimated-semver-stub.js");
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Windows: @expo/metro-runtime's self-referencing "rsc/runtime" subpath import
+  // fails package-exports resolution (works via fallback for cross-package imports
+  // but not this self-import), crashing the bundle. Point straight at the file.
+  if (moduleName === "@expo/metro-runtime/rsc/runtime") {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(
+        __dirname,
+        "node_modules",
+        "@expo",
+        "metro-runtime",
+        "rsc",
+        "runtime.js",
+      ),
+    };
+  }
   // Stub reanimated worklets validation (Node.js only, fails on web)
   if (moduleName === "react-native-reanimated/scripts/validate-worklets-version") {
     return {

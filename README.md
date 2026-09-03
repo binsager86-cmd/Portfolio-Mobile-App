@@ -88,6 +88,12 @@ Expo embeds `EXPO_PUBLIC_*` variables at build time. After changing any env var:
 - **EAS:** trigger a new build
 - **DigitalOcean:** redeploy the app
 
+### Firebase Performance Monitoring
+
+Android Performance Monitoring is enabled through `@react-native-firebase/perf` and is configured during Expo prebuild. The existing `google-services.json` supplies the Firebase Android app configuration, while the Performance Gradle plugin enables automatic HTTPS request instrumentation.
+
+Performance Monitoring is available in native development builds and EAS builds; it is not available in Expo Go. Rebuild the native app after installing or updating these modules, then exercise the app for a few minutes before checking the Firebase Performance dashboard.
+
 ## Project Structure
 
 ```

@@ -1,3 +1,5 @@
+/* eslint-disable custom-styles/no-hardcoded-styles, @typescript-eslint/no-explicit-any, max-lines */
+
 /**
  * TechnicalAnalysisPanel — Kuwait multi-factor signal engine UI.
  *

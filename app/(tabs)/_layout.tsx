@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MobileDrawer } from "@/components/MobileDrawer";
 import WebSidebar from "@/components/WebSidebar";
 import { AnimatedTabBar } from "@/components/ui/AnimatedTabBar";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useKeyboardShortcuts, Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { trackEvent } from "@/lib/gtag";
@@ -133,6 +134,16 @@ export default function TabLayout() {
     });
     return () => sub.remove();
   }, [drawerOpen, router]);
+
+  if (isLoading) {
+    return (
+      <LoadingScreen
+        type="spinner"
+        message="Preparing your dashboard..."
+        fullscreen
+      />
+    );
+  }
 
   return (
     <View style={[ls.root, { backgroundColor: colors.bgPrimary }]}>

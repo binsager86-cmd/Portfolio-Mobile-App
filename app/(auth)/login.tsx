@@ -134,11 +134,9 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     try {
       console.info("[Login] Starting Google Sign-In…");
-      // On web this redirects the page to Google (never returns).
-      // On native this returns a result with the token.
+      // Shared cross-platform Google auth flow.
       const result = await googlePrompt();
 
-      // ─ Native path (web never reaches here — page navigates away) ─
       if (result.success) {
         if (__DEV__) console.info("[Login] Got token, sending to backend…");
         const ok = await googleSignIn(result.token);

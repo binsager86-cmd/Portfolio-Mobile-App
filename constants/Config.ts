@@ -35,10 +35,81 @@ const ENV_API_URL_IOS =
 const LOCAL_WEB_API = "http://127.0.0.1:8004";
 const LOCAL_ANDROID_EMULATOR_API = "http://10.0.2.2:8004";
 
+function isPrivateIpv4Host(hostname: string): boolean {
+  const parts = hostname.split(".").map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
+    return false;
+  }
+
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function getWebHostname(): string | null {
+  if (typeof window === "undefined") return null;
+  const host = window.location?.hostname?.trim().toLowerCase();
+  return host && host.length > 0 ? host : null;
+}
+
+function isLocalDevWebHost(hostname: string | null): boolean {
+  if (!hostname) return false;
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+    return true;
+  }
+  if (hostname.endsWith(".local")) return true;
+  return isPrivateIpv4Host(hostname);
+}
+
+function normalizedEnvValue(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isLoopbackOrEmulatorHost(urlValue: string): boolean {
+  try {
+    const parsed = new URL(urlValue);
+    const host = parsed.hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "10.0.2.2";
+  } catch {
+    const lower = urlValue.toLowerCase();
+    return (
+      lower.includes("localhost") ||
+      lower.includes("127.0.0.1") ||
+      lower.includes("::1") ||
+      lower.includes("10.0.2.2")
+    );
+  }
+}
+
+function resolveWebApiUrl(isLocalDevWeb: boolean): string {
+  const webEnv = normalizedEnvValue(ENV_API_URL_WEB);
+  const globalEnv = normalizedEnvValue(ENV_API_URL);
+  const configured = webEnv ?? globalEnv;
+
+  if (configured) {
+    // Production web should never target device/emulator loopback hosts.
+    // Local/LAN dev hosts are allowed to use loopback endpoints.
+    if (!isLocalDevWeb && isLoopbackOrEmulatorHost(configured)) {
+      console.error(
+        "[Config] Ignoring loopback/emulator API URL for production web build:",
+        configured,
+      );
+      return "";
+    }
+    return configured;
+  }
+
+  return isLocalDevWeb ? LOCAL_WEB_API : "";
+}
+
 function isAndroidPhysicalDevice(): boolean {
   if (Platform.OS !== "android") return false;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Device = require("expo-device");
     return Boolean(Device?.isDevice);
   } catch {
@@ -49,7 +120,7 @@ function isAndroidPhysicalDevice(): boolean {
 function inferNativeDevApiUrl(): string | null {
   // Expo Go / dev client usually exposes hostUri like "192.168.1.5:8081".
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Constants = require("expo-constants").default;
     const hostUri: string | undefined =
       Constants?.expoConfig?.hostUri ??
@@ -107,25 +178,17 @@ function resolveAndroidApiUrl(): string {
  *   5. Local/platform fallbacks
  */
 const isLocalDev =
-  Platform.OS === "web" &&
-  typeof window !== "undefined" &&
-  (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
+  Platform.OS === "web" && isLocalDevWebHost(getWebHostname());
 
 export const API_BASE_URL: string =
   Platform.OS === "android"
     ? resolveAndroidApiUrl()
     : Platform.OS === "web"
-      ? (ENV_API_URL_WEB && ENV_API_URL_WEB !== "")
-        ? ENV_API_URL_WEB
-        : (ENV_API_URL != null && ENV_API_URL !== "")
-          ? ENV_API_URL
-          : isLocalDev
-            ? LOCAL_WEB_API      // Dev web: localhost backend
-            : ""                 // Production web: relative paths (same domain)
-      : (ENV_API_URL_IOS && ENV_API_URL_IOS !== "")
-        ? ENV_API_URL_IOS
-        : (ENV_API_URL != null && ENV_API_URL !== "")
-          ? ENV_API_URL
+      ? resolveWebApiUrl(isLocalDev)
+      : (ENV_API_URL_IOS && ENV_API_URL_IOS.trim() !== "")
+        ? ENV_API_URL_IOS.trim()
+        : (ENV_API_URL != null && ENV_API_URL.trim() !== "")
+          ? ENV_API_URL.trim()
           : inferNativeDevApiUrl() ?? LOCAL_WEB_API;
 
 /** How long (ms) to wait before timing out API calls. */

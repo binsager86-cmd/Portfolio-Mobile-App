@@ -11,7 +11,7 @@
  *   <FlashList ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} ... />
  */
 
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation } from "expo-router";
 import { useCallback, useRef } from "react";
 import { type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 

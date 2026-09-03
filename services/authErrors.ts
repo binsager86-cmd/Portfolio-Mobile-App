@@ -170,7 +170,18 @@ export function mapAuthError(
   if (err instanceof Error) {
     const name = String((err as { name?: string }).name || "").toLowerCase();
     const msg = String(err.message || "").toLowerCase();
-    if (msg.includes("network request failed")) {
+    if (
+      context === "google" &&
+      (msg.includes("invalid google token") || msg.includes("could not verify with google"))
+    ) {
+      return {
+        code: "auth/google-invalid-token",
+        message: "Google sign-in could not be verified. Please try signing in again.",
+        severity: "warning",
+        originalError: err,
+      };
+    }
+    if (msg.includes("network request failed") || msg.includes("failed to fetch")) {
       return {
         code: "auth/network-error",
         message: "Cannot reach the server. Please check your internet connection.",

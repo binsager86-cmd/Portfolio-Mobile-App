@@ -50,17 +50,33 @@ export async function performGoogleSignIn(): Promise<GoogleAuthResult> {
   return performNativeGoogleSignIn();
 }
 
+function redirectToGoogleConsent(params: {
+  clientId: string;
+  redirectUri: string;
+  state?: string;
+}): void {
+  if (typeof window === "undefined") return;
+  const searchParams = new URLSearchParams({
+    client_id: params.clientId,
+    redirect_uri: params.redirectUri,
+    response_type: "token",
+    scope: "openid profile email",
+    prompt: "select_account",
+  });
+
+  if (params.state) {
+    searchParams.set("state", params.state);
+  }
+
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?${searchParams.toString()}`;
+  window.location.assign(url);
+}
+
 // ── Web: implicit flow via expo-auth-session ────────────────────────
 
 async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
   try {
     const AuthSession = await import("expo-auth-session");
-
-    // Google OAuth 2.0 endpoints
-    const discovery: import("expo-auth-session").DiscoveryDocument = {
-      authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-      tokenEndpoint: "https://oauth2.googleapis.com/token",
-    };
 
     // ✅ Dynamic redirect URI — adapts to whatever port Expo picks
     // On web this uses the current origin (e.g. http://localhost:8081)
@@ -91,52 +107,18 @@ async function performWebGoogleSignIn(): Promise<GoogleAuthResult> {
       try { window.localStorage.setItem("google_oauth_state", request.state); } catch { /* storage may be disabled */ }
     }
 
-    // Open the Google consent screen in a popup
-    if (__DEV__) console.info("[GoogleAuth] Opening Google consent screen…");
-    const result = await request.promptAsync(discovery);
+    // UX decision: always use full-page redirect on web.
+    // This avoids popup blockers and keeps behavior consistent across browsers.
+    if (__DEV__) console.info("[GoogleAuth] Redirecting browser to Google consent screen…");
+    redirectToGoogleConsent({
+      clientId: GOOGLE_WEB_CLIENT_ID,
+      redirectUri,
+      state: request.state,
+    });
 
-    if (__DEV__) console.info("[GoogleAuth] Auth result type:", result.type);
-
-    if (result.type === "cancel" || result.type === "dismiss") {
-      if (__DEV__) console.info("[GoogleAuth] User cancelled/dismissed the consent screen");
-      return { success: false, cancelled: true };
-    }
-
-    if (result.type === "success") {
-      const accessToken = result.params?.access_token;
-      if (!accessToken) {
-        if (__DEV__) console.error("[GoogleAuth] ❌ No access_token in response params");
-        return {
-          success: false,
-          cancelled: false,
-          error: "Google did not return an access token.",
-        };
-      }
-      if (__DEV__) console.info("[GoogleAuth] ✅ Got access_token");
-      // We return it as `idToken` for backward compatibility with the
-      // auth store which calls `apiGoogleSignIn(idToken)`. The backend
-      // accepts both real ID tokens and access tokens.
-      return { success: true, idToken: accessToken };
-    }
-
-    // Handle error responses (e.g., access_denied, server_error)
-    if (result.type === "error") {
-      const errorCode = result.params?.error || "unknown_error";
-      const errorDesc = result.params?.error_description || "Google Sign-In returned an error.";
-      if (__DEV__) console.error("[GoogleAuth] ❌ Error response:", errorCode);
-      return {
-        success: false,
-        cancelled: false,
-        error: `${errorCode}: ${errorDesc}`,
-      };
-    }
-
-    if (__DEV__) console.warn("[GoogleAuth] ⚠️ Unexpected result type:", result.type);
-    return {
-      success: false,
-      cancelled: false,
-      error: `Google Sign-In returned unexpected result: ${result.type}`,
-    };
+    // Browser navigation begins immediately. Login completes in app/_layout.tsx
+    // when Google redirects back with #access_token=...&state=...
+    return { success: false, cancelled: true };
   } catch (err: unknown) {
     if (__DEV__) console.error("[GoogleAuth Web] ❌ Exception:", err);
     return {

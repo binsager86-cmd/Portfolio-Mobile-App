@@ -106,6 +106,7 @@ export function formatLineItemValue(name: string, value: number): string {
 }
 
 export function formatMetricValue(name: string, value: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "–";
   const lc = name.toLowerCase().trim();
   const hasRatioWord = /(^|\s)ratio(\s|$)/.test(lc);
   // True percentage metrics (stored as decimals, display ×100 as %)
@@ -271,6 +272,7 @@ export function enrichMetricsWithFallbacks(
   const stmtByYear = new Map<number, Map<string, FinancialStatement>>();
   for (const s of statements) {
     if (s.fiscal_quarter != null) continue; // explicitly quarterly
+    if (typeof s.period_end_date !== "string" || s.period_end_date.length < 7) continue; // malformed/missing date
     const endMonth = parseInt(s.period_end_date.slice(5, 7), 10);
     if (endMonth === 6 || endMonth === 9) continue; // inferred Q2/Q3 — clearly non-annual
     if (!stmtByYear.has(s.fiscal_year)) stmtByYear.set(s.fiscal_year, new Map());

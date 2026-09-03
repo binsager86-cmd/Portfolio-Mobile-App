@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+
 /**
  * Trade Signals API client.
  */

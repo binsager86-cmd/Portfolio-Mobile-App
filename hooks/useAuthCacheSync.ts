@@ -27,7 +27,8 @@ export function useAuthCacheSync() {
             return key === "portfolio" || key === "portfolio-overview"
               || key === "holdings" || key === "transactions"
               || key === "news" || key === "deposits"
-              || key === "dividends" || key === "user";
+              || key === "market" || key === "dividends"
+              || key === "user";
           },
         });
       }

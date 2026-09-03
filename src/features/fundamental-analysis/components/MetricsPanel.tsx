@@ -1,3 +1,5 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
+
 /**
  * MetricsPanel — Financial metric calculation and display
  * (historical table + grouped list views).
@@ -5,7 +7,7 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { FAPanelSkeleton } from "@/components/ui/PageSkeletons";

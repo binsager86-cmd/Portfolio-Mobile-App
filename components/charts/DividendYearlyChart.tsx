@@ -59,6 +59,10 @@ interface Props {
   projectedData?: YearlyDividendData[];
   currency?: string;
   height?: number;
+  title?: string;
+  barTopColor?: string;
+  barBottomColor?: string;
+  activeValueColor?: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -81,6 +85,10 @@ function fmtVal(v: number): string {
 
 function propsAreEqual(prev: Props, next: Props): boolean {
   if (prev.currency !== next.currency || prev.height !== next.height) return false;
+  if (prev.title !== next.title) return false;
+  if (prev.barTopColor !== next.barTopColor) return false;
+  if (prev.barBottomColor !== next.barBottomColor) return false;
+  if (prev.activeValueColor !== next.activeValueColor) return false;
   if (prev.data.length !== next.data.length) return false;
   if ((prev.projectedData?.length ?? 0) !== (next.projectedData?.length ?? 0)) return false;
   for (let i = 0; i < prev.data.length; i++) {
@@ -103,6 +111,10 @@ export default React.memo(function DividendYearlyChart({
   projectedData,
   currency = "KWD",
   height: chartHeight = 260,
+  title,
+  barTopColor,
+  barBottomColor,
+  activeValueColor,
 }: Props) {
   const { colors } = useThemeStore();
   const [width, setWidth] = useState(0);
@@ -114,6 +126,11 @@ export default React.memo(function DividendYearlyChart({
   const gradProjectedId = `${uid}_barProjected`;
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const { t } = useTranslation();
+
+  const resolvedTitle = title ?? t("chart.dividendsByYear", "Dividends by Year");
+  const resolvedBarTopColor = barTopColor ?? colors.success;
+  const resolvedBarBottomColor = barBottomColor ?? colors.accentPrimary;
+  const resolvedActiveValueColor = activeValueColor ?? colors.success;
 
   // Entrance animation
   const animProgress = useSharedValue(0);
@@ -247,10 +264,10 @@ export default React.memo(function DividendYearlyChart({
       {/* Title */}
       <View style={s.titleRow}>
         <Text style={[s.title, { color: colors.textPrimary }]}>
-          {t("chart.dividendsByYear", "Dividends by Year")}
+          {resolvedTitle}
         </Text>
         {activeBar && (
-          <Text style={[s.tooltipValue, { color: colors.success }]}>
+          <Text style={[s.tooltipValue, { color: resolvedActiveValueColor }]}>
             {activeBar.year}: {formatCurrency(activeBar.amount, currency)}
           </Text>
         )}
@@ -276,12 +293,12 @@ export default React.memo(function DividendYearlyChart({
         >
           <Defs>
             <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={colors.success} stopOpacity={0.95} />
-              <Stop offset="100%" stopColor={colors.accentPrimary} stopOpacity={0.7} />
+              <Stop offset="0%" stopColor={resolvedBarTopColor} stopOpacity={0.95} />
+              <Stop offset="100%" stopColor={resolvedBarBottomColor} stopOpacity={0.7} />
             </LinearGradient>
             <LinearGradient id={gradActiveId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={colors.success} stopOpacity={1} />
-              <Stop offset="100%" stopColor={colors.accentPrimary} stopOpacity={1} />
+              <Stop offset="0%" stopColor={resolvedBarTopColor} stopOpacity={1} />
+              <Stop offset="100%" stopColor={resolvedBarBottomColor} stopOpacity={1} />
             </LinearGradient>
             <LinearGradient id={gradProjectedId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={colors.warning} stopOpacity={0.5} />

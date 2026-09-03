@@ -3,13 +3,14 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { getDeposits, type CashDepositListResponse } from "@/services/api";
+import { getAllDeposits, getDeposits, type CashDepositListResponse, type CashDepositRecord } from "@/services/api";
 
 // ── Query key constants ─────────────────────────────────────────────
 
 export const depositKeys = {
   list: (page?: number, portfolio?: string) =>
     ["deposits", page, portfolio] as const,
+  all: () => ["deposits", "all"] as const,
 } as const;
 
 // ── Hooks ───────────────────────────────────────────────────────────
@@ -29,5 +30,14 @@ export function useDeposits(params: {
         portfolio: params.portfolio,
       }),
     placeholderData: (prev) => prev,
+  });
+}
+
+/** Full deposits table (all pages) for yearly analytics/charting. */
+export function useAllDeposits() {
+  return useQuery<CashDepositRecord[]>({
+    queryKey: depositKeys.all(),
+    queryFn: () => getAllDeposits({ page_size: 200 }),
+    staleTime: 5 * 60 * 1000,
   });
 }

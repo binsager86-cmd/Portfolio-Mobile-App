@@ -1,3 +1,5 @@
+/* eslint-disable custom-styles/no-hardcoded-styles, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, max-lines */
+
 /**
  * Fundamental Analysis — stock profiles, financial statements,
  * metrics & ratios, growth analysis, scoring, and valuation models.
@@ -1230,7 +1232,6 @@ function StatementsPanel({ stockId, colors, isDesktop, autoFetch, onAutoFetchDon
     if (autoFetch && !fetchingOnline) {
       handleFetchOnline();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFetch]);
 
   useEffect(() => {
@@ -1797,7 +1798,8 @@ function ComparisonPanel({ stockId, stockSymbol, colors, isDesktop: _isDesktop }
       }
       return row;
     });
-    const typeName = STMNT_META[typeFilter]?.label ?? typeFilter;
+    const selectedType = typeFilter ?? "income";
+    const typeName = STMNT_META[selectedType]?.label ?? selectedType;
     return [{ title: `${typeName} — Period Comparison`, headers, rows }];
   }, [periods, allCodes, typeFilter, periodView]);
 

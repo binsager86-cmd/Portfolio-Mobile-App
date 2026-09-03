@@ -10,7 +10,6 @@
 
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ThemePalette } from "@/constants/theme";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import React, { useCallback, useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -21,6 +20,27 @@ import Animated, {
 } from "react-native-reanimated";
 
 const SPRING_CONFIG = { damping: 15, stiffness: 180, mass: 0.8 };
+
+type AnimatedTabBarProps = {
+  state: {
+    index: number;
+    routes: Array<{ key: string; name: string; params?: object }>;
+  };
+  descriptors: Record<string, {
+    options: {
+      href?: string | null;
+      tabBarLabel?: string;
+      title?: string;
+      tabBarAccessibilityLabel?: string;
+    };
+  }>;
+  navigation: {
+    emit: (event: { type: string; target: string; canPreventDefault?: boolean }) => {
+      defaultPrevented?: boolean;
+    };
+    navigate: (name: string, params?: object) => void;
+  };
+};
 
 interface AnimatedTabItemProps {
   label: string;
@@ -156,7 +176,7 @@ export function AnimatedTabBar({
   navigation,
   colors,
   insetBottom,
-}: BottomTabBarProps & { colors: ThemePalette; insetBottom: number }) {
+}: AnimatedTabBarProps & { colors: ThemePalette; insetBottom: number }) {
   return (
     <View
       style={[

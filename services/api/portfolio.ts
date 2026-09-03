@@ -129,6 +129,32 @@ export async function getDeposits(params?: {
   return data.data;
 }
 
+/** Fetch all cash deposits across pages (for analytics/chart aggregation). */
+export async function getAllDeposits(params?: {
+  portfolio?: string;
+  page_size?: number;
+}): Promise<CashDepositRecord[]> {
+  const pageSize = Math.min(params?.page_size ?? 200, 200);
+  let page = 1;
+  const rows: CashDepositRecord[] = [];
+
+  while (true) {
+    const res = await getDeposits({
+      portfolio: params?.portfolio,
+      page,
+      page_size: pageSize,
+    });
+
+    rows.push(...(res.deposits ?? []));
+
+    const totalPages = res.pagination?.total_pages ?? 1;
+    if (page >= totalPages) break;
+    page += 1;
+  }
+
+  return rows;
+}
+
 /** Get a single cash deposit by ID. */
 export async function getDeposit(depositId: number): Promise<CashDepositRecord> {
   const { data } = await api.get<{ status: string; data: CashDepositRecord }>(

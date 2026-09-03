@@ -335,7 +335,7 @@ function RootLayoutNav() {
     <StatusBar style={theme.isDark ? "light" : "dark"} />
     <QueryClientProvider client={queryClient}>
       <OfflineSyncProvider />
-      <SyncEngineProvider />
+      {token ? <SyncEngineProvider /> : null}
       <AuthCacheSyncProvider />
       <PaperProvider theme={theme}>
         <ThemeProvider value={buildNavTheme(theme)}>

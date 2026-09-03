@@ -13,6 +13,7 @@ import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/services/authStore";
 
@@ -87,7 +88,13 @@ export default function Index() {
 
   // Wait for auth hydration + onboarding check before redirecting
   if (isLoading || onboardingSeen === null) {
-    return null;
+    return (
+      <LoadingScreen
+        type="spinner"
+        message="Loading your account..."
+        fullscreen
+      />
+    );
   }
 
   if (!onboardingSeen) {

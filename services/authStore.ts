@@ -24,6 +24,7 @@ import {
     setRefreshToken,
     setToken,
 } from "@/services/tokenStorage";
+  import { Platform } from "react-native";
 import { create } from "zustand";
 
 // ── State shape ─────────────────────────────────────────────────────
@@ -103,26 +104,67 @@ async function persistAndSetSession(
 }
 
 async function authRequest(
-  path: "/api/v1/auth/login" | "/api/v1/auth/register",
+  path: "/api/v1/auth/login" | "/api/v1/auth/register" | "/api/v1/auth/google",
   payload: Record<string, unknown>,
 ): Promise<LoginResponse> {
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const candidateUrls = getAuthEndpointCandidates(path);
+  let lastNetworkError: unknown = null;
+  for (const url of candidateUrls) {
+    try {
+      const resp = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }, 45_000);
 
-  const json = await resp.json().catch(() => ({} as Record<string, unknown>));
-  if (!resp.ok) {
-    const message =
-      (typeof json?.detail === "string" && json.detail) ||
-      (typeof json?.message === "string" && json.message) ||
-      `Auth request failed (${resp.status})`;
-    throw new Error(message);
+      const json = await resp.json().catch(() => ({} as Record<string, unknown>));
+      if (!resp.ok) {
+        const message =
+          (typeof json?.detail === "string" && json.detail) ||
+          (typeof json?.message === "string" && json.message) ||
+          `Auth request failed (${resp.status})`;
+        throw new Error(message);
+      }
+
+      const data = (json as { data?: unknown })?.data ?? json;
+      return data as LoginResponse;
+    } catch (err) {
+      if (!isLikelyNetworkError(err)) {
+        throw err;
+      }
+      lastNetworkError = err;
+    }
   }
 
-  const data = (json as { data?: unknown })?.data ?? json;
-  return data as LoginResponse;
+  throw lastNetworkError ?? new Error("Auth request failed due to a network error.");
+}
+
+function getAuthEndpointCandidates(
+  path: "/api/v1/auth/login" | "/api/v1/auth/register" | "/api/v1/auth/google",
+): string[] {
+  const primary = `${API_BASE_URL}${path}`;
+  const fallback = `http://127.0.0.1:8004${path}`;
+
+  // Web local-dev safety net: if the configured API host is unreachable,
+  // retry against loopback to tolerate stale/misresolved local host targets.
+  if (Platform.OS === "web" && primary !== fallback) {
+    return [primary, fallback];
+  }
+
+  return [primary];
+}
+
+function isLikelyNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const name = (err.name || "").toLowerCase();
+  const message = (err.message || "").toLowerCase();
+  return (
+    name.includes("abort") ||
+    message.includes("failed to fetch") ||
+    message.includes("network request failed") ||
+    message.includes("timed out") ||
+    message.includes("econnrefused")
+  );
 }
 
 async function fetchWithTimeout(
@@ -337,21 +379,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (__DEV__) console.info("[AuthStore] 🔵 googleSignIn called");
     set({ isLoading: true, error: null, lastAuthError: null });
     try {
-      if (__DEV__) console.info("[AuthStore] 🔵 Calling POST /api/v1/auth/google…");
-      const googleResp = await fetchWithTimeout(`${API_BASE_URL}/api/v1/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: idToken }),
-      }, 45_000);
-      const googleJson = await googleResp.json().catch(() => ({} as Record<string, unknown>));
-      if (!googleResp.ok) {
-        const message =
-          (typeof googleJson?.detail === "string" && googleJson.detail) ||
-          (typeof googleJson?.message === "string" && googleJson.message) ||
-          `Google sign-in failed (${googleResp.status})`;
-        throw new Error(message);
-      }
-      const normalized = ((googleJson as { data?: unknown })?.data ?? googleJson) as LoginResponse;
+      if (__DEV__) console.info("[AuthStore] 🔵 Calling /api/v1/auth/google…");
+      const normalized = await authRequest("/api/v1/auth/google", {
+        id_token: idToken,
+      });
       if (__DEV__) console.info("[AuthStore] ✅ Backend returned tokens");
       await persistAndSetSession(normalized, set);
       if (__DEV__) console.info("[AuthStore] ✅ Session persisted, user is now authenticated");

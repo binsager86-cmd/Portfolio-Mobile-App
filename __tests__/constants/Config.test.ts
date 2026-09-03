@@ -76,6 +76,11 @@ describe("Config — API_BASE_URL resolution", () => {
     expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
   });
 
+  it("treats private-LAN web hosts as local dev", () => {
+    const config = loadConfig("web", "192.168.1.45");
+    expect(config.API_BASE_URL).toBe("http://127.0.0.1:8004");
+  });
+
   it("LOCAL_WEB_API never contains 'localhost' (prevents IPv6 issues)", () => {
     const config = loadConfig("web", "localhost");
     // The URL should use 127.0.0.1, NOT localhost
@@ -84,6 +89,12 @@ describe("Config — API_BASE_URL resolution", () => {
   });
 
   it("uses empty string for production web (non-localhost hostname)", () => {
+    const config = loadConfig("web", "myapp.example.com");
+    expect(config.API_BASE_URL).toBe("");
+  });
+
+  it("rejects loopback API URL for production web hosts", () => {
+    process.env.EXPO_PUBLIC_API_URL_WEB = "http://127.0.0.1:8004";
     const config = loadConfig("web", "myapp.example.com");
     expect(config.API_BASE_URL).toBe("");
   });

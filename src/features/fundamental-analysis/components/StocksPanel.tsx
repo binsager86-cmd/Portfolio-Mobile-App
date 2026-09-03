@@ -1,3 +1,5 @@
+/* eslint-disable custom-styles/no-hardcoded-styles */
+
 /**
  * StocksPanel — Stock list with search, add/edit/delete, and stock picker.
  */

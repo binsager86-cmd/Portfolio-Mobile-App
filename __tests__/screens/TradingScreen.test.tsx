@@ -9,6 +9,10 @@ const mockTradingSummary = {
       total_transactions: 0,
       total_trades: 0,
       total_pnl: 0,
+      total_deposits: 133231.207,
+      deposit_count: 52,
+      total_withdrawals: 4650,
+      withdrawal_count: 0,
     },
     transactions: [],
     pagination: {
@@ -24,6 +28,30 @@ const mockTradingSummary = {
   isFetching: false,
 };
 
+const mockDeposits = {
+  data: {
+    deposits: [
+      {
+        id: 101,
+        user_id: 1,
+        portfolio: "KFH",
+        deposit_date: "2026-07-01",
+        amount: 2500,
+        currency: "KWD",
+        bank_name: null,
+        source: "deposit",
+        notes: "opening cash",
+        is_deleted: 0,
+        created_at: null,
+      },
+    ],
+    count: 1,
+    total_kwd: 2500,
+    pagination: { page: 1, page_size: 200, total_items: 1, total_pages: 1 },
+  },
+  refetch: jest.fn(),
+};
+
 const mockRealizedProfit: {
   data: { total_realized_kwd: number; total_profit_kwd: number; total_loss_kwd: number; details: any[] } | null;
 } = {
@@ -37,6 +65,7 @@ const mockRealizedProfit: {
 
 jest.mock("@/hooks/queries", () => ({
   useTradingSummary: () => mockTradingSummary,
+  useDeposits: () => mockDeposits,
   useRiskMetrics: () => ({ data: null }),
   useRealizedProfit: () => mockRealizedProfit,
 }));
@@ -122,9 +151,27 @@ jest.mock("@/components/trading/TradingSummary", () => ({
 }));
 
 jest.mock("@/components/trading/TradingFilters", () => ({
-  FilterChip: () => null,
+  FilterChip: ({ label, onPress }: { label: string; onPress: () => void }) => {
+    const { Pressable, Text } = require("react-native");
+    return (
+      <Pressable testID={`filter-chip-${label}`} onPress={onPress}>
+        <Text>{label}</Text>
+      </Pressable>
+    );
+  },
   PORTFOLIOS: ["KFH", "BBYN", "USA"],
-  TXN_TYPES: ["Buy", "Sell", "Dividend_Only"],
+  TXN_TYPES: ["Buy", "Sell", "Deposit", "Withdrawal", "Dividend_Only"],
+}));
+
+jest.mock("@/components/form/DateInput", () => ({
+  DateInput: ({ value, placeholder, onChangeText }: { value: string; placeholder: string; onChangeText: (value: string) => void }) => {
+    const { Pressable, Text } = require("react-native");
+    return (
+      <Pressable testID={`date-input-${placeholder}`} onPress={() => onChangeText("2026-07-01")}>
+        <Text>{value || placeholder}</Text>
+      </Pressable>
+    );
+  },
 }));
 
 jest.mock("@/components/portfolio/KpiWidgets", () => ({
@@ -137,7 +184,11 @@ jest.mock("@/components/ui/InfoTip", () => ({
 }));
 
 jest.mock("@shopify/flash-list", () => ({
-  FlashList: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  FlashList: ({ data = [], renderItem, children }: { data?: unknown[]; renderItem?: (args: { item: unknown; index: number }) => React.ReactNode; children?: React.ReactNode }) => {
+    const { View } = require("react-native");
+    if (renderItem) return <>{data.map((item, index) => <View key={index}>{renderItem({ item, index })}</View>)}</>;
+    return children ?? null;
+  },
 }));
 
 jest.mock("@/components/trading/TradingEditableRow", () => ({
@@ -176,7 +227,16 @@ jest.mock("@/components/trading/TradingTable", () => ({
   HeaderCell: () => null,
   sortTransactions: (transactions: unknown[]) => transactions,
   TABLE_COLUMNS: [],
-  TableRow: () => null,
+  TableRow: ({ txn }: { txn: { type: string; company_name: string; value: number } }) => {
+    const { Text } = require("react-native");
+    return (
+      <>
+        <Text>{txn.type}</Text>
+        <Text>{txn.company_name}</Text>
+        <Text>{txn.value}</Text>
+      </>
+    );
+  },
   TOTAL_TABLE_WIDTH: 0,
   ts: {
     tableOuter: {},
@@ -211,6 +271,7 @@ describe("TradingScreen", () => {
   beforeEach(() => {
     queryClient = createTestQueryClient();
     mockTradingSummary.refetch.mockClear();
+    mockDeposits.refetch.mockClear();
     mockRealizedProfit.data = {
       total_realized_kwd: 123.45,
       total_profit_kwd: 150,
@@ -254,5 +315,25 @@ describe("TradingScreen", () => {
 
     expect(screen.getByTestId("trading-summary-active-tab").props.children).toBe("realizedTransactions");
     expect(screen.queryByText("trading.transactionLog")).toBeNull();
+  });
+
+  it("shows deposit rows from the deposits API when trading transactions are empty", () => {
+    renderScreen(queryClient);
+
+    fireEvent.press(screen.getByTestId("filter-chip-Deposit"));
+
+    expect(screen.getByText("1 trading.transactionsLabel · Deposit")).toBeTruthy();
+  expect(screen.getAllByText("Deposit").length).toBeGreaterThan(1);
+    expect(screen.getByText("Cash Deposit")).toBeTruthy();
+    expect(screen.getByText("2500")).toBeTruthy();
+    expect(screen.queryByText("trading.noTransactions")).toBeNull();
+  });
+
+  it("uses calendar date inputs for the trading date filters", () => {
+    renderScreen(queryClient);
+
+    fireEvent.press(screen.getByTestId("date-input-trading.fromDate"));
+
+    expect(screen.getByText("1 trading.transactionsLabel · from 2026-07-01")).toBeTruthy();
   });
 });

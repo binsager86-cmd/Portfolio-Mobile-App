@@ -24,11 +24,32 @@ interface MLSignalCardProps {
   ticker: string;
 }
 
+const ML_SHADOW_ROSTER = new Set([
+  "AAYANRE",
+  "ALTIJARIA",
+  "ARGAN",
+  "BOURSA",
+  "FACIL",
+  "IFA",
+  "JAZEERA",
+  "JTC",
+  "KCEM",
+  "KPPC",
+  "MKHZN",
+  "OOREDOO",
+  "URC",
+  "WARBACAP",
+]);
+
 export function MLSignalCard({ ticker }: MLSignalCardProps) {
   const { colors } = useThemeStore();
   const router = useRouter();
+  const normalizedTicker = ticker.toUpperCase().trim();
+  const isShadowTicker = ML_SHADOW_ROSTER.has(normalizedTicker);
 
-  const { data, isLoading, isError } = useMLBandForTicker(ticker);
+  const { data, isLoading, isError } = useMLBandForTicker(normalizedTicker, isShadowTicker);
+
+  if (!isShadowTicker) return null;
 
   if (isLoading) {
     return (
