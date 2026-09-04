@@ -54,6 +54,21 @@ export interface TrendHoldBookPosition {
   market_value_kwd?: number | null;
   unrealized_pnl_kwd?: number | null;
   opened_date?: string | null;
+  // What triggered this position's own BUY, straight from trend_hold_engine's
+  // entry-gate snapshot. Null for any signal source with no equivalent
+  // concept (e.g. the V1 Rating Book).
+  entry_path?: "DONCHIAN" | "EMA_CROSS" | null;
+  entry_confidence?: number | null; // 0-100
+  breakout_margin_pct?: number | null;
+  rel_volume_entry?: number | null;
+  cmf10_entry?: number | null;
+  adx14_entry?: number | null;
+  sma200_slope_entry?: number | null;
+  atr14_entry?: number | null;
+  // Today's live trailing-stop level -- the only "target" concept this
+  // system has for an open trade: not a take-profit price, just where it
+  // currently exits if broken.
+  structural_stop?: number | null;
 }
 
 export interface TrendHoldBookPositionsResponse {
@@ -119,16 +134,77 @@ export interface TrendHoldBookLesson {
   holding_days?: number | null;
   reason: string;
   enhancement: string;
+  // Buy/sell price, size, and realized P&L for this closing leg -- every
+  // trade (open or closed) should be able to show what it bought/sold at.
+  entry_price?: number | null;
+  exit_price?: number | null;
+  quantity?: number | null;
+  realized_pnl_kwd?: number | null;
+  commission_kwd?: number | null;
+  // Entry-quality / regime context, straight from trend_hold_engine's own
+  // reading. Null for any signal source with no equivalent concept (e.g.
+  // the V1 Rating Book).
+  entry_path?: "DONCHIAN" | "EMA_CROSS" | null;
+  entry_confidence?: number | null; // 0-100
+  breakout_margin_pct?: number | null;
+  rel_volume_entry?: number | null;
+  cmf10_entry?: number | null;
+  adx14_entry?: number | null;
+  sma200_slope_entry?: number | null;
+  atr14_entry?: number | null;
+  adx14_exit?: number | null;
+  atr14_exit?: number | null;
+  // The trailing-stop level that actually governed this exit -- this
+  // system never sets a fixed take-profit target at entry (see the
+  // reports' "no target price" disclosure); this is the real number that
+  // fired instead.
+  structural_stop_at_exit?: number | null;
+  // Tested upside missed (pp) -- WIN/PARTIAL-side classifications only
+  // (CLEAN_WIN, GAVE_BACK_GAINS, PROFIT_MILESTONE). This system's stated
+  // priority is maximizing profit and win rate, so losses keep their
+  // classification + reason without an equivalent field.
+  pct_left_on_table?: number | null;
+  // Forward-look: did the stock keep running after this system exited it?
+  // Computed from real OHLCV that arrived *after* trade_date -- available
+  // is false until at least 5 trading sessions (1 week) have actually
+  // passed, since the answer doesn't exist before then.
+  forward_1w_available: boolean;
+  forward_1w_price?: number | null;
+  forward_1w_return_pct?: number | null;
+  forward_peak_20d_pct?: number | null;
+  forward_sessions_available?: number | null;
 }
 
 export interface TrendHoldBookLessonsResponse {
   lessons: TrendHoldBookLesson[];
 }
 
+export interface TrendHoldBookEntryPathStats {
+  closed: number;
+  wins: number;
+  losses: number;
+  // null below the backend's minimum-sample floor (currently 5 closed) --
+  // withheld rather than shown as a misleadingly precise rate off a
+  // handful of trades. Same shape reused for ADX-regime buckets.
+  win_rate_pct?: number | null;
+}
+
 export interface TrendHoldBookLessonsSummary {
   total_closed: number;
   by_classification: Record<string, number>;
   by_outcome: Record<string, number>;
+  // Profit-maximization headline -- the average measurable upside missed
+  // across WIN/PARTIAL trades, and how many had any (> 0.5pp). Surface
+  // these first: this system's stated priority is maximizing profit and
+  // win rate, ahead of loss diagnostics.
+  avg_pct_left_on_table?: number | null;
+  trades_with_room_to_improve?: number;
+  by_entry_path?: Record<string, TrendHoldBookEntryPathStats>;
+  // ADX14-at-entry regime bands: WEAK_LT20 | MODERATE_20_40 | STRONG_GT40.
+  by_adx_bucket?: Record<string, TrendHoldBookEntryPathStats>;
+  avg_entry_confidence_win?: number | null;
+  avg_entry_confidence_loss?: number | null;
+  // Loss diagnostics -- kept lean by design.
   avg_loss_mae_pct?: number | null;
   avg_win_giveback_pct?: number | null;
 }

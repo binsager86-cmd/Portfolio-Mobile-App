@@ -16,7 +16,7 @@ import { sanitizePdfText } from "@/lib/sanitizePdf";
 import { Platform } from "react-native";
 import { jsPDF } from "jspdf";
 
-import type { TrendHoldBookLesson, TrendHoldBookLessonsSummary } from "@/hooks/useTrendHoldBook";
+import type { TrendHoldBookLesson, TrendHoldBookLessonsSummary, TrendHoldBookPosition } from "@/hooks/useTrendHoldBook";
 
 // ── Input ────────────────────────────────────────────────────────────
 
@@ -24,6 +24,21 @@ export interface LessonsReportInput {
   bookLabel: string; // "Trend-Hold" | "V1 Rating"
   lessons: TrendHoldBookLesson[];
   summary?: TrendHoldBookLessonsSummary | null;
+  // Still-open positions -- included so every trade (open or closed) shows
+  // a buy price, not just the ones that have exited. Undefined/empty for
+  // books with no position concept in this report (falls back to omitting
+  // the section rather than rendering it empty).
+  positions?: TrendHoldBookPosition[];
+}
+
+const ENTRY_PATH_LABEL: Record<string, string> = { DONCHIAN: "Donchian breakout", EMA_CROSS: "EMA10/30 cross" };
+
+function fmtPct(v: number | null | undefined, digits = 1): string {
+  return v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
+}
+
+function fmtNum(v: number | null | undefined, digits = 3): string {
+  return v == null ? "—" : v.toFixed(digits);
 }
 
 // ── Palette — mirrors the in-app Trend-Hold Book KPI identity (violet /
@@ -187,6 +202,30 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
   if (kpiBits.length) doc.text(kpiBits.join("   |   "), mx + 8, y + 21, { maxWidth: cw - 16 });
   y += overviewH + SECTION_GAP;
 
+  // ── Trading-model disclosure: no fixed target price, and which gate
+  // indicators are lagging vs same-session. System-level facts, stated
+  // once here rather than repeated on every trade card. ─────────────────
+  const disclosureText =
+    "No fixed take-profit target is set at entry — this system exits only via the chandelier trailing stop " +
+    "(3.5×ATR14 off the post-entry high) or the automatic +20% profit-milestone scale-out. The stop level shown " +
+    "per trade is what actually governed the exit, not a target.";
+  const lagText =
+    "Indicator lag: EMA10/30/50, the Donchian-40 ceiling, ATR14, CMF10, OBV-slope40, and SMA200-slope are all " +
+    "lagging (built from trailing price/volume history — they confirm a move already in progress, never predict " +
+    "one). Relative-volume(20d) is same-session. ADX14 is regime context only, not a gate — like RSI14, it does " +
+    "not fire or block any decision today.";
+  const disclosureLines = doc.setFont("helvetica", "normal").setFontSize(7).splitTextToSize(disclosureText, cw - 16) as string[];
+  const lagLines = doc.setFont("helvetica", "normal").setFontSize(7).splitTextToSize(lagText, cw - 16) as string[];
+  const disclosureBoxH = (disclosureLines.length + lagLines.length) * LINE_H + 10;
+  ensureSpace(disclosureBoxH + 4);
+  drawRoundedRect(doc, mx, y, cw, disclosureBoxH, 2.5, C.altRow, C.border);
+  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(C.textDark);
+  doc.text("How this system trades", mx + 6, y + 5);
+  doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(C.textMedium);
+  doc.text(disclosureLines, mx + 6, y + 9.5);
+  doc.text(lagLines, mx + 6, y + 9.5 + disclosureLines.length * LINE_H + 3);
+  y += disclosureBoxH + SECTION_GAP;
+
   // ── By entry path / by ADX bucket mini-tables ─────────────────────
   function drawBucketTable(title: string, buckets: Record<string, { closed: number; wins: number; losses: number; win_rate_pct?: number | null }> | undefined, labelFor: (k: string) => string) {
     const entries = Object.entries(buckets ?? {});
@@ -212,7 +251,6 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
     y += SECTION_GAP - 2;
   }
 
-  const ENTRY_PATH_LABEL: Record<string, string> = { DONCHIAN: "Donchian breakout", EMA_CROSS: "EMA10/30 cross" };
   const ADX_BUCKET_LABEL: Record<string, string> = {
     WEAK_LT20: "Weak trend (ADX < 20)",
     MODERATE_20_40: "Moderate trend (ADX 20-40)",
@@ -220,6 +258,72 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
   };
   drawBucketTable("By entry path", summary?.by_entry_path, (k) => ENTRY_PATH_LABEL[k] ?? k);
   drawBucketTable("By trend strength at entry", summary?.by_adx_bucket, (k) => ADX_BUCKET_LABEL[k] ?? k);
+
+  // ── Open positions — every trade should state a buy price, including
+  // ones that haven't sold yet. No sell price/PnL exists until it closes;
+  // the current trailing-stop level is shown instead of a target price
+  // (this system doesn't set one). ─────────────────────────────────────
+  const positions = input.positions ?? [];
+  if (positions.length > 0) {
+    ensureSpace(10);
+    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(C.textDark);
+    doc.text(`Open Positions (${positions.length})`, mx, y + 5);
+    y += 10;
+
+    for (const pos of positions) {
+      const hasEntryCtx = pos.entry_path != null || pos.entry_confidence != null;
+      const hasGateDetail = pos.rel_volume_entry != null || pos.cmf10_entry != null || pos.adx14_entry != null;
+      const rowH = 6.5;
+      const entryCtxH = hasEntryCtx ? 5.2 : 0;
+      const gateH = hasGateDetail ? 5.2 : 0;
+      const posCardH = 9 + rowH + entryCtxH + gateH + 4;
+
+      ensureSpace(posCardH + 4);
+      const cardTop = y;
+      drawRoundedRect(doc, mx, y, cw, posCardH, 2.5, C.cardBg, C.border);
+
+      doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(C.textDark);
+      doc.text(sanitizePdfText(pos.ticker, 20), mx + 5, y + 6.5);
+      drawBadge(doc, mx + 5 + doc.getTextWidth(sanitizePdfText(pos.ticker, 20)) + 6, y + 6.5, "OPEN", lightenHex(C.primary, 0.85), C.primary);
+      doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(C.textLight);
+      doc.text(`opened ${sanitizePdfText(pos.opened_date ?? "—", 12)}`, mx + cw - 4, y + 6.5, { align: "right" });
+      y += 9;
+
+      const rowBits = [`Bought ${fmtNum(pos.avg_cost, 3)}`, `Qty ${pos.quantity.toFixed(2)}`];
+      if (pos.latest_close != null) rowBits.push(`Now ${fmtNum(pos.latest_close, 3)}`);
+      if (pos.unrealized_pnl_kwd != null) {
+        rowBits.push(`Unrealized ${pos.unrealized_pnl_kwd >= 0 ? "+" : ""}${pos.unrealized_pnl_kwd.toFixed(3)} KWD`);
+      }
+      if (pos.structural_stop != null) rowBits.push(`Current stop ${pos.structural_stop.toFixed(3)}`);
+      doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(C.textDark);
+      doc.text(rowBits.join("   ·   "), mx + 5, y + 3.6);
+      y += rowH;
+
+      if (hasEntryCtx) {
+        const bits: string[] = [];
+        if (pos.entry_path) bits.push(`Buy trigger: ${ENTRY_PATH_LABEL[pos.entry_path] ?? pos.entry_path}`);
+        if (pos.entry_confidence != null) bits.push(`Confidence ${pos.entry_confidence.toFixed(0)}/100`);
+        if (pos.breakout_margin_pct != null) bits.push(`Breakout margin +${pos.breakout_margin_pct.toFixed(1)}%`);
+        doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.primary);
+        doc.text(bits.join("   ·   "), mx + 5, y + 3.4);
+        y += entryCtxH;
+      }
+
+      if (hasGateDetail) {
+        const bits: string[] = [];
+        if (pos.rel_volume_entry != null) bits.push(`Rel-vol ${pos.rel_volume_entry.toFixed(2)} (floor 0.80)`);
+        if (pos.cmf10_entry != null) bits.push(`CMF10 ${pos.cmf10_entry.toFixed(3)} (floor -0.05)`);
+        if (pos.adx14_entry != null) bits.push(`ADX14 ${pos.adx14_entry.toFixed(1)}`);
+        if (pos.sma200_slope_entry != null) bits.push(`SMA200 slope ${pos.sma200_slope_entry >= 0 ? "up" : "down"}`);
+        doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.primary);
+        doc.text(bits.join("   ·   "), mx + 5, y + 3.4);
+        y += gateH;
+      }
+
+      y = cardTop + posCardH + 4;
+    }
+    y += SECTION_GAP - 4;
+  }
 
   // ── Per-trade lesson cards ─────────────────────────────────────────
   ensureSpace(10);
@@ -239,18 +343,28 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
       lesson.mae_pct != null ||
       lesson.giveback_pct != null ||
       lesson.pct_left_on_table != null;
-    const hasEntryCtx = lesson.entry_path != null || lesson.entry_confidence != null || lesson.breakout_margin_pct != null;
+    const hasPriceLine = lesson.entry_price != null || lesson.exit_price != null || lesson.quantity != null;
+    const hasEntryCtx1 = lesson.entry_path != null || lesson.entry_confidence != null || lesson.breakout_margin_pct != null;
+    const hasEntryCtx2 =
+      lesson.rel_volume_entry != null || lesson.cmf10_entry != null || lesson.adx14_entry != null || lesson.sma200_slope_entry != null;
+    const hasExitCtx = lesson.structural_stop_at_exit != null || lesson.atr14_exit != null || lesson.adx14_exit != null;
+    const hasForward = lesson.forward_1w_available || lesson.forward_sessions_available != null;
 
     const headerH = 9;
     const metricsH = hasMetrics ? 6 : 0;
-    const entryCtxH = hasEntryCtx ? 5.5 : 0;
+    const priceLineH = hasPriceLine ? 5.5 : 0;
+    const entryCtx1H = hasEntryCtx1 ? 5.2 : 0;
+    const entryCtx2H = hasEntryCtx2 ? 5.2 : 0;
+    const exitCtxH = hasExitCtx ? 5.2 : 0;
+    const forwardH = hasForward ? 5.5 : 0;
     const reasonH = reasonLines.length * LINE_H + 2;
     // Must match exactly what the enhancement box drawing below produces
     // (encBoxH) plus its own trailing gap -- this is the single source of
     // truth for the card's total height, used both to draw the card's
     // background/border up front and to know how much space to reserve.
     const encBoxH = enhancementLines.length * LINE_H + 5;
-    const cardH = headerH + metricsH + entryCtxH + reasonH + encBoxH + 4 + 2;
+    const cardH =
+      headerH + metricsH + priceLineH + entryCtx1H + entryCtx2H + exitCtxH + forwardH + reasonH + encBoxH + 4 + 2;
 
     ensureSpace(cardH + 4);
 
@@ -267,6 +381,21 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
     doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(C.textLight);
     doc.text(sanitizePdfText(lesson.trade_date, 12), mx + cw - 4, y + 6.5, { align: "right" });
     y += headerH;
+
+    // buy/sell price + quantity + realized P&L -- every trade should state
+    // what it bought and sold at, not just the % outcome.
+    if (hasPriceLine) {
+      const bits: string[] = [];
+      if (lesson.entry_price != null) bits.push(`Bought ${fmtNum(lesson.entry_price, 3)}`);
+      if (lesson.exit_price != null) bits.push(`Sold ${fmtNum(lesson.exit_price, 3)}`);
+      if (lesson.quantity != null) bits.push(`Qty ${lesson.quantity.toFixed(2)}`);
+      if (lesson.realized_pnl_kwd != null) {
+        bits.push(`P&L ${lesson.realized_pnl_kwd >= 0 ? "+" : ""}${lesson.realized_pnl_kwd.toFixed(3)} KWD`);
+      }
+      doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(C.textDark);
+      doc.text(bits.join("   ·   "), mx + 5, y + 3.6);
+      y += priceLineH;
+    }
 
     // metrics line
     if (hasMetrics) {
@@ -287,15 +416,55 @@ export async function exportLessonsLearnedPdf(input: LessonsReportInput): Promis
       y += metricsH;
     }
 
-    // entry-quality context line
-    if (hasEntryCtx) {
+    // entry gate, line 1: which path fired the BUY and how strong the signal was
+    if (hasEntryCtx1) {
       const bits: string[] = [];
-      if (lesson.entry_path) bits.push(ENTRY_PATH_LABEL[lesson.entry_path] ?? lesson.entry_path);
+      if (lesson.entry_path) bits.push(`Buy trigger: ${ENTRY_PATH_LABEL[lesson.entry_path] ?? lesson.entry_path}`);
       if (lesson.entry_confidence != null) bits.push(`Confidence ${lesson.entry_confidence.toFixed(0)}/100`);
       if (lesson.breakout_margin_pct != null) bits.push(`Breakout margin +${lesson.breakout_margin_pct.toFixed(1)}%`);
       doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.primary);
       doc.text(bits.join("   ·   "), mx + 5, y + 3.4);
-      y += entryCtxH;
+      y += entryCtx1H;
+    }
+
+    // entry gate, line 2: the raw volume/flow/regime readings behind that trigger
+    if (hasEntryCtx2) {
+      const bits: string[] = [];
+      if (lesson.rel_volume_entry != null) bits.push(`Rel-vol ${lesson.rel_volume_entry.toFixed(2)} (floor 0.80)`);
+      if (lesson.cmf10_entry != null) bits.push(`CMF10 ${lesson.cmf10_entry.toFixed(3)} (floor -0.05)`);
+      if (lesson.adx14_entry != null) bits.push(`ADX14 ${lesson.adx14_entry.toFixed(1)}`);
+      if (lesson.sma200_slope_entry != null) bits.push(`SMA200 slope ${lesson.sma200_slope_entry >= 0 ? "up" : "down"}`);
+      doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.primary);
+      doc.text(bits.join("   ·   "), mx + 5, y + 3.4);
+      y += entryCtx2H;
+    }
+
+    // exit gate: the trailing-stop level and volatility/regime context that
+    // actually fired the SELL -- this system has no fixed target price, so
+    // this line (not a target) is the real number that governed the exit.
+    if (hasExitCtx) {
+      const bits: string[] = [];
+      if (lesson.structural_stop_at_exit != null) bits.push(`Sell trigger: stop ${lesson.structural_stop_at_exit.toFixed(3)}`);
+      if (lesson.atr14_exit != null) bits.push(`ATR14 ${lesson.atr14_exit.toFixed(3)}`);
+      if (lesson.adx14_exit != null) bits.push(`ADX14 ${lesson.adx14_exit.toFixed(1)}`);
+      doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.gold);
+      doc.text(bits.join("   ·   "), mx + 5, y + 3.4);
+      y += exitCtxH;
+    }
+
+    // forward-look: did the stock have more room to run after this system exited it?
+    if (hasForward) {
+      let text: string;
+      if (lesson.forward_1w_available) {
+        const bits = [`1wk after exit: ${fmtPct(lesson.forward_1w_return_pct)}`];
+        if (lesson.forward_peak_20d_pct != null) bits.push(`best of next ~20 sessions: ${fmtPct(lesson.forward_peak_20d_pct)}`);
+        text = `Forward-look — ${bits.join("   ·   ")}`;
+      } else {
+        text = `Forward-look — pending (${lesson.forward_sessions_available ?? 0}/5 sessions elapsed since exit)`;
+      }
+      doc.setFont("helvetica", "italic").setFontSize(6.8).setTextColor(C.textLight);
+      doc.text(text, mx + 5, y + 3.4);
+      y += forwardH;
     }
 
     // reason

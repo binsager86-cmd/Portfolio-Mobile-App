@@ -1,4 +1,4 @@
-/* eslint-disable custom-styles/no-hardcoded-styles */
+/* eslint-disable custom-styles/no-hardcoded-styles, max-lines */
 /**
  * Paper Books screen.
  *
@@ -40,10 +40,11 @@ import {
 } from "@/hooks/useTrendHoldBook";
 import { useResponsive } from "@/hooks/useResponsive";
 import { fmtNum, formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/currency";
+import { exportLessonsLearnedPdf } from "@/lib/exportLessonsLearnedPdf";
 import { useThemeStore } from "@/services/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, LayoutChangeEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, LayoutChangeEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── KPI card palette — deliberately its own violet/amber identity, not the
@@ -86,6 +87,14 @@ const OUTCOME_COLOR_KEY: Record<string, keyof typeof KPI_STYLES> = {
   LOSS: "returnNegative",
   PARTIAL: "equity",
   UNKNOWN: "positions",
+};
+
+// ADX14-at-entry regime bands -- mirrors paper_book_store.py's _adx_bucket.
+const ADX_BUCKET_ORDER = ["WEAK_LT20", "MODERATE_20_40", "STRONG_GT40"] as const;
+const ADX_BUCKET_LABEL: Record<string, string> = {
+  WEAK_LT20: "Weak trend (ADX < 20)",
+  MODERATE_20_40: "Moderate trend (ADX 20-40)",
+  STRONG_GT40: "Strong trend (ADX > 40)",
 };
 
 function KpiCard({
@@ -308,10 +317,44 @@ function FetchPriceButton({ onPress, pending, colors }: { onPress: () => void; p
   );
 }
 
+/** Save/share the Lessons Learned log as a PDF -- see lib/exportLessonsLearnedPdf.ts. */
+function ExportLessonsButton({
+  onPress,
+  pending,
+  disabled,
+  colors,
+}: {
+  onPress: () => void;
+  pending: boolean;
+  disabled: boolean;
+  colors: ThemePalette;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={pending || disabled}
+      style={[
+        styles.fetchPriceButton,
+        { backgroundColor: colors.bgCard, borderColor: colors.borderColor, opacity: pending || disabled ? 0.5 : 1 },
+      ]}
+    >
+      {pending ? (
+        <ActivityIndicator size="small" color={colors.accentPrimary} />
+      ) : (
+        <FontAwesome name="file-pdf-o" size={12} color={colors.accentPrimary} />
+      )}
+      <Text style={[styles.fetchPriceText, { color: colors.accentPrimary }]}>
+        {pending ? "Preparing…" : "Export PDF"}
+      </Text>
+    </Pressable>
+  );
+}
+
 function PositionRow({ position }: { position: TrendHoldBookPosition }) {
   const { colors } = useThemeStore();
   const pnl = position.unrealized_pnl_kwd;
   const pnlColor = pnl == null ? colors.textMuted : pnl >= 0 ? colors.success : colors.danger;
+  const hasEntryCtx = position.entry_path != null || position.entry_confidence != null;
   return (
     <View style={[styles.row, { borderColor: colors.borderColor }]}>
       <View style={styles.rowMain}>
@@ -321,6 +364,17 @@ function PositionRow({ position }: { position: TrendHoldBookPosition }) {
         </Text>
         {position.opened_date ? (
           <Text style={[styles.rowMetaSmall, { color: colors.textMuted }]}>Opened {position.opened_date}</Text>
+        ) : null}
+        {hasEntryCtx ? (
+          <Text style={[styles.rowMetaSmall, { color: colors.accentPrimary }]}>
+            {position.entry_path === "DONCHIAN" ? "Donchian breakout" : position.entry_path === "EMA_CROSS" ? "EMA10/30 cross" : ""}
+            {position.entry_confidence != null ? `  ·  confidence ${fmtNum(position.entry_confidence, 0)}/100` : ""}
+          </Text>
+        ) : null}
+        {position.structural_stop != null ? (
+          <Text style={[styles.rowMetaSmall, { color: colors.textMuted }]}>
+            Current stop {fmtNum(position.structural_stop, 3)} (no fixed target price)
+          </Text>
         ) : null}
       </View>
       <View style={styles.rowEnd}>
@@ -405,6 +459,37 @@ function LessonCard({ lesson }: { lesson: TrendHoldBookLesson }) {
         <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginLeft: "auto" }]}>{lesson.trade_date}</Text>
       </View>
 
+      {lesson.entry_price != null || lesson.exit_price != null || lesson.quantity != null ? (
+        <View style={styles.tradeDetailGrid}>
+          {lesson.entry_price != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Bought</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.entry_price, 3)}</Text>
+            </View>
+          ) : null}
+          {lesson.exit_price != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Sold</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.exit_price, 3)}</Text>
+            </View>
+          ) : null}
+          {lesson.quantity != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Qty</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.quantity, 2)}</Text>
+            </View>
+          ) : null}
+          {lesson.realized_pnl_kwd != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Realized P&L</Text>
+              <Text style={[styles.detailValue, { color: lesson.realized_pnl_kwd >= 0 ? colors.success : colors.danger }]}>
+                {lesson.realized_pnl_kwd >= 0 ? "+" : ""}{fmtNum(lesson.realized_pnl_kwd, 3)} KWD
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.tradeDetailGrid}>
         {lesson.holding_days != null ? (
           <View style={styles.tradeDetailCell}>
@@ -430,7 +515,106 @@ function LessonCard({ lesson }: { lesson: TrendHoldBookLesson }) {
             <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.giveback_pct, 1)}pp</Text>
           </View>
         ) : null}
+        {lesson.pct_left_on_table != null ? (
+          <View style={styles.tradeDetailCell}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Profit left on table</Text>
+            <Text
+              style={[
+                styles.detailValue,
+                { color: lesson.pct_left_on_table > 0.5 ? colors.success : colors.textMuted },
+              ]}
+            >
+              {lesson.pct_left_on_table > 0.5 ? `+${fmtNum(lesson.pct_left_on_table, 1)}pp` : "none — efficient"}
+            </Text>
+          </View>
+        ) : null}
       </View>
+
+      {lesson.entry_path || lesson.entry_confidence != null || lesson.breakout_margin_pct != null ? (
+        <View style={styles.tradeDetailGrid}>
+          {lesson.entry_path ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Entry path</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+                {lesson.entry_path === "DONCHIAN" ? "Donchian breakout" : "EMA10/30 cross"}
+              </Text>
+            </View>
+          ) : null}
+          {lesson.entry_confidence != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Entry confidence</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.entry_confidence, 0)}/100</Text>
+            </View>
+          ) : null}
+          {lesson.breakout_margin_pct != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Breakout margin</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>+{fmtNum(lesson.breakout_margin_pct, 1)}%</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {lesson.rel_volume_entry != null || lesson.cmf10_entry != null || lesson.adx14_entry != null || lesson.sma200_slope_entry != null ? (
+        <View style={styles.tradeDetailGrid}>
+          {lesson.rel_volume_entry != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Rel-volume (floor 0.80)</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.rel_volume_entry, 2)}</Text>
+            </View>
+          ) : null}
+          {lesson.cmf10_entry != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>CMF10 (floor -0.05)</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.cmf10_entry, 3)}</Text>
+            </View>
+          ) : null}
+          {lesson.adx14_entry != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>ADX14 (regime, not a gate)</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.adx14_entry, 1)}</Text>
+            </View>
+          ) : null}
+          {lesson.sma200_slope_entry != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>SMA200 slope</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{lesson.sma200_slope_entry >= 0 ? "up" : "down"}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {lesson.structural_stop_at_exit != null || lesson.atr14_exit != null || lesson.adx14_exit != null ? (
+        <View style={styles.tradeDetailGrid}>
+          {lesson.structural_stop_at_exit != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Sell trigger: stop level</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.structural_stop_at_exit, 3)}</Text>
+            </View>
+          ) : null}
+          {lesson.atr14_exit != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>ATR14 at exit</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.atr14_exit, 3)}</Text>
+            </View>
+          ) : null}
+          {lesson.adx14_exit != null ? (
+            <View style={styles.tradeDetailCell}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>ADX14 at exit</Text>
+              <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{fmtNum(lesson.adx14_exit, 1)}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {lesson.forward_1w_available || lesson.forward_sessions_available != null ? (
+        <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginTop: 4 }]}>
+          {lesson.forward_1w_available
+            ? `Forward-look — 1wk after exit: ${formatPercent(lesson.forward_1w_return_pct ?? 0)}` +
+              (lesson.forward_peak_20d_pct != null ? `  ·  best of next ~20 sessions: ${formatPercent(lesson.forward_peak_20d_pct)}` : "")
+            : `Forward-look — pending (${lesson.forward_sessions_available ?? 0}/5 sessions elapsed since exit)`}
+        </Text>
+      ) : null}
 
       <Text style={[styles.reasonText, { color: colors.textPrimary, fontStyle: "normal" }]}>{lesson.reason}</Text>
       <View style={[styles.enhancementBox, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
@@ -493,6 +677,7 @@ export default function TrendHoldBookScreen() {
   const lessonsSummaryQuery = useTrendHoldBookLessonsSummary(selectedBook);
   const performanceQuery = useTrendHoldBookPerformance(selectedBook);
   const refreshPricesMutation = useRefreshTrendHoldBookPrices();
+  const [exportingLessons, setExportingLessons] = useState(false);
 
   const isRefetching =
     comparisonQuery.isRefetching ||
@@ -519,6 +704,24 @@ export default function TrendHoldBookScreen() {
     comparisonQuery, portfolioQuery, positionsQuery, tradesQuery, navHistoryQuery, decisionLogQuery,
     lessonsQuery, lessonsSummaryQuery, performanceQuery,
   ]);
+
+  const handleExportLessons = useCallback(async () => {
+    if (exportingLessons) return;
+    setExportingLessons(true);
+    try {
+      await exportLessonsLearnedPdf({
+        bookLabel: BOOK_LABEL[selectedBook],
+        lessons: lessonsQuery.data?.lessons ?? [],
+        summary: lessonsSummaryQuery.data,
+        positions: positionsQuery.data?.positions ?? [],
+      });
+    } catch (error) {
+      console.error("Failed to export lessons learned report", error);
+      Alert.alert("Export failed", "Could not generate the Lessons Learned report.");
+    } finally {
+      setExportingLessons(false);
+    }
+  }, [exportingLessons, selectedBook, lessonsQuery.data, lessonsSummaryQuery.data, positionsQuery.data]);
 
   const portfolio = portfolioQuery.data;
   const positions = positionsQuery.data?.positions ?? [];
@@ -774,11 +977,33 @@ export default function TrendHoldBookScreen() {
           </View>
         )}
 
-        <SectionTitle icon="graduation-cap" title="Lessons Learned" colors={colors} />
+        <View style={styles.sectionHeaderRow}>
+          <SectionTitle icon="graduation-cap" title="Lessons Learned" colors={colors} />
+          <ExportLessonsButton
+            onPress={handleExportLessons}
+            pending={exportingLessons}
+            disabled={lessons.length === 0}
+            colors={colors}
+          />
+        </View>
         <Text style={[styles.pageSubtitle, { color: colors.textMuted, marginTop: -8 }]}>
-          A rule-based autopsy of every closed trade — why it won or lost, using the actual price
-          path, not a black box. This never auto-adjusts the engine; it's evidence for you to act on.
+          A rule-based autopsy of every closed trade, focused on maximizing profit and win rate —
+          using the actual price path, not a black box. This never auto-adjusts the engine; it's
+          evidence for you to act on.
         </Text>
+        <View style={[styles.enhancementBox, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, alignItems: "flex-start" }]}>
+          <FontAwesome name="info-circle" size={11} color={colors.textMuted} style={{ marginTop: 2 }} />
+          <Text style={[styles.enhancementText, { color: colors.textMuted }]}>
+            <Text style={{ fontWeight: "700" }}>No fixed take-profit target</Text> is set at entry — this system
+            exits only via the chandelier trailing stop (3.5×ATR14 off the post-entry high) or the automatic +20%
+            profit-milestone scale-out. The stop level shown per trade is what actually governed the exit, not a
+            target.{"\n\n"}
+            <Text style={{ fontWeight: "700" }}>Indicator lag:</Text> EMA10/30/50, the Donchian-40 ceiling, ATR14,
+            CMF10, OBV-slope40, and SMA200-slope are all lagging (built from trailing price/volume history — they
+            confirm a move already in progress, never predict one). Relative-volume(20d) is same-session. ADX14 is
+            regime context only, not a gate — like RSI14, it does not fire or block any decision today.
+          </Text>
+        </View>
         {lessonsSummaryQuery.data && lessonsSummary && lessonsSummary.total_closed > 0 ? (
           <View style={styles.kpiRow}>
             <KpiCard
@@ -788,6 +1013,24 @@ export default function TrendHoldBookScreen() {
               kpiStyle={KPI_STYLES.positions[isDark ? "dark" : "light"]}
               colors={colors}
             />
+            {lessonsSummary.avg_pct_left_on_table != null ? (
+              <KpiCard
+                label="Profit Left on Table"
+                value={`${fmtNum(lessonsSummary.avg_pct_left_on_table, 1)}pp`}
+                subtitle={`avg, tested on wins/scale-outs — ${lessonsSummary.trades_with_room_to_improve ?? 0} had room`}
+                kpiStyle={KPI_STYLES.equity[isDark ? "dark" : "light"]}
+                colors={colors}
+              />
+            ) : null}
+            {lessonsSummary.avg_entry_confidence_win != null || lessonsSummary.avg_entry_confidence_loss != null ? (
+              <KpiCard
+                label="Entry Confidence"
+                value={`${lessonsSummary.avg_entry_confidence_win != null ? fmtNum(lessonsSummary.avg_entry_confidence_win, 0) : "—"} vs ${lessonsSummary.avg_entry_confidence_loss != null ? fmtNum(lessonsSummary.avg_entry_confidence_loss, 0) : "—"}`}
+                subtitle="avg score: wins vs losses"
+                kpiStyle={KPI_STYLES.cash[isDark ? "dark" : "light"]}
+                colors={colors}
+              />
+            ) : null}
             {lessonsSummary.avg_loss_mae_pct != null ? (
               <KpiCard
                 label="Avg Loss Drawdown"
@@ -797,15 +1040,45 @@ export default function TrendHoldBookScreen() {
                 colors={colors}
               />
             ) : null}
-            {lessonsSummary.avg_win_giveback_pct != null ? (
-              <KpiCard
-                label="Avg Win Giveback"
-                value={`${fmtNum(lessonsSummary.avg_win_giveback_pct, 1)}pp`}
-                subtitle="given back from the peak"
-                kpiStyle={KPI_STYLES.equity[isDark ? "dark" : "light"]}
-                colors={colors}
-              />
-            ) : null}
+          </View>
+        ) : null}
+        {lessonsSummary && lessonsSummary.by_entry_path && Object.keys(lessonsSummary.by_entry_path).length > 0 ? (
+          <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, padding: 12, gap: 8 }]}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
+              By entry path — is one mechanism carrying the other?
+            </Text>
+            {Object.entries(lessonsSummary.by_entry_path).map(([path, stats]) => (
+              <View key={path} style={styles.tradeHeaderLine}>
+                <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>
+                  {path === "DONCHIAN" ? "Donchian breakout" : "EMA10/30 cross"}
+                </Text>
+                <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginLeft: "auto" }]}>
+                  {stats.wins}W / {stats.losses}L
+                  {stats.win_rate_pct != null ? ` · ${fmtNum(stats.win_rate_pct, 0)}% win rate` : " · not enough data yet"}
+                  {" "}({stats.closed} closed)
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {lessonsSummary && lessonsSummary.by_adx_bucket && Object.keys(lessonsSummary.by_adx_bucket).length > 0 ? (
+          <View style={[styles.listPanel, { backgroundColor: colors.bgCard, borderColor: colors.borderColor, padding: 12, gap: 8 }]}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
+              By trend strength at entry — does this only work in a strong trend?
+            </Text>
+            {ADX_BUCKET_ORDER.filter((key) => lessonsSummary.by_adx_bucket?.[key]).map((key) => {
+              const stats = lessonsSummary.by_adx_bucket![key];
+              return (
+                <View key={key} style={styles.tradeHeaderLine}>
+                  <Text style={[styles.rowTicker, { color: colors.textPrimary }]}>{ADX_BUCKET_LABEL[key]}</Text>
+                  <Text style={[styles.rowMetaSmall, { color: colors.textMuted, marginLeft: "auto" }]}>
+                    {stats.wins}W / {stats.losses}L
+                    {stats.win_rate_pct != null ? ` · ${fmtNum(stats.win_rate_pct, 0)}% win rate` : " · not enough data yet"}
+                    {" "}({stats.closed} closed)
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         ) : null}
         {lessonsQuery.isError ? (
@@ -897,6 +1170,7 @@ const styles = StyleSheet.create({
   statTileSub: { fontSize: 9, lineHeight: 12, marginTop: 2 },
 
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: "800" },
   fetchPriceButton: {
     flexDirection: "row",
