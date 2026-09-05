@@ -26,7 +26,6 @@ import { useOfflineSyncEngine } from "@/hooks/useOfflineSyncEngine";
 import { usePageViewTracking } from "@/hooks/usePageViewTracking";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
-import { useBackgroundDailyRefresh } from "@/hooks/useBackgroundDailyRefresh";
 import { analytics } from "@/lib/analytics";
 import i18n from "@/lib/i18n/config";
 import { queryClient } from "@/lib/queryClient";
@@ -132,7 +131,6 @@ function RootLayoutNav() {
   // ── Session guard: periodic heartbeat + focus re-validation ────
   useSessionGuard();
   usePushNotifications();
-  useBackgroundDailyRefresh();
 
   // Clear badge count when the user opens the app (foreground)
   useEffect(() => {
