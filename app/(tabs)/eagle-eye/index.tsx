@@ -1152,7 +1152,8 @@ export default function EagleEyeScannerScreen() {
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          stickyHeaderIndices={listData.length > 0 ? [1] : undefined}
+          removeClippedSubviews={false}
+          stickyHeaderIndices={listData.length > 1 ? [1] : undefined}
           ListEmptyComponent={renderEmpty}
           ListHeaderComponent={
             <>
