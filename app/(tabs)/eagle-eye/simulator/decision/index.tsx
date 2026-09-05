@@ -1,4 +1,5 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
+import { AdminOnlyGate } from "@/components/eagle-eye/AdminOnlyGate";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { hasSimulatorIntegrityIssue, isSimulatorFeatureEnabled } from "@/constants/Config";
 import {
@@ -33,6 +34,14 @@ function matchesChip(row: SimulatorSymbolState, chip: ChipFilter): boolean {
 }
 
 export default function DecisionScannerScreen() {
+  return (
+    <AdminOnlyGate message="Simulator is available to admin users only.">
+      <DecisionScannerScreenContent />
+    </AdminOnlyGate>
+  );
+}
+
+function DecisionScannerScreenContent() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();

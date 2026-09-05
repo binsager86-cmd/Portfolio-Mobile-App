@@ -1,4 +1,5 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
+import { AdminOnlyGate } from "@/components/eagle-eye/AdminOnlyGate";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { useReadOnlySimulatorTrace } from "@/hooks/useSimulatorReadOnly";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -11,6 +12,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DecisionTraceChart, formatKwd, formatPct, readText } from "./_shared";
 
 export default function DecisionCycleHistoryScreen() {
+  return (
+    <AdminOnlyGate message="Simulator is available to admin users only.">
+      <DecisionCycleHistoryScreenContent />
+    </AdminOnlyGate>
+  );
+}
+
+function DecisionCycleHistoryScreenContent() {
   const params = useLocalSearchParams<{ ticker: string }>();
   const ticker = (params.ticker ?? "").toUpperCase().trim();
   const { colors } = useThemeStore();

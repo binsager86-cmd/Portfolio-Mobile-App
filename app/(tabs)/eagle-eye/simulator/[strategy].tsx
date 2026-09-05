@@ -1,4 +1,5 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
+import { AdminOnlyGate } from "@/components/eagle-eye/AdminOnlyGate";
 import {
   useReadOnlySimulatorIntegrity,
   useReadOnlySimulatorNav,
@@ -106,6 +107,14 @@ function TransactionRow({ transaction }: { transaction: SimulatorTransaction }) 
 }
 
 export default function SimulatorBookDetailScreen() {
+  return (
+    <AdminOnlyGate message="Simulator is available to admin users only.">
+      <SimulatorBookDetailScreenContent />
+    </AdminOnlyGate>
+  );
+}
+
+function SimulatorBookDetailScreenContent() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { strategy } = useLocalSearchParams<{ strategy: string }>();

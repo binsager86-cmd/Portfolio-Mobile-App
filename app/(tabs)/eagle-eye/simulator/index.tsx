@@ -1,4 +1,5 @@
 /* eslint-disable custom-styles/no-hardcoded-styles */
+import { AdminOnlyGate } from "@/components/eagle-eye/AdminOnlyGate";
 import { EagleEyeTopTabs } from "@/components/eagle-eye/EagleEyeTopTabs";
 import { hasSimulatorIntegrityIssue, isSimulatorFeatureEnabled } from "@/constants/Config";
 import {
@@ -122,6 +123,14 @@ function SimulatorCard({ book, summary }: { book: SimulatorBook; summary?: Simul
 }
 
 export default function SimulatorIndexScreen() {
+  return (
+    <AdminOnlyGate message="Simulator is available to admin users only.">
+      <SimulatorIndexScreenContent />
+    </AdminOnlyGate>
+  );
+}
+
+function SimulatorIndexScreenContent() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
