@@ -81,7 +81,11 @@ export function EagleEyeTopTabs({ rightSlot }: { rightSlot?: React.ReactNode } =
   const router = useRouter();
   const activeTextColor = "#ffffff";
   const simulatorEnabled = isSimulatorFeatureEnabled();
-  const visibleTabs = EAGLE_EYE_TABS.filter((tab) => tab.key !== "simulator" || (isAdmin && simulatorEnabled));
+  const visibleTabs = EAGLE_EYE_TABS.filter(
+    (tab) =>
+      (tab.key !== "simulator" || (isAdmin && simulatorEnabled)) &&
+      (tab.key !== "trend-hold-book" || isAdmin),
+  );
   const activeTabIndex = findActiveTabIndex(pathname, visibleTabs);
 
   // Kept fresh via effect (not during render) so the pan responder --

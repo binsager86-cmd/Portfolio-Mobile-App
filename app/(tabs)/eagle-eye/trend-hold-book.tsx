@@ -38,6 +38,7 @@ import {
   type TrendHoldBookTrade,
   type TrendHoldDecisionLogEntry,
 } from "@/hooks/useTrendHoldBook";
+import { useAdminGate } from "@/hooks/useAdminGate";
 import { useResponsive } from "@/hooks/useResponsive";
 import { fmtNum, formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/currency";
 import { exportLessonsLearnedPdf } from "@/lib/exportLessonsLearnedPdf";
@@ -658,7 +659,30 @@ function DecisionLogRow({ entry }: { entry: TrendHoldDecisionLogEntry }) {
   );
 }
 
+// Admin-only: the tab bar (EagleEyeTopTabs) already hides this screen's tab
+// for non-admins, but a stale link/direct navigation could still reach the
+// route -- this is the same defense-in-depth gate app/(tabs)/admin.tsx uses.
 export default function TrendHoldBookScreen() {
+  const { isAdmin, isLoading: isAdminGateLoading } = useAdminGate();
+
+  if (isAdminGateLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: "#888", fontSize: 16 }}>Admin access required.</Text>
+      </View>
+    );
+  }
+  return <TrendHoldBookScreenContent />;
+}
+
+function TrendHoldBookScreenContent() {
   const { colors } = useThemeStore();
   const insets = useSafeAreaInsets();
   const { showSidebar } = useResponsive();
