@@ -56,7 +56,7 @@ export function usePushNotifications(): void {
         }
       }
 
-      if (type === "price_alert" || type === "portfolio_update") {
+      if (type === "price_alert" || type === "portfolio_update" || type === "daily_update") {
         try {
           router.push("/(tabs)" as never);
         } catch (err) {
@@ -65,8 +65,20 @@ export function usePushNotifications(): void {
       }
     };
 
-    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+    const receivedSub = Notifications.addNotificationReceivedListener((response) => {
+      const data = response?.notification?.request?.content?.data as
+        | Record<string, unknown>
+        | undefined;
+      const type = typeof data?.type === "string" ? data.type : null;
+      
+      // Invalidate relevant caches when notification received
       queryClient.invalidateQueries({ queryKey: ["news"] });
+      if (type === "daily_update" || type === "portfolio_update") {
+        // Invalidate portfolio queries to refresh UI
+        queryClient.invalidateQueries({ queryKey: ["portfolio-overview"] });
+        queryClient.invalidateQueries({ queryKey: ["holdings"] });
+        queryClient.invalidateQueries({ queryKey: ["snapshots"] });
+      }
     });
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
