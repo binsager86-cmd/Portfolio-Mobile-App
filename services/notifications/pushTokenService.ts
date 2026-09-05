@@ -8,10 +8,14 @@
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/constants/Config";
 import { getToken } from "@/services/tokenStorage";
+
+const LAST_PUSH_REGISTRATION_KEY = "notifications.lastPushRegistrationAt";
+const PUSH_REGISTRATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Resolve the EAS projectId required by getExpoPushTokenAsync() in
@@ -110,7 +114,7 @@ async function registerTokenWithBackend(
  * - Gets the Expo push token
  * - POSTs it to /api/v1/notifications/register-token
  */
-export async function registerPushToken(): Promise<string | null> {
+export async function registerPushToken(options?: { force?: boolean }): Promise<string | null> {
   // Web uses a different notification flow
   if (Platform.OS === "web") {
     if (__DEV__) console.info("[Push] Web platform — skipping Expo push token");
@@ -127,6 +131,20 @@ export async function registerPushToken(): Promise<string | null> {
   if (!Device.isDevice) {
     if (__DEV__) console.warn("[Push] Physical device required for remote push notifications");
     return null;
+  }
+
+  if (!options?.force) {
+    try {
+      const lastRegistration = await AsyncStorage.getItem(LAST_PUSH_REGISTRATION_KEY);
+      if (
+        lastRegistration &&
+        Date.now() - Number(lastRegistration) < PUSH_REGISTRATION_INTERVAL_MS
+      ) {
+        return null;
+      }
+    } catch (error) {
+      if (__DEV__) console.warn("[Push] Registration timestamp read failed:", error);
+    }
   }
 
   // Ensure all Android notification channels exist (required on Android 8+).
@@ -208,6 +226,11 @@ export async function registerPushToken(): Promise<string | null> {
 
     if (ok) {
       if (__DEV__) console.info("[Push] Token registered with backend");
+      try {
+        await AsyncStorage.setItem(LAST_PUSH_REGISTRATION_KEY, String(Date.now()));
+      } catch (error) {
+        if (__DEV__) console.warn("[Push] Registration timestamp write failed:", error);
+      }
       // After the device is known to the backend, sync the user's current
       // notification preferences so the dispatcher can honor disabled toggles.
       try {

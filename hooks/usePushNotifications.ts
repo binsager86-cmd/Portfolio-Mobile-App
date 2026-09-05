@@ -65,8 +65,8 @@ export function usePushNotifications(): void {
       }
     };
 
-    const receivedSub = Notifications.addNotificationReceivedListener((response) => {
-      const data = response?.notification?.request?.content?.data as
+    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification?.request?.content?.data as
         | Record<string, unknown>
         | undefined;
       const type = typeof data?.type === "string" ? data.type : null;

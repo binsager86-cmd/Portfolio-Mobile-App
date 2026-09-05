@@ -139,10 +139,17 @@ function RootLayoutNav() {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         Notifications.setBadgeCountAsync(0).catch(() => {});
+        if (token) {
+          registerPushToken().catch((err) => {
+            analytics.logEvent("push_foreground_registration_failed", {
+              message: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [token]);
 
   // ── Google Analytics: track page views on route changes (web) ──
   usePageViewTracking();
@@ -312,7 +319,7 @@ function RootLayoutNav() {
         const Notifications = await import("expo-notifications");
         if (cancelled) return;
         sub = Notifications.addPushTokenListener(() => {
-          registerPushToken().catch((err) => {
+          registerPushToken({ force: true }).catch((err) => {
             analytics.logEvent("push_token_rollover_registration_failed", {
               message: err instanceof Error ? err.message : String(err),
             });
