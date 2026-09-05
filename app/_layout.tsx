@@ -300,7 +300,7 @@ function RootLayoutNav() {
     }
 
     // Register push token for real-time news notifications
-    registerPushToken().catch((err) => {
+    registerPushToken({ force: true }).catch((err) => {
       analytics.logEvent("push_registration_failed", {
         message: err instanceof Error ? err.message : String(err),
       });
